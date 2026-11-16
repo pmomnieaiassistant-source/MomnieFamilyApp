@@ -12,10 +12,10 @@
 <link rel="icon" href="icons/icon-192.png">
 <title>Momnie Family</title>
 <style>
-  :root { --bg:#fff; --card:#fff; --text:#0f0f0f; --muted:#737373; --line:#efefef; --soft:#f2f2f2; --green:#00a35c; --red:#e8334f; --amber:#b86e00;
-          --grad:linear-gradient(45deg,#f58529 0%,#dd2a7b 45%,#8134af 75%,#515bd4 100%); --blur:rgba(255,255,255,.8);
+  :root { --bg:#fff; --card:#fff; --text:#0f0f0f; --muted:#64748b; --line:#e2e8f0; --soft:#f1f5f9; --green:#00a35c; --red:#e8334f; --amber:#b86e00;
+          --grad:linear-gradient(45deg,#1e3a8a 0%,#2563eb 40%,#60a5fa 72%,#94a3b8 100%); --accent:#2563eb; --blur:rgba(255,255,255,.8);
           --redbg:#ffe8ec; --amberbg:#fff3d6; --greenbg:#dcf7e9; }
-  @media (prefers-color-scheme: dark) { :root { --bg:#000; --card:#000; --text:#f5f5f5; --muted:#a8a8a8; --line:#262626; --soft:#1c1c1c; --blur:rgba(0,0,0,.72);
+  @media (prefers-color-scheme: dark) { :root { --bg:#0b1220; --card:#0b1220; --text:#f1f5f9; --muted:#94a3b8; --line:#1e293b; --soft:#1e293b; --blur:rgba(11,18,32,.75); --accent:#60a5fa;
           --redbg:#3d1219; --amberbg:#3a2a05; --greenbg:#0c3320; --red:#ff5d75; --amber:#f0b03c; --green:#35d08a; } dialog { border:.5px solid var(--line) !important; } }
   * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
   body { margin:0; font:16px -apple-system,"SF Pro Text","Inter",system-ui,sans-serif; background:var(--bg); color:var(--text);
@@ -25,7 +25,7 @@
   h1 { font-size:26px; margin:0; font-weight:800; letter-spacing:-.6px; }
   h2 { margin:0 0 4px; font-weight:800; font-size:20px; letter-spacing:-.4px; }
   h3 { margin:18px 0 6px; font-size:15px; font-weight:800; }
-  a { color:#3b82f6; text-decoration:none; font-weight:600; }
+  a { color:var(--accent); text-decoration:none; font-weight:600; }
   .icon-btn { background:none; border:0; font-size:21px; color:var(--text); width:40px; height:40px; border-radius:50%; padding:0; }
   .muted { color:var(--muted); } .small { font-size:13px; } .b { font-weight:700; } .red { color:var(--red); font-weight:700; } .grn { color:var(--green); font-weight:700; }
   .pad { padding:0 16px; } .row { display:flex; justify-content:space-between; gap:10px; align-items:center; } .grow { flex:1; min-width:0; }
@@ -45,7 +45,7 @@
   .actions { display:flex; gap:8px; margin-top:12px; flex-wrap:wrap; }
   .empty { text-align:center; color:var(--muted); padding:36px 24px; font-size:15px; }
   .fab { position:fixed; right:18px; bottom:calc(76px + env(safe-area-inset-bottom)); width:56px; height:56px; border-radius:50%; border:0; background:var(--grad); color:#fff; font-size:28px;
-         box-shadow:0 8px 24px rgba(221,42,123,.35); z-index:4; }
+         box-shadow:0 8px 24px rgba(37,99,235,.35); z-index:4; }
   nav.bottom { position:fixed; left:0; right:0; bottom:0; display:flex; z-index:5; background:var(--blur); -webkit-backdrop-filter:saturate(180%) blur(20px); backdrop-filter:saturate(180%) blur(20px);
                border-top:.5px solid var(--line); padding-bottom:env(safe-area-inset-bottom); }
   nav.bottom button { flex:1; border:0; background:none; padding:9px 0 7px; font-size:22px; color:var(--muted); font-family:inherit; filter:grayscale(1); opacity:.55; }
@@ -88,20 +88,31 @@
   .x { position:sticky; float:right; top:0; border:0; background:var(--soft); color:var(--text); width:32px; height:32px; border-radius:50%; font-size:15px; z-index:2; }
   label { display:block; font-size:13px; color:var(--muted); margin:12px 0 5px; font-weight:600; }
   input, select, textarea { width:100%; padding:12px 13px; font:inherit; font-size:16px; border:0; border-radius:12px; background:var(--soft); color:var(--text); -webkit-appearance:none; appearance:none; }
-  textarea { min-height:84px; resize:vertical; } input:focus, select:focus, textarea:focus { outline:2px solid #dd2a7b; }
+  textarea { min-height:84px; resize:vertical; } input:focus, select:focus, textarea:focus { outline:2px solid var(--accent); }
   input[type=checkbox] { width:22px; height:22px; -webkit-appearance:auto; appearance:auto; flex:0 0 auto; }
   .check-row { display:flex; align-items:center; gap:10px; margin-top:14px; font-weight:600; color:var(--text); font-size:15px; }
   .two { display:flex; gap:10px; } .two > div { flex:1; min-width:0; }
   .kv { font-size:15px; margin-top:6px; line-height:1.4; word-break:break-word; white-space:pre-wrap; } .kv span { color:var(--muted); font-size:13px; font-weight:600; display:block; }
   .err { color:var(--red); font-size:14px; margin-top:8px; min-height:18px; font-weight:600; }
   .cm { padding:8px 0; border-top:.5px solid var(--line); font-size:15px; } .cm.sys { color:var(--muted); font-style:italic; font-size:13px; }
-  .rx { border:0; background:var(--soft); border-radius:999px; padding:6px 12px; font:inherit; font-size:14px; font-weight:600; color:var(--text); } .rx.on { outline:2px solid #dd2a7b; }
+  .rx { border:0; background:var(--soft); border-radius:999px; padding:6px 12px; font:inherit; font-size:14px; font-weight:600; color:var(--text); } .rx.on { outline:2px solid var(--accent); }
   .stars button { border:0; background:none; font-size:24px; padding:0 2px; color:#f5a623; }
   #toast { position:fixed; left:50%; transform:translateX(-50%); bottom:calc(150px + env(safe-area-inset-bottom)); background:var(--text); color:var(--bg); padding:11px 18px; border-radius:999px; display:none;
            font-size:14px; font-weight:600; z-index:99; max-width:90%; text-align:center; }
   #ptr { position:fixed; left:50%; top:calc(env(safe-area-inset-top) + 64px); width:38px; height:38px; margin-left:-19px; border-radius:50%; background:var(--card); box-shadow:0 2px 12px rgba(0,0,0,.18);
-         display:flex; align-items:center; justify-content:center; z-index:4; opacity:0; transform:translateY(-50px); pointer-events:none; font-size:20px; font-weight:700; color:#dd2a7b; }
+         display:flex; align-items:center; justify-content:center; z-index:4; opacity:0; transform:translateY(-50px); pointer-events:none; font-size:20px; font-weight:700; color:var(--accent); }
   #ptr.spin span { animation:spin .8s linear infinite; } @keyframes spin { to { transform:rotate(360deg); } }
+  /* lock screen */
+  #lock { position:fixed; inset:0; z-index:1000; display:none; flex-direction:column; align-items:center; justify-content:center; gap:18px; color:#fff;
+          background:linear-gradient(160deg,#1e3a8a 0%,#2563eb 45%,#475569 100%); padding:env(safe-area-inset-top) 24px env(safe-area-inset-bottom); user-select:none; -webkit-user-select:none; }
+  #lock.on { display:flex; }
+  #lock .lt { font-size:22px; font-weight:800; letter-spacing:-.4px; } #lock .ls { font-size:14px; opacity:.85; min-height:20px; text-align:center; }
+  #lock .dots { display:flex; gap:18px; } #lock .dots i { width:14px; height:14px; border-radius:50%; border:2px solid #fff; } #lock .dots i.f { background:#fff; }
+  #lock .dots.shake { animation:shake .4s; } @keyframes shake { 20%,60% { transform:translateX(-10px); } 40%,80% { transform:translateX(10px); } }
+  #lock .pad { display:grid; grid-template-columns:repeat(3,76px); gap:16px 22px; margin-top:10px; }
+  #lock .pad button { width:76px; height:76px; border-radius:50%; border:0; background:rgba(255,255,255,.16); color:#fff; font:inherit; font-size:30px; font-weight:500; }
+  #lock .pad button:active { background:rgba(255,255,255,.38); } #lock .pad button.nb { background:none; font-size:18px; font-weight:600; }
+  #lock.busy .pad { opacity:.5; pointer-events:none; }
 </style>
 </head>
 <body>
@@ -115,9 +126,11 @@
   <button data-a="nav" data-v="home">🏠<span>Home</span></button>
 </nav>
 <div id="toast"></div>
+<div id="lock"><div class="lt">Momnie Family</div><div class="ls" id="lockMsg">Enter your code</div><div class="dots" id="lockDots"><i></i><i></i><i></i><i></i></div>
+  <div class="pad"><button data-k="1">1</button><button data-k="2">2</button><button data-k="3">3</button><button data-k="4">4</button><button data-k="5">5</button><button data-k="6">6</button><button data-k="7">7</button><button data-k="8">8</button><button data-k="9">9</button><span></span><button data-k="0">0</button><button class="nb" data-k="del">Delete</button></div></div>
 <div id="ptr"><span id="ptrIcon">↓</span></div>
 <script>
-// Momnie Family app v3.0
+// Momnie Family app v3.1
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'], DAYN = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'], ADULTS = ['Paul', 'Shana'];
 const TABLES = ['People', 'Schools', 'SchoolCal', 'Activities', 'Overrides', 'Events', 'Caretakers', 'Childcare', 'Birthdays', 'Todos', 'TodoTypes', 'Recipes', 'DinnerRules', 'Weeks', 'Menus',
   'Groceries', 'GroceryList', 'HouseCards', 'Houses', 'WeatherRules', 'Quotes', 'Memories', 'Updates', 'Messages', 'Activity', 'Comments', 'Reactions', 'Links', 'Settings'];
@@ -128,8 +141,14 @@ const store = { get: k => { try { return localStorage.getItem(k) || ''; } catch 
 const S = {}; TABLES.forEach(t => S[t] = []);
 let CAL = [], WX = null, ME = '', view = 'feed', TODAY = '';
 
-// one-tap setup link: .../#url=<WEBAPP_URL>&p=<PASSCODE>
-(function () { const h = new URLSearchParams(location.hash.slice(1)); if (h.get('url') && h.get('p')) { store.set('url', h.get('url')); store.set('pass', h.get('p')); history.replaceState(null, '', location.pathname + location.search); } })();
+// Backend (Apps Script web app) URL. Set once here so nobody has to type it.
+const API_URL = 'https://script.google.com/macros/s/AKfycbzMv2Qje7i1dCWJcV6phZTGX_uzjeY3f9ZNtnvxdopkypJdpE2hVhQl_3S-4ln9lyy2lw/exec';
+const apiUrl = () => API_URL || store.get('url');
+// The 4-digit code is each person's passcode (PASSCODE_PAUL / PASSCODE_SHANA in Apps Script). It's kept in memory only, never saved on the phone.
+let PIN = '';
+try { localStorage.removeItem('pass'); } catch (e) {}
+// optional setup link if API_URL is blank: .../#url=<WEBAPP_URL>
+(function () { const h = new URLSearchParams(location.hash.slice(1)); if (h.get('url')) { store.set('url', h.get('url')); history.replaceState(null, '', location.pathname + location.search); } })();
 
 // ---------- helpers ----------
 const esc = s => String(s === undefined || s === null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -168,8 +187,9 @@ const L = (type, text, cat, extra) => Object.assign({ type, text, cat: cat || ''
 
 // ---------- server ----------
 async function api(action, data = {}) {
-  const url = store.get('url'), passcode = store.get('pass');
-  if (!url || !passcode) throw new Error('Not connected yet. Open Home, then Settings.');
+  const url = apiUrl(), passcode = PIN;
+  if (!url) throw new Error('Not connected yet. Open Home, then Settings.');
+  if (!passcode) { lock(); throw new Error('Locked'); }
   const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ action, passcode, ...data }) });
   const j = await res.json();
   if (!j.ok) throw new Error(j.error || 'Request failed');
@@ -819,7 +839,7 @@ A.tdWho = v => { TD.who = TD.who.includes(v) ? TD.who.filter(x => x !== v) : TD.
 // ----- Home -----
 const HOME = [['family', '👨‍👩‍👧‍👦', 'Family', 'Schedules, schools and notes for each person'], ['Schools', '🏫', 'Schools', 'Hours, contacts and each school calendar'], ['Activities', '⚽', 'Activities', 'Repeating kid activities with drop-off and pickup'],
   ['Caretakers', '👶', 'Caretakers', 'Boston and Cape rosters, rates, driving'], ['birthdays', '🎂', 'Birthdays', 'Friends and family'], ['houses', '🏠', 'Houses', 'Info and upkeep for Boston and the Cape'], ['WeatherRules', '🌦️', 'Weather rules', 'If-then reminders based on the forecast'],
-  ['Groceries', '🛒', 'Grocery library', 'Saved items with brands and notes'], ['TodoTypes', '🗂️', 'To-do types', 'Types and who they go to by default'], ['memories', '💛', 'Quotes and memories', 'The morning splash screen'], ['settings', '⚙️', 'Settings', 'Notifications, Feed, connection']];
+  ['Groceries', '🛒', 'Grocery library', 'Saved items with brands and notes'], ['TodoTypes', '🗂️', 'To-do types', 'Types and who they go to by default'], ['memories', '💛', 'Quotes and memories', 'The morning splash screen'], ['settings', '⚙️', 'Settings', 'Notifications, Feed, lock']];
 const vHome = () => HOME.map(([k, e, l, s]) => `<div class="li" data-a="homeOpen" data-v="${k}"><span style="font-size:24px">${e}</span><div class="grow"><div class="ti">${l}</div><div class="small muted">${s}</div></div><span class="chev">›</span></div>`).join('');
 const rowLi = (t, id, title, sub) => `<div class="li" style="padding:12px 0" data-a="open" data-t="${t}" data-id="${esc(id)}"><div class="grow"><div class="ti">${esc(title)}</div>${sub ? `<div class="small muted">${esc(sub)}</div>` : ''}</div><span class="chev">›</span></div>`;
 const addBtn = (t, l) => `<div class="actions"><button class="btn" data-a="add" data-v="${t}">＋ ${l}</button></div>`;
@@ -843,15 +863,17 @@ const PAGES = {
       `<div class="two"><div><label>Quiet hours start</label><input type="time" data-c="setVal" data-k="quietStart" value="${q('quietStart')}"></div><div><label>Quiet hours end</label><input type="time" data-c="setVal" data-k="quietEnd" value="${q('quietEnd')}"></div></div>
       <div class="actions"><button class="btn gray sm" data-a="ntest">Send me a test</button></div><h3>Show in my Feed</h3>` + Object.keys(NCATS).map(c => chk('setFlag', 'f.' + c, '1', NCATS[c].replace(/ \(.*\)/, ''))).join('') +
       `<h3>Weather</h3><div class="small muted">Weather follows this phone: near Boston or the Cape shows that house, anywhere else shows local weather.</div><div class="actions"><button class="btn gray sm" data-a="geoOn">${store.get('geo') === '1' ? '✓ Using my location' : 'Use my location'}</button></div>
-      <h3>Connection</h3><label>Backend URL</label><input id="sUrl" value="${esc(store.get('url'))}"><label>Your passcode</label><input id="sPass" type="password" value="${esc(store.get('pass'))}"><div class="actions"><button class="btn dark" data-a="connect">Save and reconnect</button></div>`; }
+      <h3>Privacy</h3><div class="small muted">The app asks for your 4-digit code when it opens and after 5 minutes away. Codes are changed in Apps Script (Script properties).</div><div class="actions"><button class="btn dark" data-a="lockNow">Lock now</button></div>` +
+      (API_URL ? '' : `<h3>Connection</h3><label>Backend URL</label><input id="sUrl" value="${esc(store.get('url'))}"><div class="actions"><button class="btn gray" data-a="connect">Save and reconnect</button></div>`); }
 };
 A.homeOpen = k => { if (!ME && k !== 'settings') return; sheet(() => PAGES[k]()); };
-A.settings = () => sheet(ME ? () => PAGES.settings() : `<h2>Connect</h2><label>Backend URL (Apps Script web app)</label><input id="sUrl" value="${esc(store.get('url'))}" placeholder="https://script.google.com/macros/s/.../exec"><label>Your passcode</label><input id="sPass" type="password" value="${esc(store.get('pass'))}"><div class="actions"><button class="btn" data-a="connect">Connect</button></div>`);
+A.settings = () => sheet(ME ? () => PAGES.settings() : `<h2>Connect</h2><label>Backend URL (Apps Script web app)</label><input id="sUrl" value="${esc(store.get('url'))}" placeholder="https://script.google.com/macros/s/.../exec"><div class="actions"><button class="btn" data-a="connect">Connect</button></div>`);
 A.editH = id => editForm('Houses', byId('Houses', id));
 A.setFlag = (v, el) => setSt(el.dataset.k, v === '1' ? '1' : '0'); A.setVal = (v, el) => setSt(el.dataset.k, v);
 A.ntest = async () => { try { const r = await api('notify_test'); toast('Sent by ' + r.sent); } catch (e) { toast(e.message); } };
 A.geoOn = () => { store.set('geo', '1'); geo(true); refresh(); };
-A.connect = (v, el) => { store.set('url', $('sUrl').value.trim()); store.set('pass', $('sPass').value); A.close(v, el); boot(); };
+A.connect = (v, el) => { store.set('url', $('sUrl').value.trim()); A.close(v, el); boot(); };
+A.lockNow = () => lock();
 
 // ---------- splash screens ----------
 function splash(force) {
@@ -879,12 +901,47 @@ let lastLoad = 0;
 async function load() { TODAY = ymd(new Date()); let loc = {}; try { loc = JSON.parse(store.get('loc') || '{}'); } catch (e) {} await api('boot', { lat: loc.lat, lon: loc.lon }); lastLoad = Date.now(); refresh(); }
 async function boot() {
   TODAY = ymd(new Date()); render();
-  if (!store.get('url')) { $('view').innerHTML = '<div class="empty">Welcome. Connect the app to your family Sheet to get started.<br><br><button class="btn" data-a="settings">Connect</button></div>'; return; }
-  try { await load(); } catch (e) { $('view').innerHTML = `<div class="empty">${esc(e.message)}<br><br><button class="btn" data-a="settings">Connection settings</button></div>`; return; }
+  if (!apiUrl()) { $('view').innerHTML = '<div class="empty">Welcome. Connect the app to your family Sheet to get started.<br><br><button class="btn" data-a="settings">Connect</button></div>'; return; }
+  if (!PIN) { lock(); return; }
+  try { await load(); } catch (e) { $('view').innerHTML = `<div class="empty">${esc(e.message)}<br><br><button class="btn" data-a="reload">Try again</button></div>`; return; }
   splash(); geo();
 }
+// ---------- lock screen ----------
+const LOCK_AFTER = 5 * 60000, MAX_TRIES = 5, LOCKOUT = 15 * 60000;
+let typed = '', hiddenAt = 0;
+function lock() {
+  PIN = ''; typed = ''; ME = ''; TABLES.forEach(t => S[t] = []); CAL = []; WX = null;
+  sheets.splice(0).forEach(d => d.remove()); $('view').innerHTML = '';
+  $('lock').classList.add('on'); lockShow();
+}
+function lockShow(msg) {
+  const until = +store.get('lockUntil') || 0, left = until - Date.now();
+  $('lockMsg').textContent = left > 0 ? `Too many tries. Try again in ${Math.ceil(left / 60000)} min.` : (msg || 'Enter your code');
+  [...$('lockDots').children].forEach((d, i) => d.className = i < typed.length ? 'f' : '');
+}
+async function lockTry() {
+  const L = $('lock'); L.classList.add('busy'); PIN = typed;
+  try {
+    await load(); store.set('tries', '0'); typed = ''; L.classList.remove('busy', 'on'); splash(); geo();
+  } catch (e) {
+    PIN = ''; typed = ''; L.classList.remove('busy');
+    if (/passcode/i.test(e.message)) {
+      const n = (+store.get('tries') || 0) + 1; store.set('tries', String(n));
+      if (n >= MAX_TRIES) { store.set('lockUntil', String(Date.now() + LOCKOUT)); store.set('tries', '0'); }
+      $('lockDots').classList.add('shake'); setTimeout(() => $('lockDots').classList.remove('shake'), 400);
+      lockShow(n >= MAX_TRIES ? '' : 'Wrong code');
+    } else lockShow("Couldn't reach the family Sheet. Check your connection and try again.");
+  }
+}
+$('lock').addEventListener('click', e => { const b = e.target.closest('button[data-k]'); if (!b || $('lock').classList.contains('busy')) return;
+  if ((+store.get('lockUntil') || 0) > Date.now()) return lockShow();
+  const k = b.dataset.k; if (k === 'del') typed = typed.slice(0, -1); else if (typed.length < 4) typed += k;
+  lockShow(); if (typed.length === 4) lockTry(); });
 A.reload = async () => { try { await load(); toast('Up to date'); } catch (e) { toast(e.message); } };
-document.addEventListener('visibilitychange', () => { if (!document.hidden && ME && Date.now() - lastLoad > 60000 && !sheets.length) load().catch(() => {}); });
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) { hiddenAt = Date.now(); return; }
+  if (PIN && hiddenAt && Date.now() - hiddenAt > LOCK_AFTER) { lock(); return; }
+  if (ME && Date.now() - lastLoad > 60000 && !sheets.length) load().catch(() => {}); });
 // swipe on draft dinners: left = new idea, right = keep
 (function () { let x0 = null, y0 = 0, el = null;
   document.addEventListener('touchstart', e => { el = e.target.closest('.dcard[data-draft]'); if (el) { x0 = e.touches[0].clientX; y0 = e.touches[0].clientY; } }, { passive: true });
