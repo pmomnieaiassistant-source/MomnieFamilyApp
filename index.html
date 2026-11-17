@@ -1085,16 +1085,33 @@ function vFeed() {
       ${pl.length ? pl.slice(0, 10).map(prow).join('') + (pl.length > 10 ? `<div class="small muted" style="padding-top:4px">+${pl.length - 10} more</div>` : '') : `<div class="small muted" style="padding-top:6px">Nothing planned${night ? ' for tomorrow' : ''}.</div>`}</div></div>`;
   const hide = c => c && st('f.' + c, '1') === '0';
   const gone = feedHidden();
-  const stream = S.Activity.filter(a => a.type !== 'message' && !hide(a.cat) && !gone.has('A:' + a.id)).map(a => ({ time: a.time, a })).concat(S.Messages.filter(mm => !gone.has('M:' + mm.id)).map(mm => ({ time: mm.time, m: mm, pin: mm.pinUntil >= TODAY && mm.resolved !== '1' })))
+  const kindHidden = a => a.table === 'Photos' ? !fOn('photos') : a.type === 'daily' ? !fOn('daily') : hide(a.cat);
+  const stream = S.Activity.filter(a => a.type !== 'message' && !kindHidden(a) && !gone.has('A:' + a.id)).map(a => ({ time: a.time, a })).concat(S.Messages.filter(mm => fOn('messages') && !gone.has('M:' + mm.id)).map(mm => ({ time: mm.time, m: mm, pin: mm.pinUntil >= TODAY && mm.resolved !== '1' })))
     .sort((x, y) => (y.pin ? 1 : 0) - (x.pin ? 1 : 0) || y.time.localeCompare(x.time)).slice(0, 70);
   // Bundle bursts: several changes by the same person within a few minutes become one post.
   const win = (+st('bundleMin', '5') || 0) * 60000, out = [];
   stream.forEach(e => { const p = out[out.length - 1], solo = x => x.m || x.pin || x.a.table === 'Photos' || x.a.type === 'daily' || x.a.type.startsWith('summary') || x.a.who === 'App';
     if (win && p && !solo(e) && !solo(p.items ? p.items[0] : p) && p.who === e.a.who && new Date(p.t0) - new Date(e.time) <= win) { p.items = p.items || [{ time: p.time, a: p.a }]; p.items.push(e); p.t0 = e.time; return; }
     out.push(Object.assign({ who: e.a ? e.a.who : '', t0: e.time }, e)); });
-  html += `<div class="sect">Activity</div>` + (out.length ? out.map(e => swipeWrap(e.items ? e.items.map(x => 'A:' + x.a.id) : e.m ? ['M:' + e.m.id] : ['A:' + e.a.id], e.items ? bundlePost(e) : e.m ? msgPost(e.m, e.pin) : actPost(e.a))).join('') : '<div class="empty">Nothing yet. Changes either of you make will show up here.</div>');
+  const fOff = FKINDS().filter(([k]) => !fOn(k)).map(x => x[1]);
+  html += `<div class="rbar" style="padding:14px 8px 6px 16px"><div class="row"><span class="sect" style="padding:0">Activity</span><button class="rmbtn ${fOff.length ? 'on' : ''}" data-a="feedMenu" aria-label="Choose what shows in the Feed" aria-expanded="${FMENU}">${ic('menu', 22)}${fOff.length ? `<i>${fOff.length}</i>` : ''}</button></div>
+    ${FMENU ? `<div class="rshade" data-a="feedMenu"></div><div class="rmenu" role="dialog" aria-label="Show in the Feed" style="top:58px;right:8px"><div class="lbl" style="margin-top:0">Show in my Feed</div>
+      ${FKINDS().map(([k, l]) => `<label class="check-row" style="margin-top:8px"><input type="checkbox" data-c="feedTog" data-k="${k}" ${fOn(k) ? 'checked' : ''}>${esc(l)}</label>`).join('')}
+      <div class="actions"><button class="btn gray sm" data-a="feedAll">Show everything</button><button class="btn sm" data-a="feedMenu">Done</button></div>
+      <div class="small muted" style="margin-top:10px">Only changes your Feed. Same as Home, Settings, Show in my Feed.</div></div>` : ''}
+    ${fOff.length ? `<div class="small muted rapplied" style="padding:2px 0 0">Hiding ${esc(fOff.join(', '))} · <a data-a="feedAll">Show everything</a></div>` : ''}</div>` + (out.length ? out.map(e => swipeWrap(e.items ? e.items.map(x => 'A:' + x.a.id) : e.m ? ['M:' + e.m.id] : ['A:' + e.a.id], e.items ? bundlePost(e) : e.m ? msgPost(e.m, e.pin) : actPost(e.a))).join('') : '<div class="empty">Nothing yet. Changes either of you make will show up here.</div>');
   return html + `<button class="fab" data-a="newMsg" aria-label="New post">${ic('plus', 20)}Post</button>`;
 }
+// Feed filter (three-line menu next to Activity). Uses the same per-person settings as Home > Settings > Show in my Feed.
+const FKINDS = () => [['messages', 'Messages'], ['photos', 'Photos']].concat(Object.keys(NCATS).map(c => [c, ({ convo: 'Comments and questions', summary: 'Weekly and monthly summaries' })[c] || NCATS[c].replace(/ \(.*\)/, '')]), [['daily', 'Memories and quotes']]);
+const fOn = k => st('f.' + k, '1') !== '0';
+let FMENU = false, fPend = {}, fT = 0;
+// Checkboxes update right away; the changes are saved together a moment later.
+function feedSet(k, v) { const id = ME + '|f.' + k, r = byId('Settings', id); if (r) r.value = v; else S.Settings.push({ id, value: v }); fPend[id] = v; clearTimeout(fT); fT = setTimeout(feedSave, 700); }
+function feedSave() { if (busy) { fT = setTimeout(feedSave, 500); return; } const ops = Object.keys(fPend).map(id => ({ t: 'Settings', row: { id, value: fPend[id] } })); fPend = {}; if (ops.length) write(ops); }
+A.feedMenu = () => { FMENU = !FMENU; render(); };
+A.feedTog = (on, el) => { feedSet(el.dataset.k, on ? '1' : '0'); render(); };
+A.feedAll = () => { FKINDS().forEach(([k]) => { if (!fOn(k)) feedSet(k, '1'); }); FMENU = false; render(); };
 // Swipe a Feed post left to delete it. Paul can delete for everyone; Shana removes it from her own Feed.
 const feedHidden = () => new Set(list(st('feedHidden', '')));
 const swipeWrap = (ids, html) => `<div class="swipe" data-fid="${esc(ids.join(' '))}"><div class="under">${ME === 'Paul' ? 'Delete' : 'Remove'}</div>${html}</div>`;
@@ -1428,7 +1445,7 @@ const PAGES = {
     return `<h2>Notifications and Feed</h2><h3>Push on this phone</h3>${pushHTML()}<h3>Notifications for ${esc(ME)}</h3>` + Object.keys(NCATS).map(c => chk('setFlag', 'n.' + c, c === 'dinner' ? '0' : '1', NCATS[c])).join('') +
       `<h3>Bundling</h3><div class="small muted">When several things happen close together, you get one notification that sums them up instead of a string of buzzes. Urgent alerts always come right away.</div><label>Bundle alerts that arrive within</label><select data-c="setVal" data-k="bundleMin">${[['0', 'Off (send each one)'], ['5', '5 minutes'], ['15', '15 minutes'], ['30', '30 minutes'], ['60', '1 hour']].map(([v, l]) => `<option value="${v}" ${st('bundleMin', '5') === v ? 'selected' : ''}>${l}</option>`).join('')}</select>` +
       `<div class="two"><div><label>Quiet hours start</label><input type="time" data-c="setVal" data-k="quietStart" value="${q('quietStart')}"></div><div><label>Quiet hours end</label><input type="time" data-c="setVal" data-k="quietEnd" value="${q('quietEnd')}"></div></div>
-      <div class="actions"><button class="btn gray sm" data-a="ntest">Send me a test</button></div><h3>Show in my Feed</h3>` + Object.keys(NCATS).map(c => chk('setFlag', 'f.' + c, '1', NCATS[c].replace(/ \(.*\)/, ''))).join('') +
+      <div class="actions"><button class="btn gray sm" data-a="ntest">Send me a test</button></div><h3>Show in my Feed</h3>` + FKINDS().map(([k, l]) => chk('setFlag', 'f.' + k, '1', l)).join('') +
       `<h3>Weather</h3><div class="small muted">Weather follows this phone: near Boston or the Cape shows that house, anywhere else shows local weather.</div><div class="actions"><button class="btn gray sm" data-a="geoOn">${store.get('geo') === '1' ? '✓ Using my location' : 'Use my location'}</button></div>
 ` +
       (API_URL ? '' : `<h3>Connection</h3><label>Backend URL</label><input id="sUrl" value="${esc(store.get('url'))}"><div class="actions"><button class="btn gray" data-a="connect">Save and reconnect</button></div>`); }
