@@ -564,11 +564,20 @@ const schoolHours = sch => { try { const h = JSON.parse(sch.hours || '{}'); retu
 const WEEK = DAYS.slice(0, 5);
 const schoolWeek = sch => { const h = schoolHours(sch); return WEEK.map(day => { const w = h[day];
   return { day, start: w ? w[0] || '' : sch.start || '', end: w ? w[1] || '' : sch.end || '', ext: w && w.length > 2 ? w[2] || '' : sch.extEnd || '' }; }); };
-const schoolExtDays = sch => sch ? schoolWeek(sch).filter(w => w.start && w.ext).map(w => w.day) : [];
-function schoolDay(sch, d, kid) {
-  const w = schoolWeek(sch).find(x => x.day === DAYS[dowIdx(d)]) || { start: '', end: '', ext: '' }, ext = !!(kid && w.start && w.ext && list(kid.extDays).includes(w.day));
-  return { s: w.start, e: ext ? w.ext : w.end, ext };
+// Each kid's own pickup and extended-day times, kept in Settings as kid|<id>|schedule = {"Wed":{"e":"15:00","x":"17:30"}}.
+// A blank time means "use the school's". Kids saved before this have no row, so their old extended-day days still work.
+function kidSchedRaw(kid) { const r = byId('Settings', 'kid|' + kid.id + '|schedule'); if (!r) return null; try { const o = JSON.parse(r.value || '{}'); return o && typeof o === 'object' ? o : {}; } catch (e) { return {}; } }
+function kidWeekRows(kid, sch) {
+  const sc = schoolWeek(sch || {}), sched = kid ? kidSchedRaw(kid) : null;
+  return sc.map(w => { const k = sched ? (sched[w.day] || {}) : {}, legacy = !sched && kid && list(kid.extDays).includes(w.day) && w.start ? w.ext : '';
+    return { day: w.day, s: w.start, e: k.e || w.end, x: k.x || legacy || '' }; });
 }
+function schoolDay(sch, d, kid) {
+  const day = DAYS[dowIdx(d)], r = kidWeekRows(kid, sch).find(x => x.day === day) || { s: '', e: '', x: '' }, ext = !!(r.s && r.x);
+  return { s: r.s, e: ext ? r.x : r.e, ext };
+}
+const kidExtTxt = (kid, sch) => groupDays(kidWeekRows(kid, sch).filter(r => r.s && r.x), r => fmtT(r.x)).map(g => dayRun(g.ds) + ' until ' + g.k).join(' · ');
+const kidWeekTxt = (kid, sch) => groupDays(kidWeekRows(kid, sch).filter(r => r.s), r => fmtT(r.e)).map(g => (g.ds.length < 5 ? dayRun(g.ds) + ' ' : '') + 'until ' + g.k).join(' · ');
 /** "Mon, Tue, Wed" becomes "Mon–Wed". */
 const dayRun = ds => { const out = []; let a = null, b = null; ds.forEach(d => { if (b && DAYS.indexOf(d) === DAYS.indexOf(b) + 1) b = d; else { if (a) out.push(a === b ? a : a + '–' + b); a = b = d; } }); if (a) out.push(a === b ? a : a + '–' + b); return out.join(', '); };
 const groupDays = (rows, key) => { const g = new Map(); rows.forEach(r => { const k = key(r); if (k) g.set(k, (g.get(k) || []).concat(r.day)); }); return [...g].map(([k, ds]) => ({ k, ds })); };
@@ -590,7 +599,7 @@ function blocksFor(p, d) {
   const items = itemsFor(d), dow = dowIdx(d), out = [];
   if (p.kind === 'kid') { const sch = byId('Schools', p.schoolId);
     if (sch && dow < 5 && schoolDay(sch, d, p).s) { const c = items.find(i => i.t === 'SchoolCal' && i.src === 'school:' + sch.id && (i.kind === 'off' || i.kind === 'half')), sd = schoolDay(sch, d, p);
-      if (!c || c.kind === 'half') out.push({ n: (sch.short || sch.name) + (sd.ext && !c ? ' extended day' : ''), s: sd.s, e: c && c.end ? c.end : c ? '12:00' : sd.e, school: 1, t: 'Schools', id: sch.id });
+      if (!c || c.kind === 'half') out.push({ n: (sch.short || sch.name) + (sd.ext && !c ? ' extended day' : ''), s: sd.s, e: c && c.end ? c.end : c ? '12:00' : sd.e, school: 1, ext: !!(sd.ext && !c), t: 'Schools', id: sch.id });
       else out.push({ off: c.title || 'No school', t: 'SchoolCal', id: c.id }); } }
   else if (list(p.workDays).includes(DAYS[dow]) && p.workStart) out.push({ n: 'Work', s: p.workStart, e: p.workEnd || p.workStart, work: 1 });
   items.forEach(i => { if (!i.start || i.src === 'dinner') return;
@@ -654,7 +663,7 @@ function fieldHTML(f, v) {
     return `<label>${esc(f.l)}</label>` + rows.map((r, i) => `<div class="irow">${f.cols.map(c => { const at = `class="${c.cls || ''}" data-rk="${f.k}" data-ri="${i}" data-rc="${c.c}"`;
       if (c.t === 'sel') { if (!r[c.c]) r[c.c] = c.o[0]; return `<select ${at}>${c.o.map(o => `<option ${o === r[c.c] ? 'selected' : ''}>${esc(o)}</option>`).join('')}</select>`; }
       if (c.t === 'label') return `<span class="${c.cls || ''} irl">${esc(r[c.c] || '')}</span>`;
-      if (c.t === 'time') return timeSelect(at, r[c.c] || '', c.ph || (c.c === 'end' ? 'Ends' : 'Starts'));
+      if (c.t === 'time') return timeSelect(at, r[c.c] || '', typeof c.ph === 'function' ? c.ph(r) : (c.ph || (c.c === 'end' ? 'Ends' : 'Starts')));
       return `<input ${at} type="${c.t || 'text'}" value="${esc(r[c.c] || '')}" placeholder="${esc(c.ph || '')}" ${c.list ? `list="${c.list}"` : ''} ${c.im ? `inputmode="${c.im}"` : ''} autocomplete="off">`; }).join('')}
       ${f.fixed ? '' : `<button type="button" class="rm" data-rdel="${f.k}" data-ri="${i}" aria-label="Remove">✕</button>`}</div>${!f.noDur && r.start && r.end ? `<div class="small muted dur" style="text-align:right">(${durTxt(r.start, r.end)})</div>` : ''}`).join('') +
       (f.fixed ? '' : `<button type="button" class="chip" style="margin-top:8px" data-radd="${f.k}">＋ ${esc(f.add || 'Add')}</button>`) + (f.copy ? `<button type="button" class="chip" style="margin-top:8px" data-rcopy="${f.k}">Same as Monday for every day</button>` : '') +
@@ -695,7 +704,7 @@ function form(title, fields, vals, onSave, buttons) {
     const ra = t.closest('[data-radd]');
     if (ra) { const k = ra.dataset.radd, rows = v[k] = v[k] || [], last = rows[rows.length - 1] || {}; rows.push(k === '_slots' ? { start: last.start || '', end: last.end || '' } : {}); draw(); const ins = d.querySelectorAll(`[data-rk="${k}"][data-ri="${rows.length - 1}"]`); if (ins[0] && ins[0].tagName === 'INPUT') ins[0].focus(); return; }
     const rc = t.closest('[data-rcopy]');
-    if (rc) { const rows = v[rc.dataset.rcopy] || [], m = Object.assign({}, rows[0] || {}); delete m.day; rows.forEach((r, i) => { if (i) Object.assign(r, m); }); draw(); return; }
+    if (rc) { const rows = v[rc.dataset.rcopy] || [], m = Object.assign({}, rows[0] || {}); delete m.day; Object.keys(m).forEach(k => { if (k[0] === '_') delete m[k]; }); rows.forEach((r, i) => { if (i) Object.assign(r, m); }); draw(); return; }
     const rd = t.closest('[data-rdel]');
     if (rd) { v[rd.dataset.rdel].splice(+rd.dataset.ri, 1); draw(); return; }
     const ia = t.closest('[data-ingadd]');
@@ -758,14 +767,19 @@ const FORMS = {
     F('kids', 'Which kids', 'multi', kidN), F('date', 'Date', 'date'), F('start', 'From', 'time'), F('end', 'Until', 'time', null, { dur: 'start' }), F('roster', 'Which roster to ask', 'sel', ['Boston', 'Cape']), F('notes', 'Notes', 'area')],
   Caretakers: [F('name', 'Name'), F('relationship', 'Relationship'), F('phone', 'Phone', 'tel'), F('roster', 'Roster', 'multi', ['Boston', 'Cape']), F('birthday', 'Birthday (optional)', 'date'),
     F('drive', 'Cleared to drive the kids', 'chk'), F('unpaid', 'Unpaid (no "pay caretaker" to-dos)', 'chk'), F('rate', 'Hourly rate', 'num'), F('notes', 'Notes', 'area')],
-  People: [F('name', 'Name'), F('kind', 'Adult or kid', 'sel', [['adult', 'Adult'], ['kid', 'Kid']], { re: 1 }), F('schoolId', 'School', 'sel', () => [['', 'None']].concat(S.Schools.map(s => [s.id, s.name])), { show: x => x.kind === 'kid', re: 1 }),
-    F('extDays', 'Stays for extended day on', 'multi', x => schoolExtDays(byId('Schools', x.schoolId)), { show: x => x.kind === 'kid' && schoolExtDays(byId('Schools', x.schoolId)).length > 0 }),
+  People: [F('name', 'Name'), F('kind', 'Adult or kid', 'sel', [['adult', 'Adult'], ['kid', 'Kid']], { re: 1 }), F('schoolId', 'School', 'sel', () => [['', 'None']].concat(S.Schools.map(s => [s.id, s.name])), { show: x => x.kind === 'kid', re: 1, on: x => { delete x._sched; } }),
+    F('_sched', 'School day for this kid', 'rows', null, { fixed: 1, noDur: 1, copy: 1, show: x => x.kind === 'kid' && !!x.schoolId,
+      hint: 'Starts from the school. Change a pickup only if it differs. Set an extended-day pickup for days they stay late.',
+      init: x => { const sc = schoolWeek(byId('Schools', x.schoolId) || {}), raw = x.id && kidSchedRaw(x),
+        saved = raw || Object.fromEntries(sc.filter(w => w.start && w.ext && list(x.extDays).includes(w.day)).map(w => [w.day, { x: w.ext }]));
+        return sc.map(w => ({ day: w.day, e: (saved[w.day] || {}).e || '', x: (saved[w.day] || {}).x || '', _pk: w.start ? w.end : '', _xk: w.start ? w.ext : '' })); },
+      cols: [{ c: 'day', t: 'label', cls: 'u' }, { c: 'e', t: 'time', cls: 'n', ph: r => r._pk ? 'School ' + fmtT(r._pk) : 'No school' }, { c: 'x', t: 'time', cls: 'n', ph: r => r._xk ? 'Off (default ' + fmtT(r._xk) + ')' : 'No extended day' }] }),
     F('workDays', 'Usual work days', 'multi', DAYS, { show: x => x.kind !== 'kid' }), F('workStart', 'Work starts', 'time', null, { show: x => x.kind !== 'kid' }), F('workEnd', 'Work ends', 'time', null, { show: x => x.kind !== 'kid', dur: 'workStart' }),
     F('birthday', 'Birthday', 'date'), F('notes', 'Notes (sizes, doctors, anything)', 'area')],
   Schools: [F('name', 'School name'), F('short', 'Short name'),
     F('_week', 'School schedule', 'rows', null, { fixed: 1, noDur: 1, copy: 1, init: x => schoolWeek(x).map(w => ({ day: w.day, start: w.start, end: w.end })), hint: 'Start and pickup for each day. Leave a day blank if there is no school.',
       cols: [{ c: 'day', t: 'label', cls: 'u' }, { c: 'start', t: 'time', cls: 'n', ph: 'No school' }, { c: 'end', t: 'time', cls: 'n', ph: 'Pickup' }] }),
-    F('_ext', 'Extended day', 'rows', null, { fixed: 1, noDur: 1, copy: 1, init: x => schoolWeek(x).map(w => ({ day: w.day, ext: w.ext })), hint: 'When extended day ends each day. Leave a day blank if there is none. Pick which kids stay in Family.',
+    F('_ext', 'Extended day (default for kids)', 'rows', null, { fixed: 1, noDur: 1, copy: 1, init: x => schoolWeek(x).map(w => ({ day: w.day, ext: w.ext })), hint: 'Default extended-day pickup for each day. Each kid can use it or set their own in their Family card.',
       cols: [{ c: 'day', t: 'label', cls: 'u' }, { c: 'ext', t: 'time', cls: 'n', ph: 'No extended day' }] }),
     F('color', 'Card color (hex)'), F('contacts', 'Contacts and teachers', 'area'), F('notes', 'Notes', 'area')],
   SchoolCal: [F('schoolId', 'School', 'sel', () => S.Schools.map(s => [s.id, s.name])), F('title', 'What is it?', 'text', null, { ph: 'e.g. Teacher in-service' }), F('kind', 'Kind', 'sel', [['event', 'Event (school is on)'], ['off', 'No school'], ['half', 'Half day']]),
@@ -803,6 +817,12 @@ function dinnerAwayOps(ev) {
   return hits.map(x => ({ t: 'Menus', row: { id: x.m.id, away: list(x.m.away).concat(x.add).join(', ') }, log: L('away', `${names === ME ? 'is' : 'marked ' + names + ' as'} not home for dinner ${fmtDay(x.m.date)}`, 'dinner') }));
 }
 const SAVE = {
+  People(v) { need(v.name && v.name.trim(), 'Name is required.');
+    const row = Object.assign({}, v, { id: v.id || nid() }), ops = [{ t: 'People', row }];
+    delete row._sched; delete row.extDays;
+    if (row.kind === 'kid' && v._sched) { const sch = {}; v._sched.forEach(r => { if (r.e || r.x) sch[r.day] = { e: r.e || '', x: r.x || '' }; });
+      ops.push({ t: 'Settings', row: { id: 'kid|' + row.id + '|schedule', value: Object.keys(sch).length ? JSON.stringify(sch) : '' } }); }
+    return write(ops); },
   gifts(v) { need(v.name && v.name.trim(), 'Name the gift.'); need(v.recipient, 'Who is it for?');
     const row = Object.assign({}, v, { id: v.id || nid(), url: v.url && !/^https?:\/\//i.test(v.url.trim()) ? 'https://' + v.url.trim() : (v.url || '').trim() });
     if (row.recipient === ME && !v.id) row.assigned_to = '';
@@ -922,7 +942,7 @@ const CARD = {
       kv('For', own ? 'You (your wish list)' : g.recipient) + kv('', g.description) + kvh('Website', g.url && linkOr(g.url)) + (own ? '' : kv('Who is buying it', g.assigned_to || 'No one yet')) +
       kv('Added', `${g.added_by === ME ? 'You' : g.added_by || ''}${g.created_at ? ' · ' + fmtDay(g.created_at) : ''}`) +
       `<div class="actions">${!own && !g.assigned_to ? `<button class="btn sm" data-a="giftMine" data-v="${g.id}">${ic('check', 16)}I'll get it</button>` : ''}<button class="btn gray sm" data-a="edit">${ic('pen')}Edit</button><button class="btn danger sm" data-a="del">${ic('trash')}Delete</button></div>`; },
-  Schools(r, d, t) { return genericCard(r, d, t) + kv('Schedule', schoolHoursTxt(r)) + kv('Kids', kids().filter(k => k.schoolId === r.id).map(k => k.name + (k.extDays && schoolExtDays(r).some(d => list(k.extDays).includes(d)) ? ` (extended day ${dayRun(WEEK.filter(d => list(k.extDays).includes(d) && schoolExtDays(r).includes(d)))})` : '')).join(', ')) + std(); },
+  Schools(r, d, t) { return genericCard(r, d, t) + kv('Schedule', schoolHoursTxt(r)) + kv('Kids', kids().filter(k => k.schoolId === r.id).map(k => k.name + (kidExtTxt(k, r) ? ' (extended ' + kidExtTxt(k, r) + ')' : '')).join(', ')) + std(); },
   Todos(r) { const ty = typeOf(r), done = r.status === 'Done', src = r.source.split(':');
     return `<h2>${esc(r.title)}</h2>${r.amount ? `<div class="b" style="font-size:22px">${money(r.amount)}</div>` : ''}` + kv('Type', ty.name) + kvh('Due', `<span class="${!done && r.due < TODAY ? 'red' : ''}">${fmtDay(r.due)}${!done && r.due < TODAY ? ' (overdue)' : ''}</span>`) + kv('For', r.assignee || 'Either of us') +
       kvh('Where to pay', r.where && linkOr(r.where)) + kv('Kid', r.kid) + kv('House', r.house) + kv('Repeats', r.repeat) + kvh('Link', r.link && linkOr(r.link)) + kv('Notes', r.notes) + kv('Added', `${r.addedBy} · ${fmtDay(r.created)}`) + (done ? kv(ty.id === 'bill' || ty.id === 'paycare' ? 'Paid' : 'Done', `${r.doneBy} · ${fmtDay(r.doneOn)}`) : '') +
@@ -970,7 +990,7 @@ const CARD = {
       `<div class="actions"><button class="btn ${res ? 'gray' : 'dark'} sm" data-a="resolve">${res ? 'Reopen' : '✓ Resolve'}</button><button class="btn gray sm" data-a="msgTodo">${ic('plus', 16)}Add as to-do</button><button class="btn gray sm" data-a="msgEvent">${ic('planner', 16)}Add as event</button></div>` + std(); },
   People(p, d, t) { const up = []; for (let i = 0; i < 7; i++) itemsFor(addDays(TODAY, i)).forEach(x => { if (x.people.includes(p.name) || x.dropoff === p.name || x.pickup === p.name) up.push(x); });
     const s = byId('Schools', p.schoolId), msgs = S.Messages.filter(m => list(m.tags).includes(p.name) && m.resolved !== '1');
-    return `<h2>${esc(p.name)}</h2>` + (s ? kv('School', `${s.name}${schoolHoursTxt(s) ? ' · ' + schoolHoursTxt(s) : ''}`) + (p.kind === 'kid' && p.extDays ? kv('Extended day', groupDays(schoolWeek(s).filter(w => w.start && w.ext && list(p.extDays).includes(w.day)), w => fmtT(w.ext)).map(g => dayRun(g.ds) + ' until ' + g.k).join(' · ') || 'None') : '') : '') + (p.kind !== 'kid' && p.workDays ? kv('Usual work schedule', `${p.workDays}${p.workStart ? ` · ${fmtT(p.workStart)}–${fmtT(p.workEnd)}` : ''}`) : '') +
+    return `<h2>${esc(p.name)}</h2>` + (s ? kv('School', `${s.name}${schoolHoursTxt(s) ? ' · ' + schoolHoursTxt(s) : ''}`) + (p.kind === 'kid' ? kv('Pickups', kidWeekTxt(p, s)) + (kidExtTxt(p, s) ? kv('Extended day', kidExtTxt(p, s)) : '') : '') : '') + (p.kind !== 'kid' && p.workDays ? kv('Usual work schedule', `${p.workDays}${p.workStart ? ` · ${fmtT(p.workStart)}–${fmtT(p.workEnd)}` : ''}`) : '') +
       (p.birthday ? kv('Birthday', fmtDate(p.birthday) + (p.birthday.length >= 10 ? ` · ${ageOn({ year: +p.birthday.slice(0, 4), md: p.birthday.slice(5) }, TODAY)} years old` : '')) : '') + kv('Notes', p.notes) +
       `<h3>Next 7 days</h3>${up.map(pcard).join('') || '<div class="muted small">Nothing on the Planner.</div>'}` + (msgs.length ? `<h3>Messages</h3>${msgs.map(m => `<div class="ptext msg" data-a="open" data-t="Messages" data-id="${m.id}">${esc(m.text)}</div>`).join('')}` : '') +
       `<div class="actions"><button class="btn gray sm" data-a="edit">${ic('pen')}Edit${p.kind === 'kid' ? ' (school, notes)' : ' (schedule, notes)'}</button>${p.kind === 'kid' ? '' : `<button class="btn gray sm" data-a="add" data-v="Events">＋ Work or social event</button>`}</div>`; },
@@ -1153,12 +1173,15 @@ function todoSummary(mine, over, due, night) {
  * after = 'HH:MM' drops things already over (afternoon view).
  */
 function planRows(d, after) {
-  const rows = [], drop = {}, pick = {};
+  const rows = [], drop = {}, pick = {}, ext = {};
   kids().forEach(k => blocksFor(k, d).filter(b => b.school && !b.off).forEach(b => {
-    const base = b.n.replace(/ extended day$/, ''), dk = b.s + '|' + base, pk = b.e + '|' + b.n;
-    (drop[dk] = drop[dk] || { s: b.s, n: base, k: [] }).k.push(k.name); (pick[pk] = pick[pk] || { s: b.e, n: b.n, k: [] }).k.push(k.name); }));
+    const base = b.n.replace(/ extended day$/, '');
+    (drop[b.s + '|' + base] = drop[b.s + '|' + base] || { s: b.s, n: base, k: [] }).k.push(k.name);
+    if (b.ext) (ext[b.e + '|' + base] = ext[b.e + '|' + base] || { s: b.e, n: base, k: [] }).k.push(k.name);
+    else (pick[b.e + '|' + base] = pick[b.e + '|' + base] || { s: b.e, n: base, k: [] }).k.push(k.name); }));
   Object.values(drop).forEach(x => rows.push({ s: x.s, title: x.n + ' drop-off', sub: esc(kidNames(x.k)) }));
   Object.values(pick).forEach(x => rows.push({ s: x.s, title: x.n + ' pickup', sub: esc(kidNames(x.k)) }));
+  Object.values(ext).forEach(x => rows.push({ s: x.s, title: x.n + ' extended day pickup', sub: esc(kidNames(x.k)) }));
   itemsFor(d).filter(i => i.t !== 'GCal' && i.src !== 'gcal' && i.src !== 'birthday').forEach(i => {
     const ride = i.ride ? (!i.dropoff || !i.pickup ? `<span class="red">${!i.dropoff && !i.pickup ? 'rides' : !i.dropoff ? 'drop-off' : 'pickup'} not set</span>` : rideHTML(i)) : '';
     const sub = i.src === 'dinner' ? [i.cook && esc(i.cook) + ' cooking', i.away && `<span class="amb">${esc(i.away)} not home</span>`].filter(Boolean).join(' · ') : [i.sub && (i.warn ? `<span class="red">${esc(i.sub)}</span>` : esc(i.sub)), ride].filter(Boolean).join(' · ');
