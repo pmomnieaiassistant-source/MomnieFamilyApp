@@ -513,6 +513,11 @@ function itemsFor(d) {
   CAL.forEach(c => { if (adopted.has(c.id)) return; const on = c.allDay ? (c.start <= d && d < c.end) : c.start.slice(0, 10) === d;
     if (on) out.push({ t: 'GCal', id: c.id, title: c.title, sub: c.location, start: c.allDay ? '' : c.start.slice(11), end: c.allDay ? '' : c.end.slice(11), color: CAT.Shared, people: [], src: 'gcal' }); });
   allBirthdays().forEach(b => { if (b.md === d.slice(5)) { const a = ageOn(b, d); out.push({ t: b.t, id: b.id, icon: 'cake', title: b.name + "'s birthday" + (a !== null && a > 0 ? ' (' + a + ')' : ''), start: '', color: CAT.Birthday, people: [], src: 'birthday' }); } });
+  // Extended day is its own Planner event: from the school pickup to the extended-day pickup. Tapping it opens the kid's card.
+  kids().forEach(k => { const sch = byId('Schools', k.schoolId); if (!sch) return;
+    const sd = schoolDay(sch, d, k);
+    if (!sd.ext || !sd.base || out.some(i => i.t === 'SchoolCal' && i.src === 'school:' + sch.id && (i.kind === 'off' || i.kind === 'half'))) return;
+    out.push({ t: 'People', id: k.id, ext: true, schoolId: sch.id, title: k.name + ' · extended day', sub: (sch.short || sch.name) + ' until ' + fmtT(sd.e), start: sd.base, end: sd.e, color: pcol(k.name), people: [k.name], src: 'school:' + sch.id }); });
   const m = S.Menus.find(x => x.date === d);
   if (m && dish(m) && m.skipped !== '1') out.push({ t: 'Menus', id: m.id, title: dish(m), sub: [m.cook && m.cook + ' cooking', m.away && m.away + ' not home'].filter(Boolean).join(' · '), cook: m.cook || '', away: m.away || '', start: '', label: 'Dinner', color: CAT.Dinner, people: [], src: 'dinner' });
   S.Childcare.forEach(c => { if (c.date === d) out.push({ t: 'Childcare', id: c.id, icon: 'care', title: careTitle(c), sub: c.confirmedId ? careName(c.confirmedId) + ' · confirmed' : 'Not confirmed yet', warn: !c.confirmedId, start: c.start, end: c.end, color: CAT.Caretaker, people: list(c.kids) }); });
@@ -574,7 +579,7 @@ function kidWeekRows(kid, sch) {
 }
 function schoolDay(sch, d, kid) {
   const day = DAYS[dowIdx(d)], r = kidWeekRows(kid, sch).find(x => x.day === day) || { s: '', e: '', x: '' }, ext = !!(r.s && r.x);
-  return { s: r.s, e: ext ? r.x : r.e, ext };
+  return { s: r.s, e: ext ? r.x : r.e, ext, base: r.e };
 }
 const kidExtTxt = (kid, sch) => groupDays(kidWeekRows(kid, sch).filter(r => r.s && r.x), r => fmtT(r.x)).map(g => dayRun(g.ds) + ' until ' + g.k).join(' · ');
 const kidWeekTxt = (kid, sch) => groupDays(kidWeekRows(kid, sch).filter(r => r.s), r => fmtT(r.e)).map(g => (g.ds.length < 5 ? dayRun(g.ds) + ' ' : '') + 'until ' + g.k).join(' · ');
@@ -769,18 +774,16 @@ const FORMS = {
     F('drive', 'Cleared to drive the kids', 'chk'), F('unpaid', 'Unpaid (no "pay caretaker" to-dos)', 'chk'), F('rate', 'Hourly rate', 'num'), F('notes', 'Notes', 'area')],
   People: [F('name', 'Name'), F('kind', 'Adult or kid', 'sel', [['adult', 'Adult'], ['kid', 'Kid']], { re: 1 }), F('schoolId', 'School', 'sel', () => [['', 'None']].concat(S.Schools.map(s => [s.id, s.name])), { show: x => x.kind === 'kid', re: 1, on: x => { delete x._sched; } }),
     F('_sched', 'School day for this kid', 'rows', null, { fixed: 1, noDur: 1, copy: 1, show: x => x.kind === 'kid' && !!x.schoolId,
-      hint: 'Starts from the school. Change a pickup only if it differs. Set an extended-day pickup for days they stay late.',
+      hint: 'Starts from the school. Change a pickup only if it differs. Set an extended-day pickup for days they stay late. Extended day shows as its own Planner event. After-school classes go under Home → Activities.',
       init: x => { const sc = schoolWeek(byId('Schools', x.schoolId) || {}), raw = x.id && kidSchedRaw(x),
         saved = raw || Object.fromEntries(sc.filter(w => w.start && w.ext && list(x.extDays).includes(w.day)).map(w => [w.day, { x: w.ext }]));
         return sc.map(w => ({ day: w.day, e: (saved[w.day] || {}).e || '', x: (saved[w.day] || {}).x || '', _pk: w.start ? w.end : '', _xk: w.start ? w.ext : '' })); },
-      cols: [{ c: 'day', t: 'label', cls: 'u' }, { c: 'e', t: 'time', cls: 'n', ph: r => r._pk ? 'School ' + fmtT(r._pk) : 'No school' }, { c: 'x', t: 'time', cls: 'n', ph: r => r._xk ? 'Off (default ' + fmtT(r._xk) + ')' : 'No extended day' }] }),
+      cols: [{ c: 'day', t: 'label', cls: 'u' }, { c: 'e', t: 'time', cls: 'n', ph: r => r._pk ? 'School ' + fmtT(r._pk) : 'No school' }, { c: 'x', t: 'time', cls: 'n', ph: () => 'No extended day' }] }),
     F('workDays', 'Usual work days', 'multi', DAYS, { show: x => x.kind !== 'kid' }), F('workStart', 'Work starts', 'time', null, { show: x => x.kind !== 'kid' }), F('workEnd', 'Work ends', 'time', null, { show: x => x.kind !== 'kid', dur: 'workStart' }),
     F('birthday', 'Birthday', 'date'), F('notes', 'Notes (sizes, doctors, anything)', 'area')],
   Schools: [F('name', 'School name'), F('short', 'Short name'),
     F('_week', 'School schedule', 'rows', null, { fixed: 1, noDur: 1, copy: 1, init: x => schoolWeek(x).map(w => ({ day: w.day, start: w.start, end: w.end })), hint: 'Start and pickup for each day. Leave a day blank if there is no school.',
       cols: [{ c: 'day', t: 'label', cls: 'u' }, { c: 'start', t: 'time', cls: 'n', ph: 'No school' }, { c: 'end', t: 'time', cls: 'n', ph: 'Pickup' }] }),
-    F('_ext', 'Extended day (default for kids)', 'rows', null, { fixed: 1, noDur: 1, copy: 1, init: x => schoolWeek(x).map(w => ({ day: w.day, ext: w.ext })), hint: 'Default extended-day pickup for each day. Each kid can use it or set their own in their Family card.',
-      cols: [{ c: 'day', t: 'label', cls: 'u' }, { c: 'ext', t: 'time', cls: 'n', ph: 'No extended day' }] }),
     F('color', 'Card color (hex)'), F('contacts', 'Contacts and teachers', 'area'), F('notes', 'Notes', 'area')],
   SchoolCal: [F('schoolId', 'School', 'sel', () => S.Schools.map(s => [s.id, s.name])), F('title', 'What is it?', 'text', null, { ph: 'e.g. Teacher in-service' }), F('kind', 'Kind', 'sel', [['event', 'Event (school is on)'], ['off', 'No school'], ['half', 'Half day']]),
     F('date', 'Date', 'date'), F('endDate', 'Last day (optional)', 'date'), F('start', 'Starts (optional)', 'time'), F('end', 'Ends, or half-day pickup time', 'time', null, { dur: 'start' }), F('notes', 'Notes', 'area')],
@@ -828,8 +831,8 @@ const SAVE = {
     if (row.recipient === ME && !v.id) row.assigned_to = '';
     return write({ t: 'gifts', row }); },   // no Feed post: gift ideas stay a surprise
   Schools(v) { need(v.name && v.name.trim(), 'School name is required.');
-    const wk = v._week || [], ex = v._ext || [], h = {}, mode = a => { const c = {}; a.filter(Boolean).forEach(x => c[x] = (c[x] || 0) + 1); return Object.keys(c).sort((x, y) => c[y] - c[x])[0] || ''; };
-    WEEK.forEach((d, i) => { const w = wk[i] || {}; need(!w.start || w.end, `Pick a pickup time for ${d}.`); h[d] = [w.start || '', w.start ? w.end || '' : '', w.start ? (ex[i] || {}).ext || '' : '']; });
+    const wk = v._week || [], old = schoolWeek(byId('Schools', v.id) || {}), h = {}, mode = a => { const c = {}; a.filter(Boolean).forEach(x => c[x] = (c[x] || 0) + 1); return Object.keys(c).sort((x, y) => c[y] - c[x])[0] || ''; };
+    WEEK.forEach((d, i) => { const w = wk[i] || {}; need(!w.start || w.end, `Pick a pickup time for ${d}.`); h[d] = [w.start || '', w.start ? w.end || '' : '', w.start ? (old[i] || {}).ext || '' : '']; });
     // start / end / extEnd keep the most common times so older screens and the backend still see sensible values
     const row = Object.assign({}, v, { id: v.id || nid(), hours: JSON.stringify(h), start: mode(WEEK.map(d => h[d][0])), end: mode(WEEK.map(d => h[d][1])), extEnd: mode(WEEK.map(d => h[d][2])) });
     delete row._week; delete row._ext; delete row._hours;
@@ -1182,7 +1185,7 @@ function planRows(d, after) {
   Object.values(drop).forEach(x => rows.push({ s: x.s, title: x.n + ' drop-off', sub: esc(kidNames(x.k)) }));
   Object.values(pick).forEach(x => rows.push({ s: x.s, title: x.n + ' pickup', sub: esc(kidNames(x.k)) }));
   Object.values(ext).forEach(x => rows.push({ s: x.s, title: x.n + ' extended day pickup', sub: esc(kidNames(x.k)) }));
-  itemsFor(d).filter(i => i.t !== 'GCal' && i.src !== 'gcal' && i.src !== 'birthday').forEach(i => {
+  itemsFor(d).filter(i => i.t !== 'GCal' && i.src !== 'gcal' && i.src !== 'birthday' && !i.ext).forEach(i => {
     const ride = i.ride ? (!i.dropoff || !i.pickup ? `<span class="red">${!i.dropoff && !i.pickup ? 'rides' : !i.dropoff ? 'drop-off' : 'pickup'} not set</span>` : rideHTML(i)) : '';
     const sub = i.src === 'dinner' ? [i.cook && esc(i.cook) + ' cooking', i.away && `<span class="amb">${esc(i.away)} not home</span>`].filter(Boolean).join(' · ') : [i.sub && (i.warn ? `<span class="red">${esc(i.sub)}</span>` : esc(i.sub)), ride].filter(Boolean).join(' · ');
     rows.push({ s: i.start || '', e: i.end || '', title: i.title, sub, dinner: i.src === 'dinner' }); });
@@ -1286,7 +1289,7 @@ let PW = '', calLoaded = ['', ''];
 const PKINDS = () => [['k:events', 'Events made in the app'], ['k:activities', 'Activities'], ['k:care', 'Childcare'], ['k:dinner', 'Dinner']]
   .concat(S.Schools.map(s => ['k:school:' + s.id, (s.short || s.name) + ' calendar']), [['k:birthday', 'Birthdays'], ['k:gcal', 'Shared calendar']]);
 const pHidden = () => { try { return new Set(JSON.parse(store.get('plHide') || '[]')); } catch (e) { return new Set(); } };
-const pKind = i => i.src === 'gcal' || i.t === 'GCal' ? 'gcal' : i.src === 'birthday' ? 'birthday' : i.src === 'dinner' ? 'dinner' : i.t === 'SchoolCal' ? i.src : i.t === 'Activities' ? 'activities' : i.t === 'Childcare' ? 'care' : 'events';
+const pKind = i => i.ext ? 'school:' + i.schoolId : i.src === 'gcal' || i.t === 'GCal' ? 'gcal' : i.src === 'birthday' ? 'birthday' : i.src === 'dinner' ? 'dinner' : i.t === 'SchoolCal' ? i.src : i.t === 'Activities' ? 'activities' : i.t === 'Childcare' ? 'care' : 'events';
 const pShown = (i, hid) => !hid.has('k:' + pKind(i)) && !(i.people.length && i.people.every(n => hid.has('p:' + n)));
 let PMENU = false;
 A.pfilterOpen = () => { PMENU = !PMENU; render(); };
