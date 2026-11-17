@@ -607,7 +607,7 @@ function blocksFor(p, d) {
       if (!c || c.kind === 'half') out.push({ n: (sch.short || sch.name) + (sd.ext && !c ? ' extended day' : ''), s: sd.s, e: c && c.end ? c.end : c ? '12:00' : sd.e, school: 1, ext: !!(sd.ext && !c), t: 'Schools', id: sch.id });
       else out.push({ off: c.title || 'No school', t: 'SchoolCal', id: c.id }); } }
   else if (list(p.workDays).includes(DAYS[dow]) && p.workStart) out.push({ n: 'Work', s: p.workStart, e: p.workEnd || p.workStart, work: 1 });
-  items.forEach(i => { if (!i.start || i.src === 'dinner') return;
+  items.forEach(i => { if (!i.start || i.src === 'dinner' || i.ext) return;   // extended day is already the school block above
     if (i.people.includes(p.name) && i.t !== 'Childcare') out.push({ n: i.title, s: i.start, e: i.end || i.start, where: i.sub, drop: i.dropoff, pick: i.pickup, ride: i.ride, t: i.t, id: i.id });
     if (p.kind !== 'kid') { if (i.dropoff === p.name) out.push({ n: 'Drop off ' + (kidNames(i.people) || 'kids') + ' at ' + i.title, s: i.start, e: i.start, t: i.t, id: i.id, task: 1 });
       if (i.pickup === p.name) out.push({ n: 'Pick up ' + (kidNames(i.people) || 'kids') + ' from ' + i.title, s: i.end || i.start, e: i.end || i.start, t: i.t, id: i.id, task: 1 }); }
@@ -823,7 +823,7 @@ const SAVE = {
   People(v) { need(v.name && v.name.trim(), 'Name is required.');
     const row = Object.assign({}, v, { id: v.id || nid() }), ops = [{ t: 'People', row }];
     delete row._sched; delete row.extDays;
-    if (row.kind === 'kid' && v._sched) { const sch = {}; v._sched.forEach(r => { if (r.e || r.x) sch[r.day] = { e: r.e || '', x: r.x || '' }; });
+    if (row.kind === 'kid' && v._sched) { v._sched.forEach(r => need(!r.x || !r.e || r.x > r.e, 'The extended-day pickup must be after the pickup.')); const sch = {}; v._sched.forEach(r => { if (r.e || r.x) sch[r.day] = { e: r.e || '', x: r.x || '' }; });
       ops.push({ t: 'Settings', row: { id: 'kid|' + row.id + '|schedule', value: Object.keys(sch).length ? JSON.stringify(sch) : '' } }); }
     return write(ops); },
   gifts(v) { need(v.name && v.name.trim(), 'Name the gift.'); need(v.recipient, 'Who is it for?');
