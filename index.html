@@ -183,10 +183,21 @@
   .plan .ph a { display:inline-flex; align-items:center; font-size:13px; letter-spacing:0; text-transform:none; }
   .prow { display:grid; grid-template-columns:62px minmax(0,1fr); gap:10px; font-size:14px; line-height:1.35; padding:4px 0; } .prow > span:first-child { font-weight:800; color:var(--muted); }
   .prow.past { opacity:.5; }
+  /* recipes search bar with a sort/tags menu */
+  .rbar { position:relative; padding:10px 12px 4px; }
+  .rsearch { display:flex; align-items:center; background:var(--card); border:1px solid var(--line); border-radius:14px; padding-right:4px; }
+  #view .rsearch input { border:0; background:none; flex:1; min-width:0; }
+  .rmbtn { position:relative; flex:0 0 auto; width:44px; height:44px; border:0; border-radius:10px; background:none; color:var(--muted); display:flex; align-items:center; justify-content:center; padding:0; }
+  .rmbtn.on { color:var(--accent); } .rmbtn i { position:absolute; top:5px; right:4px; min-width:16px; height:16px; border-radius:8px; background:var(--accent); color:var(--onacc); font:800 10px/16px inherit; font-style:normal; text-align:center; }
+  .rshade { position:fixed; inset:0; z-index:6; }
+  .rmenu { position:absolute; right:12px; top:62px; z-index:7; width:min(320px, calc(100% - 24px)); max-height:70vh; overflow:auto; padding:14px; border-radius:18px; background:var(--card); border:1px solid var(--line); box-shadow:0 12px 32px rgba(15,23,42,.22); }
+  .rmopt { display:flex; align-items:center; gap:8px; width:100%; border:0; background:none; padding:9px 4px; font:inherit; font-size:15px; font-weight:600; color:var(--text); text-align:left; border-radius:10px; }
+  .rmopt.on { color:var(--accent); } .rmtags { display:flex; flex-wrap:wrap; gap:6px; margin-top:8px; }
+  .rapplied { padding:6px 4px 0; } .rapplied a { cursor:pointer; }
+  .alert.flag { background:var(--accsoft); color:var(--text); font-weight:600; } .alert.flag .ic { color:var(--accent); }
+  .ftag { flex:0 0 auto; font-size:10px; font-weight:800; letter-spacing:.6px; padding:3px 7px; border-radius:6px; background:var(--accent); color:var(--onacc); }
   input[type=checkbox] { accent-color:var(--accent); }
   .ride { display:inline-flex; align-items:center; gap:1px; white-space:nowrap; }
-  .fhead { display:flex; align-items:center; justify-content:space-between; gap:10px; padding:2px 16px 4px; }
-  .fhead .small { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .wxrow { display:flex; align-items:center; gap:8px; margin-top:8px; } .wxrow b { font-size:30px; font-weight:800; letter-spacing:-.5px; }
   .stack { display:flex; flex-direction:column; gap:6px; margin-top:8px; } .amb { color:var(--amber); font-weight:700; }
   .hero .plan { margin-top:16px; }
@@ -357,6 +368,7 @@ const ICONS = {
   wrench: '<path d="M14.5 6.5a4 4 0 0 0 5 5L21 13l-8 8-3-3 8-8-1.5-1.5a4 4 0 0 1-5-5L13 2z"/>',
   note: '<rect x="5" y="3.5" width="14" height="18" rx="2"/><path d="M9 3.5V2h6v1.5M9 10h6M9 14h6M9 18h3"/>',
   chev: '<path d="m9 6 6 6-6 6"/>',
+  menu: '<path d="M4 7h16M4 12h16M4 17h16"/>',
   up: '<path d="M12 19V5M6 11l6-6 6 6"/>',
   down: '<path d="M12 5v14M6 13l6 6 6-6"/>',
   filter: '<path d="M3 5h18l-7 8.5V20l-4-2v-4.5z"/>'
@@ -1012,11 +1024,20 @@ const todoRow = t => { const ty = typeOf(t), done = t.status === 'Done', late = 
     <div class="small muted"><span class="${late || t.due === TODAY ? 'red' : ''}">${done ? 'Done ' + fmtDay(t.doneOn) + ' by ' + esc(t.doneBy) : (late ? 'Overdue · ' : t.due === TODAY ? 'Due today · ' : 'Due ') + fmtDay(t.due)}</span> · ${esc(t.assignee || 'Either of us')}${t.kid ? ' · ' + esc(t.kid) : ''}${t.house ? ' · ' + esc(t.house) : ''}${t.repeat ? ' · ' + ic('repeat', 13) : ''}</div></div></div>`; };
 
 // ----- Feed -----
-// The day after a planned dinner: ask how it was until you've rated it and someone has added a photo.
-function howWas() {
-  const m = S.Menus.find(x => x.date === addDays(TODAY, -1) && x.recipeId && x.skipped !== '1'), r = m && byId('Recipes', m.recipeId);
-  if (!r || (myStars(r) && photosOf('Recipes', r.id).length)) return [];
-  return [{ lvl: 'plain', icon: 'meals', text: `How was the ${r.name}? ${myStars(r) ? 'Add a photo' : 'Rate it' + (photosOf('Recipes', r.id).length ? '' : ' or add a photo')}`, open: ['Recipes', r.id] }];
+// Dinner flags, shown first and on their own, when a parent isn't home for dinner (tonight, or tomorrow from 7 PM): who's out, and that I'm cooking if I am.
+function dinnerFlags(d, night) {
+  // Only when someone won't be home, and not when someone other than me is cooking that night.
+  const m = S.Menus.find(x => x.date === d); if (!m || m.skipped === '1' || !list(m.away).length || (m.cook && m.cook !== ME)) return [];
+  const when = night ? 'tomorrow' : 'tonight', out = [];
+  if (m.cook === ME) out.push({ lvl: 'plain', icon: 'meals', tag: 'DINNER', text: `You're making dinner ${when}${dish(m) ? ': ' + dish(m) : ''}`, open: ['Menus', m.id] });
+  list(m.away).forEach(p => out.push({ lvl: 'plain', icon: 'home', tag: 'DINNER', text: `${p === ME ? "You won't" : p + " won't"} be home for dinner ${when}`, open: ['Menus', m.id] }));
+  return out;
+}
+// Reminders show one line for my open to-dos (mine or unassigned), with how many are overdue or due soon. Tapping it opens To-Do.
+function todoSummary(mine, over, due, night) {
+  if (!mine.length) return [];
+  const today = due.filter(t => t.due === TODAY).length, soon = due.length - today, bits = [over.length && over.length + ' overdue', today && today + ' due today', soon && soon + ' due tomorrow'].filter(Boolean);
+  return [{ lvl: over.length ? 'red' : 'plain', icon: 'todo', text: `You have ${mine.length} outstanding to-do${mine.length === 1 ? '' : 's'}${bits.length ? ' · ' + bits.join(' · ') : ''}`, nav: 'todo' }];
 }
 /**
  * The plan shown on the Today card: school drop-offs and pickups (with extended day), activities, events made in the app,
@@ -1045,11 +1066,10 @@ function vFeed() {
   const wx = wxHits(wi, 'morning').concat(wxHits(wi, 'night')).filter(r => !seen.has(r.message) && seen.add(r.message)).map(r => ({ icon: WXR[r.metric] || 'weather', text: r.message }));
   const mine = myTodos(), over = mine.filter(t => t.due && t.due < TODAY), due = mine.filter(t => t.due === TODAY || (night && t.due === sd));
   const bdays = itemsFor(sd).filter(i => i.src === 'birthday');
-  const rem = al.map(a => ({ lvl: a.lvl || 'plain', icon: a.icon, text: a.text, open: a.open }))
+  const rem = dinnerFlags(sd, night).concat(al.map(a => ({ lvl: a.lvl || 'plain', icon: a.icon, text: a.text, open: a.open })))
     .concat(bdays.map(b => ({ lvl: 'plain', icon: 'cake', text: b.title + (night ? ' tomorrow' : ' today'), open: [b.t, b.id] })),
-      over.concat(due).map(t => ({ lvl: t.due < TODAY ? 'red' : 'plain', ty: typeOf(t), text: t.title + (t.due < TODAY ? ' · overdue' : t.due === TODAY ? ' · due today' : ' · due tomorrow'), open: ['Todos', t.id] })),
-      night ? [] : howWas());
-  const remHTML = r => `<div class="alert ${r.lvl}" ${r.open ? `data-a="open" data-t="${r.open[0]}" data-id="${esc(r.open[1])}" data-d="${r.open[2] || ''}"` : ''}>${r.ty ? tyIcon(r.ty, 16) : ic(r.icon || 'alert', 16)}<span>${esc(r.text)}</span></div>`;
+      todoSummary(mine, over, due, night));
+  const remHTML = r => `<div class="alert ${r.lvl}${r.tag ? ' flag' : ''}" ${r.nav ? `data-a="nav" data-v="${r.nav}"` : r.open ? `data-a="open" data-t="${r.open[0]}" data-id="${esc(r.open[1])}" data-d="${r.open[2] || ''}"` : ''}>${r.ty ? tyIcon(r.ty, 16) : ic(r.icon || 'alert', 16)}<span class="grow">${esc(r.text)}</span>${r.tag ? `<span class="ftag">${esc(r.tag)}</span>` : ''}</div>`;
   const code = wd ? (night || WX.code === null ? wd.code : WX.code) : null;
   const weather = wd ? `<div class="lbl">${night ? "Tomorrow's" : "Today's"} weather</div>
     <div class="wxrow">${WXI(code, 30)}<b>${night || WX.now === null ? wd.high : WX.now}°</b><span class="small muted">${WXW[wxKind(code)]}${WX.place ? ' · ' + esc(WX.place) : ''}</span></div>
@@ -1065,16 +1085,33 @@ function vFeed() {
       ${pl.length ? pl.slice(0, 10).map(prow).join('') + (pl.length > 10 ? `<div class="small muted" style="padding-top:4px">+${pl.length - 10} more</div>` : '') : `<div class="small muted" style="padding-top:6px">Nothing planned${night ? ' for tomorrow' : ''}.</div>`}</div></div>`;
   const hide = c => c && st('f.' + c, '1') === '0';
   const gone = feedHidden();
-  const stream = S.Activity.filter(a => a.type !== 'message' && !hide(a.cat) && !gone.has('A:' + a.id)).map(a => ({ time: a.time, a })).concat(S.Messages.filter(mm => !gone.has('M:' + mm.id)).map(mm => ({ time: mm.time, m: mm, pin: mm.pinUntil >= TODAY && mm.resolved !== '1' })))
+  const kindHidden = a => a.table === 'Photos' ? !fOn('photos') : a.type === 'daily' ? !fOn('daily') : hide(a.cat);
+  const stream = S.Activity.filter(a => a.type !== 'message' && !kindHidden(a) && !gone.has('A:' + a.id)).map(a => ({ time: a.time, a })).concat(S.Messages.filter(mm => fOn('messages') && !gone.has('M:' + mm.id)).map(mm => ({ time: mm.time, m: mm, pin: mm.pinUntil >= TODAY && mm.resolved !== '1' })))
     .sort((x, y) => (y.pin ? 1 : 0) - (x.pin ? 1 : 0) || y.time.localeCompare(x.time)).slice(0, 70);
   // Bundle bursts: several changes by the same person within a few minutes become one post.
   const win = (+st('bundleMin', '5') || 0) * 60000, out = [];
   stream.forEach(e => { const p = out[out.length - 1], solo = x => x.m || x.pin || x.a.table === 'Photos' || x.a.type === 'daily' || x.a.type.startsWith('summary') || x.a.who === 'App';
     if (win && p && !solo(e) && !solo(p.items ? p.items[0] : p) && p.who === e.a.who && new Date(p.t0) - new Date(e.time) <= win) { p.items = p.items || [{ time: p.time, a: p.a }]; p.items.push(e); p.t0 = e.time; return; }
     out.push(Object.assign({ who: e.a ? e.a.who : '', t0: e.time }, e)); });
-  html += `<div class="sect">Activity</div>` + (out.length ? out.map(e => swipeWrap(e.items ? e.items.map(x => 'A:' + x.a.id) : e.m ? ['M:' + e.m.id] : ['A:' + e.a.id], e.items ? bundlePost(e) : e.m ? msgPost(e.m, e.pin) : actPost(e.a))).join('') : '<div class="empty">Nothing yet. Changes either of you make will show up here.</div>');
+  const fOff = FKINDS().filter(([k]) => !fOn(k)).map(x => x[1]);
+  html += `<div class="rbar" style="padding:14px 8px 6px 16px"><div class="row"><span class="sect" style="padding:0">Activity</span><button class="rmbtn ${fOff.length ? 'on' : ''}" data-a="feedMenu" aria-label="Choose what shows in the Feed" aria-expanded="${FMENU}">${ic('menu', 22)}${fOff.length ? `<i>${fOff.length}</i>` : ''}</button></div>
+    ${FMENU ? `<div class="rshade" data-a="feedMenu"></div><div class="rmenu" role="dialog" aria-label="Show in the Feed" style="top:58px;right:8px"><div class="lbl" style="margin-top:0">Show in my Feed</div>
+      ${FKINDS().map(([k, l]) => `<label class="check-row" style="margin-top:8px"><input type="checkbox" data-c="feedTog" data-k="${k}" ${fOn(k) ? 'checked' : ''}>${esc(l)}</label>`).join('')}
+      <div class="actions"><button class="btn gray sm" data-a="feedAll">Show everything</button><button class="btn sm" data-a="feedMenu">Done</button></div>
+      <div class="small muted" style="margin-top:10px">Only changes your Feed. Same as Home, Settings, Show in my Feed.</div></div>` : ''}
+    ${fOff.length ? `<div class="small muted rapplied" style="padding:2px 0 0">Hiding ${esc(fOff.join(', '))} · <a data-a="feedAll">Show everything</a></div>` : ''}</div>` + (out.length ? out.map(e => swipeWrap(e.items ? e.items.map(x => 'A:' + x.a.id) : e.m ? ['M:' + e.m.id] : ['A:' + e.a.id], e.items ? bundlePost(e) : e.m ? msgPost(e.m, e.pin) : actPost(e.a))).join('') : '<div class="empty">Nothing yet. Changes either of you make will show up here.</div>');
   return html + `<button class="fab" data-a="newMsg" aria-label="New post">${ic('plus', 20)}Post</button>`;
 }
+// Feed filter (three-line menu next to Activity). Uses the same per-person settings as Home > Settings > Show in my Feed.
+const FKINDS = () => [['messages', 'Messages'], ['photos', 'Photos']].concat(Object.keys(NCATS).map(c => [c, ({ convo: 'Comments and questions', summary: 'Weekly and monthly summaries' })[c] || NCATS[c].replace(/ \(.*\)/, '')]), [['daily', 'Memories and quotes']]);
+const fOn = k => st('f.' + k, '1') !== '0';
+let FMENU = false, fPend = {}, fT = 0;
+// Checkboxes update right away; the changes are saved together a moment later.
+function feedSet(k, v) { const id = ME + '|f.' + k, r = byId('Settings', id); if (r) r.value = v; else S.Settings.push({ id, value: v }); fPend[id] = v; clearTimeout(fT); fT = setTimeout(feedSave, 700); }
+function feedSave() { if (busy) { fT = setTimeout(feedSave, 500); return; } const ops = Object.keys(fPend).map(id => ({ t: 'Settings', row: { id, value: fPend[id] } })); fPend = {}; if (ops.length) write(ops); }
+A.feedMenu = () => { FMENU = !FMENU; render(); };
+A.feedTog = (on, el) => { feedSet(el.dataset.k, on ? '1' : '0'); render(); };
+A.feedAll = () => { FKINDS().forEach(([k]) => { if (!fOn(k)) feedSet(k, '1'); }); FMENU = false; render(); };
 // Swipe a Feed post left to delete it. Paul can delete for everyone; Shana removes it from her own Feed.
 const feedHidden = () => new Set(list(st('feedHidden', '')));
 const swipeWrap = (ids, html) => `<div class="swipe" data-fid="${esc(ids.join(' '))}"><div class="under">${ME === 'Paul' ? 'Delete' : 'Remove'}</div>${html}</div>`;
@@ -1120,19 +1157,24 @@ const PKINDS = () => [['k:events', 'Events made in the app'], ['k:activities', '
 const pHidden = () => { try { return new Set(JSON.parse(store.get('plHide') || '[]')); } catch (e) { return new Set(); } };
 const pKind = i => i.src === 'gcal' || i.t === 'GCal' ? 'gcal' : i.src === 'birthday' ? 'birthday' : i.src === 'dinner' ? 'dinner' : i.t === 'SchoolCal' ? i.src : i.t === 'Activities' ? 'activities' : i.t === 'Childcare' ? 'care' : 'events';
 const pShown = (i, hid) => !hid.has('k:' + pKind(i)) && !(i.people.length && i.people.every(n => hid.has('p:' + n)));
-A.pfilterOpen = () => sheet(() => { const hid = pHidden(), row = (k, l, c) => `<label class="check-row"><input type="checkbox" data-c="pfToggle" data-k="${esc(k)}" ${hid.has(k) ? '' : 'checked'}>${c ? `<span class="pdot" style="background:${c}"></span>` : ''}${esc(l)}</label>`;
-  return `<h2>Show on the Planner</h2><div class="small muted">Uncheck anything you don't want to see. Kept on this phone.</div>
-    <h3>People</h3>${S.People.map(p => row('p:' + p.name, p.name, pcol(p.name))).join('')}<div class="small muted" style="margin-top:6px">Unchecking someone hides items that are only for them.</div>
-    <h3>What to show</h3>${PKINDS().map(([k, l]) => row(k, l)).join('')}
-    <div class="actions"><button class="btn gray" data-a="pfAll">Show everything</button><button class="btn" data-a="close">Done</button></div>`; });
+let PMENU = false;
+A.pfilterOpen = () => { PMENU = !PMENU; render(); };
 A.pfToggle = (on, el) => { const hid = pHidden(), k = el.dataset.k; if (on) hid.delete(k); else hid.add(k); store.set('plHide', JSON.stringify([...hid])); refresh(); };
-A.pfAll = () => { store.set('plHide', '[]'); refresh(); };
+A.pfAll = () => { store.set('plHide', '[]'); PMENU = false; refresh(); };
 function vPlanner() {
   PW = PW || mondayOf(TODAY);
   const hid = pHidden(), pass = i => pShown(i, hid), names = Object.fromEntries(PKINDS().concat(S.People.map(p => ['p:' + p.name, p.name])));
   const off = [...hid].map(k => names[k]).filter(Boolean);
-  let html = `<div class="weekbar"><button class="icon-btn" data-a="pweek" data-v="-7">‹</button><span>${PW === mondayOf(TODAY) ? 'This week · ' : ''}${fmtDate(PW)} – ${fmtDate(addDays(PW, 6))}</span><button class="icon-btn" data-a="pweek" data-v="7">›</button></div>
-    <div class="fhead"><span class="small muted">${off.length ? 'Hiding: ' + esc(off.join(', ')) : 'Showing everything'}</span><button class="chip ${off.length ? 'on' : ''}" data-a="pfilterOpen">${ic('filter', 14)} Filter${off.length ? ' (' + off.length + ')' : ''}</button></div>`;
+  const row = (k, l, c) => `<label class="check-row" style="margin-top:8px"><input type="checkbox" data-c="pfToggle" data-k="${esc(k)}" ${hid.has(k) ? '' : 'checked'}>${c ? `<span class="pdot" style="background:${c}"></span>` : ''}${esc(l)}</label>`;
+  let html = `<div class="rbar" style="padding:6px 8px 4px"><div class="weekbar" style="margin:0"><button class="icon-btn" data-a="pweek" data-v="-7" aria-label="Previous week">‹</button><span>${PW === mondayOf(TODAY) ? 'This week · ' : ''}${fmtDate(PW)} – ${fmtDate(addDays(PW, 6))}</span><button class="icon-btn" data-a="pweek" data-v="7" aria-label="Next week">›</button>
+      <button class="rmbtn ${off.length ? 'on' : ''}" data-a="pfilterOpen" aria-label="What to show" aria-expanded="${PMENU}">${ic('menu', 22)}${off.length ? `<i>${off.length}</i>` : ''}</button></div>
+    ${PMENU ? `<div class="rshade" data-a="pfilterOpen"></div><div class="rmenu" role="dialog" aria-label="What to show" style="top:56px;right:8px">
+      <div class="lbl" style="margin-top:0">People</div>${S.People.map(p => row('p:' + p.name, p.name, pcol(p.name))).join('')}
+      <div class="small muted" style="margin-top:6px">Unchecking someone hides items that are only for them.</div>
+      <div class="lbl">What to show</div>${PKINDS().map(([k, l]) => row(k, l)).join('')}
+      <div class="actions"><button class="btn gray sm" data-a="pfAll">Show everything</button><button class="btn sm" data-a="pfilterOpen">Done</button></div>
+      <div class="small muted" style="margin-top:10px">Kept on this phone.</div></div>` : ''}
+    ${off.length ? `<div class="small muted rapplied" style="padding:2px 8px 0">Hiding ${esc(off.join(', '))} · <a data-a="pfAll">Show everything</a></div>` : ''}</div>`;
   for (let n = 0; n < 7; n++) { const d = addDays(PW, n), it = itemsFor(d).filter(pass), all = it.filter(i => !i.start && i.src !== 'dinner'), timed = it.filter(i => i.start || i.src === 'dinner');
     html += `<div class="dayhead ${d === TODAY ? 'today' : ''}" id="day-${d}"><span><b>${DAYN[n]}</b> <span class="muted">${fmtDate(d)}</span></span><button class="chip" data-a="dayAdd" data-v="${d}">＋ Add</button></div><div class="pad">
       ${all.length ? `<div class="allday">${all.map(pcard).join('')}</div>` : ''}${timed.map(pcard).join('')}${it.length ? '' : '<div class="muted small" style="padding:4px 0 8px">Nothing planned</div>'}</div>`; }
@@ -1145,7 +1187,7 @@ A.dayAdd = d => { const s = sheet(`<h2>Add to ${fmtDay(d)}</h2><div class="actio
 A.addOn = (t, el) => { A.close(null, el); editForm(t, null, t === 'Todos' ? { due: el.dataset.d } : t === 'Activities' ? { days: DAYS[dowIdx(el.dataset.d)], from: el.dataset.d } : { date: el.dataset.d }); };
 
 // ----- Dinner -----
-let DT = 'menu', MW = '', GH = '', GF = false, RQ = '', RFQ = '', RS = 'stale', RT = '', RPICK = '';
+let DT = 'menu', MW = '', GH = '', GF = false, RQ = '', RFQ = '', RS = 'stale', RT = [], RPICK = '', RMENU = false;
 const RHIDE = new Set();
 const gchk = () => { try { return new Set(JSON.parse(store.get('gchk') || '[]')); } catch (e) { return new Set(); } };
 function vDinner() {
@@ -1268,7 +1310,7 @@ function nightsHTML(rid) {
 function vRecFeed() {
   const q = RFQ.toLowerCase(), live = S.Recipes.filter(r => r.name && r.status !== 'archived');
   const tagsOf = r => list(String(r.tags || '').toLowerCase()), tags = [...new Set(live.flatMap(tagsOf))].sort();
-  const rs = live.filter(r => !RHIDE.has(r.id) && (!RT || tagsOf(r).includes(RT)) && (!q || (r.name + ' ' + r.tags + ' ' + (r.description || '')).toLowerCase().includes(q)));
+  const rs = live.filter(r => !RHIDE.has(r.id) && RT.every(t => tagsOf(r).includes(t)) && (!q || (r.name + ' ' + r.tags + ' ' + (r.description || '')).toLowerCase().includes(q)));
   const st = new Map(rs.map(r => [r.id, recipeStats(r.id)])), last = r => st.get(r.id).last, byName = (a, b) => a.name.localeCompare(b.name);
   const cmp = {
     stale: (a, b) => (!last(a) - !last(b)) || last(a).localeCompare(last(b)) || byName(a, b),   // longest since you had it first; never made at the end
@@ -1284,15 +1326,22 @@ function vRecFeed() {
       <div class="small muted">${s.last ? 'Had ' + daysAgo(s.last) : 'Never made'}${s.n > 1 ? ` · made ${s.n} times` : ''}${r.tags ? ' · ' + list(r.tags).map(t => '#' + esc(t)).join(' ') : ''}</div>
       ${nx || paused ? `<div style="margin-top:4px">${nx ? `<span class="chip ok">${nx.date === TODAY ? 'Tonight' : 'On ' + nightName(nx.date)}</span> ` : ''}${paused ? `<span class="chip">Paused until ${fmtDate(r.pausedUntil)}</span>` : ''}</div>` : ''}</div>
       <button class="btn ${RPICK === r.id ? 'gray' : ''} sm" data-a="recPick" data-v="${r.id}" aria-label="Add to a night">${RPICK === r.id ? ic('x', 16) : ic('plus', 16)}</button></div></div>${RPICK === r.id ? `<div class="rnights">${nightsHTML(r.id)}</div>` : ''}</div>`; };
-  return `<div class="pad" style="margin-top:10px"><input placeholder="Search recipes or #keywords" value="${esc(RFQ)}" onchange="RFQ=this.value;refresh()"></div>
-    <div class="chips">${[['stale', 'Not had lately'], ['top', 'Top rated'], ['recent', 'Recently made'], ['az', 'A–Z']].map(([k, l]) => `<button class="chip ${RS === k ? 'on' : ''}" data-a="recSort" data-v="${k}">${l}</button>`).join('')}</div>
-    ${tags.length ? `<div class="chips">${tags.map(t => `<button class="chip ${RT === t ? 'on' : ''}" data-a="recTag" data-v="${esc(t)}">#${esc(t)}</button>`).join('')}</div>` : ''}
-    <div class="pad small muted" style="margin:6px 0 4px">Swipe right to put a recipe on a night, left to skip it for now.</div>` +
+  const SORTS = [['stale', 'Not had lately'], ['top', 'Top rated'], ['recent', 'Recently made'], ['az', 'A–Z']], on = (RS !== 'stale' ? 1 : 0) + RT.length;
+  const applied = [RS !== 'stale' ? SORTS.find(x => x[0] === RS)[1] : ''].concat(RT.map(t => '#' + t)).filter(Boolean);
+  return `<div class="rbar"><div class="rsearch"><input placeholder="Search recipes" value="${esc(RFQ)}" onchange="RFQ=this.value;refresh()"><button class="rmbtn ${on ? 'on' : ''}" data-a="recMenu" aria-label="Sort and tags" aria-expanded="${RMENU}">${ic('menu', 22)}${on ? `<i>${on}</i>` : ''}</button></div>
+    ${RMENU ? `<div class="rshade" data-a="recMenu"></div><div class="rmenu" role="dialog" aria-label="Sort and tags"><div class="lbl" style="margin-top:0">Sort by</div>
+      ${SORTS.map(([k, l]) => `<button class="rmopt ${RS === k ? 'on' : ''}" data-a="recSort" data-v="${k}">${RS === k ? ic('check', 16) : '<span style="width:16px"></span>'}${l}</button>`).join('')}
+      ${tags.length ? `<div class="lbl">Tags</div><div class="rmtags">${tags.map(t => `<button class="chip ${RT.includes(t) ? 'on' : ''}" data-a="recTag" data-v="${esc(t)}">#${esc(t)}</button>`).join('')}</div>` : ''}
+      <div class="actions"><button class="btn gray sm" data-a="recClear">Clear</button><button class="btn sm" data-a="recMenu">Done</button></div>
+      <div class="small muted" style="margin-top:10px">Swipe a recipe right to put it on a night, left to skip it for now.</div></div>` : ''}
+    ${applied.length ? `<div class="small muted rapplied">${esc(applied.join(' · '))} · <a data-a="recClear">Clear</a></div>` : ''}</div>` +
     (rs.map(card).join('') || `<div class="empty">${live.length ? 'Nothing matches.' : 'No recipes yet. Add some under Home, then Recipes.'}</div>`) +
     (RHIDE.size ? `<div class="actions pad" style="margin:12px 0"><button class="chip" data-a="recUnhide">Show ${RHIDE.size} skipped</button></div>` : '') + '<div style="height:16px"></div>';
 }
+A.recMenu = () => { RMENU = !RMENU; render(); };
 A.recSort = v => { RS = v; render(); };
-A.recTag = v => { RT = RT === v ? '' : v; render(); };
+A.recTag = v => { RT = RT.includes(v) ? RT.filter(t => t !== v) : RT.concat(v); render(); };
+A.recClear = () => { RS = 'stale'; RT = []; RMENU = false; render(); };
 A.recPick = id => { RPICK = RPICK === id ? '' : id; render(); };
 A.recHide = id => { RHIDE.add(id); if (RPICK === id) RPICK = ''; render(); undoToast('Skipped for now', () => { RHIDE.delete(id); render(); }); };
 A.recUnhide = () => { RHIDE.clear(); render(); };
@@ -1320,20 +1369,32 @@ function vRecipes() {
 }
 
 // ----- To-Do -----
-const TD = { tab: 'open', who: null, type: '', sort: 'date' };
+const TD = { tab: 'open', who: null, type: '', sort: 'date', menu: false };
 function vTodo() {
   if (!TD.who) TD.who = [ME, ''];
-  const open = S.Todos.filter(t => t.status !== 'Done'), mine = myTodos();
-  let items = (TD.tab === 'open' ? open : S.Todos.filter(t => t.status === 'Done')).filter(t => TD.who.includes(t.assignee) && (!TD.type || t.type === TD.type));
-  items = TD.tab === 'done' ? items.sort((a, b) => b.doneOn.localeCompare(a.doneOn)).slice(0, 60) : items.sort((a, b) => (TD.sort === 'type' ? a.type.localeCompare(b.type) : 0) || (a.due || '9').localeCompare(b.due || '9'));
-  return `<div class="pad" style="padding-top:10px"><div style="font-size:26px;font-weight:800">${mine.length} for you</div><div class="small muted">${open.length} open in all · ${mine.filter(t => t.due < TODAY).length} overdue</div></div>
-    <div class="seg" style="margin-top:8px"><button class="${TD.tab === 'open' ? 'on' : ''}" data-a="tdTab" data-v="open">To do</button><button class="${TD.tab === 'done' ? 'on' : ''}" data-a="tdTab" data-v="done">Done</button></div>
-    <div class="chips"><span class="small muted" style="align-self:center">Show</span>${[['Paul', 'Paul'], ['Shana', 'Shana'], ['', 'Unassigned']].map(([k, l]) => `<button class="chip ${TD.who.includes(k) ? 'on' : ''}" data-a="tdWho" data-v="${k}">${TD.who.includes(k) ? '✓ ' : ''}${l}</button>`).join('')}</div>
-    <div class="pad two" style="margin-top:6px"><div><select data-c="tdType" style="padding:9px 12px;font-size:14px"><option value="">All types</option>${S.TodoTypes.map(t => `<option value="${t.id}" ${TD.type === t.id ? 'selected' : ''}>${esc(t.name)}</option>`).join('')}</select></div>
-      <div><select data-c="tdSort" style="padding:9px 12px;font-size:14px"><option value="date">Sort by date</option><option value="type" ${TD.sort === 'type' ? 'selected' : ''}>Sort by type</option></select></div></div>
-    ${items.map(todoRow).join('') || `<div class="empty">${TD.tab === 'open' ? 'All clear.' : 'Nothing checked off yet.'}</div>`}<button class="fab" data-a="add" data-v="Todos" aria-label="Add to-do">${ic('plus', 26)}</button>`;
+  const open = S.Todos.filter(t => t.status !== 'Done'), mine = myTodos(), doneAll = S.Todos.filter(t => t.status === 'Done'), done = TD.tab === 'done';
+  let items = (done ? doneAll : open).filter(t => TD.who.includes(t.assignee) && (!TD.type || t.type === TD.type));
+  items = done ? items.sort((a, b) => b.doneOn.localeCompare(a.doneOn)).slice(0, 60) : items.sort((a, b) => (TD.sort === 'type' ? a.type.localeCompare(b.type) : 0) || (a.due || '9').localeCompare(b.due || '9'));
+  const WHO = [['Paul', 'Paul'], ['Shana', 'Shana'], ['', 'Unassigned']], whoDefault = TD.who.length === 2 && TD.who.includes(ME) && TD.who.includes('');
+  const on = (whoDefault ? 0 : 1) + (TD.type ? 1 : 0) + (TD.sort !== 'date' ? 1 : 0), ty = TD.type && byId('TodoTypes', TD.type);
+  const applied = [whoDefault ? '' : 'Showing ' + (WHO.filter(([k]) => TD.who.includes(k)).map(x => x[1]).join(', ') || 'no one'), ty ? ty.name : '', TD.sort === 'type' ? 'By type' : ''].filter(Boolean);
+  return `<div class="rbar" style="padding-top:12px"><div class="row" style="align-items:flex-start"><div class="grow">
+      <div style="font-size:26px;font-weight:800;letter-spacing:-.5px">${done ? 'Done' : mine.length + ' for you'}</div>
+      <div class="small muted">${done ? 'Checked off recently, newest first' : `${open.length} open in all · ${mine.filter(t => t.due && t.due < TODAY).length} overdue`}</div></div>
+      <button class="rmbtn ${on ? 'on' : ''}" data-a="tdMenu" aria-label="Show, type and sort" aria-expanded="${TD.menu}">${ic('menu', 22)}${on ? `<i>${on}</i>` : ''}</button></div>
+    ${TD.menu ? `<div class="rshade" data-a="tdMenu"></div><div class="rmenu" role="dialog" aria-label="Show, type and sort" style="top:64px">
+      <div class="lbl" style="margin-top:0">Show to-dos for</div><div class="rmtags">${WHO.map(([k, l]) => `<button class="chip ${TD.who.includes(k) ? 'on' : ''}" data-a="tdWho" data-v="${k}">${l}</button>`).join('')}</div>
+      <div class="lbl">Type</div><div class="rmtags">${[['', 'All types']].concat(S.TodoTypes.map(t => [t.id, t.name])).map(([k, l]) => `<button class="chip ${TD.type === k ? 'on' : ''}" data-a="tdType" data-v="${esc(k)}">${esc(l)}</button>`).join('')}</div>
+      ${done ? '' : `<div class="lbl">Sort by</div>${[['date', 'Due date'], ['type', 'Type']].map(([k, l]) => `<button class="rmopt ${TD.sort === k ? 'on' : ''}" data-a="tdSort" data-v="${k}">${TD.sort === k ? ic('check', 16) : '<span style="width:16px"></span>'}${l}</button>`).join('')}`}
+      <div class="actions"><button class="btn gray sm" data-a="tdClear">Reset</button><button class="btn sm" data-a="tdMenu">Done</button></div></div>` : ''}
+    ${applied.length ? `<div class="small muted rapplied">${esc(applied.join(' · '))} · <a data-a="tdClear">Reset</a></div>` : ''}</div>
+    ${items.map(todoRow).join('') || `<div class="empty">${done ? 'Nothing checked off yet.' : 'All clear.'}</div>`}
+    <div class="actions" style="justify-content:center;margin:4px 16px 90px">${done ? `<button class="chip" style="padding:8px 14px" data-a="tdTab" data-v="open">${ic('chev', 16)} Back to open to-dos</button>` : `<button class="chip" style="padding:8px 14px" data-a="tdTab" data-v="done">${ic('check', 16)} Show done (${doneAll.length})</button>`}</div>
+    <button class="fab" data-a="add" data-v="Todos" aria-label="Add to-do">${ic('plus', 26)}</button>`;
 }
-A.tdTab = v => { TD.tab = v; render(); }; A.tdType = v => { TD.type = v; render(); }; A.tdSort = v => { TD.sort = v; render(); };
+A.tdMenu = () => { TD.menu = !TD.menu; render(); };
+A.tdTab = v => { TD.tab = v; TD.menu = false; render(); window.scrollTo(0, 0); }; A.tdType = v => { TD.type = v; render(); }; A.tdSort = v => { TD.sort = v; render(); };
+A.tdClear = () => { TD.who = [ME, '']; TD.type = ''; TD.sort = 'date'; TD.menu = false; render(); };
 A.tdWho = v => { TD.who = TD.who.includes(v) ? TD.who.filter(x => x !== v) : TD.who.concat(v); render(); };
 
 // ----- Home -----
@@ -1384,7 +1445,7 @@ const PAGES = {
     return `<h2>Notifications and Feed</h2><h3>Push on this phone</h3>${pushHTML()}<h3>Notifications for ${esc(ME)}</h3>` + Object.keys(NCATS).map(c => chk('setFlag', 'n.' + c, c === 'dinner' ? '0' : '1', NCATS[c])).join('') +
       `<h3>Bundling</h3><div class="small muted">When several things happen close together, you get one notification that sums them up instead of a string of buzzes. Urgent alerts always come right away.</div><label>Bundle alerts that arrive within</label><select data-c="setVal" data-k="bundleMin">${[['0', 'Off (send each one)'], ['5', '5 minutes'], ['15', '15 minutes'], ['30', '30 minutes'], ['60', '1 hour']].map(([v, l]) => `<option value="${v}" ${st('bundleMin', '5') === v ? 'selected' : ''}>${l}</option>`).join('')}</select>` +
       `<div class="two"><div><label>Quiet hours start</label><input type="time" data-c="setVal" data-k="quietStart" value="${q('quietStart')}"></div><div><label>Quiet hours end</label><input type="time" data-c="setVal" data-k="quietEnd" value="${q('quietEnd')}"></div></div>
-      <div class="actions"><button class="btn gray sm" data-a="ntest">Send me a test</button></div><h3>Show in my Feed</h3>` + Object.keys(NCATS).map(c => chk('setFlag', 'f.' + c, '1', NCATS[c].replace(/ \(.*\)/, ''))).join('') +
+      <div class="actions"><button class="btn gray sm" data-a="ntest">Send me a test</button></div><h3>Show in my Feed</h3>` + FKINDS().map(([k, l]) => chk('setFlag', 'f.' + k, '1', l)).join('') +
       `<h3>Weather</h3><div class="small muted">Weather follows this phone: near Boston or the Cape shows that house, anywhere else shows local weather.</div><div class="actions"><button class="btn gray sm" data-a="geoOn">${store.get('geo') === '1' ? '✓ Using my location' : 'Use my location'}</button></div>
 ` +
       (API_URL ? '' : `<h3>Connection</h3><label>Backend URL</label><input id="sUrl" value="${esc(store.get('url'))}"><div class="actions"><button class="btn gray" data-a="connect">Save and reconnect</button></div>`); }
