@@ -82,7 +82,7 @@
   .check.on { border:0; background:var(--grad); } .check.sq { border-radius:7px; }
   .done .ti, .done .payee { text-decoration:line-through; color:var(--muted); }
   .li { display:flex; gap:12px; align-items:center; padding:12px 16px; border-bottom:.5px solid var(--line); } .li .ti { font-weight:700; } .chev { color:var(--muted); font-size:20px; }
-  .dcard { transition:transform .15s; } .dcard.kept { box-shadow:inset 4px 0 0 var(--green); }
+  .dcard { transition:transform .15s; }
   /* recipes feed (Meals > Recipes) */
   .rcard { position:relative; overflow:hidden; margin:0 12px 12px; border:1px solid var(--line); border-radius:20px; background:var(--card); box-shadow:var(--shadow); }
   .rcard .rrow { display:flex; gap:12px; align-items:center; padding:12px 14px; }
@@ -183,6 +183,9 @@
   .plan .ph a { display:inline-flex; align-items:center; font-size:13px; letter-spacing:0; text-transform:none; }
   .prow { display:grid; grid-template-columns:62px minmax(0,1fr); gap:10px; font-size:14px; line-height:1.35; padding:4px 0; } .prow > span:first-child { font-weight:800; color:var(--muted); }
   .prow.past { opacity:.5; }
+  .dcard { position:relative; overflow:hidden; }
+  .dchg { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; gap:10px; background:color-mix(in srgb, var(--card) 62%, transparent); -webkit-backdrop-filter:blur(3px); backdrop-filter:blur(3px); }
+  .dchg .btn { flex:0 0 auto; display:inline-flex; align-items:center; gap:6px; padding:11px 18px; box-shadow:var(--shadow); }
   /* gift ideas */
   .gcard { margin:0 0 12px; border:1px solid var(--line); border-radius:18px; overflow:hidden; background:var(--card); box-shadow:var(--shadow); }
   .gcard img { display:block; width:100%; height:160px; object-fit:cover; background:var(--soft); } .gcard .gin { padding:12px 14px; }
@@ -914,7 +917,7 @@ const CARD = {
     return `<h2>${fmtLong(m.date)}</h2><div class="b" style="font-size:20px;margin-top:6px">${esc(dish(m) || 'No dinner planned')}${m.skipped === '1' ? ' <span class="chip bad">Skipped</span>' : ''}</div>` + (r ? kv('', r.description) + `<div class="kv">${list(r.tags).map(t => `<span class="chip" style="display:inline-block;margin:2px 4px 2px 0">#${esc(t)}</span>`).join('')}</div>` : '') +
       `<h3>Who's cooking</h3><div class="actions" style="margin-top:4px">${ADULTS.map(p => `<button class="chip ${m.cook === p ? 'on' : ''}" data-a="cook" data-v="${p}">${m.cook === p ? ic('check', 14) + ' ' : ''}${p}</button>`).join('')}</div>
       <h3>Who's home</h3><div class="actions" style="margin-top:4px">${ADULTS.map(p => `<button class="chip ${aw.includes(p) ? 'bad' : ''}" data-a="away" data-v="${p}">${aw.includes(p) ? ic('x', 14) + ' ' + p + ' not home' : ic('home', 14) + ' ' + p}</button>`).join('')}</div>
-      <div class="actions"><button class="btn gray sm" data-a="swap" data-v="${m.id}">${ic('shuffle', 16)}Swap</button><button class="btn gray sm" data-a="choose" data-v="${m.id}">${ic('pen', 16)}Choose</button>${r ? `<button class="btn gray sm" data-a="open" data-t="Recipes" data-id="${r.id}">${ic('book', 16)}Recipe</button>` : ''}${r ? `<button class="btn gray sm" data-a="skip" data-v="${m.id}">${m.skipped === '1' ? 'Un-skip' : 'Skipped'}</button>` : ''}</div>` + std({ noEdit: 1, noDel: 1 }); },
+      <div class="actions"><button class="btn gray sm" data-a="swap" data-v="${m.id}">${ic('shuffle', 16)}Random</button><button class="btn gray sm" data-a="choose" data-v="${m.id}">${ic('list', 16)}Select</button>${r ? `<button class="btn gray sm" data-a="open" data-t="Recipes" data-id="${r.id}">${ic('book', 16)}Recipe</button>` : ''}${r ? `<button class="btn gray sm" data-a="skip" data-v="${m.id}">${m.skipped === '1' ? 'Un-skip' : 'Skipped'}</button>` : ''}</div>` + std({ noEdit: 1, noDel: 1 }); },
   Recipes(r) { const s = recipeStats(r.id), my = (() => { try { return +JSON.parse(r.ratings || '{}')[ME] || 0; } catch (e) { return 0; } })(), avg = avgRating(r), next = S.Menus.filter(m => m.recipeId === r.id && m.date >= TODAY && m.skipped !== '1').sort((a, b) => a.date.localeCompare(b.date))[0];
     const marks = next ? recipeNeeds(next.date, next.date, 'unique').filter(n => n.menu.id === next.id) : [];
     const ing = n => { const p = ingParse(n), g = groc(p.name), mk = marks.find(x => norm(x.name) === norm(n)); return `<div class="row" style="padding:5px 0"><span>${qtyTxt(p) ? `<b>${esc(qtyTxt(p))}</b> ` : ''}${esc(p.name)}${g && g.details ? ` <span class="muted small">· ${esc(g.details)}</span>` : ''}</span>${next ? (mk && mk.mark === 'bought' ? '<span class="chip ok">Already bought</span>' : '<span class="chip">Need to buy</span>') : ''}</div>`; };
@@ -1274,11 +1277,12 @@ function vMenu() {
   if (!S.Recipes.length) html += '<div class="empty">Add a few recipes first (Home, then Recipes). Then the app can propose a week.</div>';
   if (!w) html += `<div class="empty">${MW === cur ? 'This week isn\'t planned yet.' : 'This week isn\'t set up yet.'}<br><br><button class="btn" data-a="weekAdd" data-v="${MW}">Set up ${weekLow(MW, cur)}</button></div>`;
   else { const ms = S.Menus.filter(m => m.week === w.id).sort((a, b) => a.date.localeCompare(b.date));
-    html += `<div class="row pad" style="margin:4px 0"><span class="small muted">Swipe a night left for a new idea, right to keep it. Pick from Recipes any time.</span></div>` +
+    html += `<div class="row pad" style="margin:4px 0"><span class="small muted">Swipe a night right to change it.</span></div>` +
       ms.map(m => { const r = byId('Recipes', m.recipeId), name = dish(m), past = m.date < TODAY;
-        return `<div class="card dcard ${m.kept === '1' ? 'kept' : ''}" data-menu="${m.id}" ${past ? '' : 'data-swipe="1"'} style="${past ? 'opacity:.55' : ''}"><div class="row"><span class="small b ${m.date === TODAY ? '' : 'muted'}" style="${m.date === TODAY ? 'color:var(--accent)' : ''}">${m.day.toUpperCase()} ${fmtDate(m.date)}${m.date === TODAY ? ' · TONIGHT' : ''}</span><span>${m.cook ? `<span class="chip">${ic('meals', 13)} ${esc(m.cook)}</span> ` : ''}${m.away ? `<span class="chip bad">${esc(m.away)} out</span>` : ''}${m.skipped === '1' ? '<span class="chip bad">Skipped</span>' : ''}</span></div>
+        return `<div class="card dcard" data-menu="${m.id}" ${past ? '' : 'data-swipe="1"'} style="${past ? 'opacity:.55' : ''}"><div class="row"><span class="small b ${m.date === TODAY ? '' : 'muted'}" style="${m.date === TODAY ? 'color:var(--accent)' : ''}">${m.day.toUpperCase()} ${fmtDate(m.date)}${m.date === TODAY ? ' · TONIGHT' : ''}</span><span>${m.cook ? `<span class="chip">${ic('meals', 13)} ${esc(m.cook)}</span> ` : ''}${m.away ? `<span class="chip bad">${esc(m.away)} out</span>` : ''}${m.skipped === '1' ? '<span class="chip bad">Skipped</span>' : ''}</span></div>
           <div class="row" style="margin-top:4px"><div class="grow" data-a="open" data-t="Menus" data-id="${m.id}"><div style="font-size:18px;font-weight:800" class="${name ? '' : 'muted'}">${esc(name || 'No dinner planned')}</div>${r && r.tags ? `<div class="small muted">${list(r.tags).map(t => '#' + esc(t)).join(' ')}</div>` : ''}</div>
-          ${name && !past ? `<button class="btn gray sm" data-a="keep" data-v="${m.id}" aria-label="Keep">${m.kept === '1' ? '✓ Kept' : 'Keep'}</button>` : ''}<button class="btn gray sm" data-a="swap" data-v="${m.id}" aria-label="New idea">${ic('refresh', 16)}</button><button class="btn gray sm" data-a="choose" data-v="${m.id}">${name ? ic('pen', 16) : '＋ Add'}</button></div></div>`; }).join('') +
+          ${name || past ? '' : `<button class="btn gray sm" data-a="choose" data-v="${m.id}">${ic('plus', 16)}Add</button>`}</div>
+          ${MCHG === m.id ? `<div class="dchg" data-a="mChgClose"><button class="btn" data-a="mRandom" data-v="${m.id}">${ic('shuffle', 18)}Random</button><button class="btn" data-a="mSelect" data-v="${m.id}">${ic('list', 18)}Select</button></div>` : ''}</div>`; }).join('') +
       `${w.id > cur ? `<div class="actions pad" style="margin-bottom:6px"><button class="btn danger sm" data-a="weekDel" data-v="${w.id}">Delete this week's plan</button></div>` : ''}`; }
   html += `<div class="sect">Future weeks</div>` + future.map(x => `<div class="li" data-a="mgo" data-v="${x.id}"><div class="hicon">${ic('planner')}</div><div class="grow"><div class="ti">${weekName(x.id, cur)}</div><div class="small muted">${fmtDate(x.id)} – ${fmtDate(addDays(x.id, 6))} · ${S.Menus.filter(m => m.week === x.id && dish(m)).length} nights planned</div></div><span class="chev">›</span></div>`).join('') +
     `<div class="actions pad" style="margin:12px 0 4px"><button class="btn dark" data-a="weekAdd" data-v="${nextNew}">＋ Set up ${weekLow(nextNew, cur)}</button></div>
@@ -1292,7 +1296,11 @@ A.weekDel = w => { if (confirm("Delete this week's plan?")) write(S.Menus.filter
 // Weeks are always editable (no more "lock in"). A change to a night in the next 7 days posts to the Feed so the other person knows.
 const menuLog = (m, type, text) => m.date >= TODAY && m.date < addDays(TODAY, 7) ? L(type, text, 'dinner') : null;
 A.swap = id => { const m = byId('Menus', id); return call('dinner_swap', { id, log: menuLog(m, 'menu_swap', `swapped dinner for ${fmtDay(m.date)}`) }); };
-A.keep = id => { const m = byId('Menus', id); write({ t: 'Menus', row: { id, kept: m.kept === '1' ? '' : '1' } }); };
+// Swiping a night right shows two choices over it: Random (a new suggestion) or Select (pick from the list).
+let MCHG = '';
+A.mRandom = id => { MCHG = ''; render(); A.swap(id); };
+A.mSelect = id => { MCHG = ''; render(); A.choose(id); };
+A.mChgClose = () => { MCHG = ''; render(); };
 A.skip = id => { const m = byId('Menus', id), on = m.skipped !== '1'; write({ t: 'Menus', row: { id, skipped: on ? '1' : '' }, log: on ? L('menu_skip', `skipped dinner on ${fmtDay(m.date)} (${dish(m)})`, 'dinner') : null }); };
 // Who's making dinner that night. Tap the same person again to clear it.
 A.cook = (p, el) => { const m = byId('Menus', ctx(el).id), on = m.cook !== p;
@@ -1697,11 +1705,11 @@ setInterval(() => { if (document.hidden || !ME || busy || loading) { paintSeen()
 document.addEventListener('visibilitychange', () => {
   if (document.hidden) return;
   if (ME && Date.now() - lastLoad > 60000 && !sheets.length) load().catch(() => {}); });
-// swipe on upcoming dinners: left = new idea, right = keep
+// swipe an upcoming dinner right to change it (Random or Select)
 (function () { let x0 = null, y0 = 0, el = null;
   document.addEventListener('touchstart', e => { el = e.target.closest('.dcard[data-swipe]'); if (el) { x0 = e.touches[0].clientX; y0 = e.touches[0].clientY; } }, { passive: true });
-  document.addEventListener('touchmove', e => { if (!el || x0 === null) return; const dx = e.touches[0].clientX - x0; if (Math.abs(e.touches[0].clientY - y0) > 30) { el.style.transform = ''; el = null; return; } el.style.transform = `translateX(${dx * 0.6}px)`; }, { passive: true });
-  document.addEventListener('touchend', e => { if (!el || x0 === null) return; const dx = e.changedTouches[0].clientX - x0, id = el.dataset.menu; el.style.transform = ''; el = null; x0 = null; if (dx < -70) A.swap(id); else if (dx > 70) A.keep(id); }); })();
+  document.addEventListener('touchmove', e => { if (!el || x0 === null) return; const dx = e.touches[0].clientX - x0; if (Math.abs(e.touches[0].clientY - y0) > 30) { el.style.transform = ''; el = null; return; } el.style.transform = `translateX(${Math.max(0, dx) * 0.6}px)`; }, { passive: true });
+  document.addEventListener('touchend', e => { if (!el || x0 === null) return; const dx = e.changedTouches[0].clientX - x0, id = el.dataset.menu; el.style.transform = ''; el = null; x0 = null; if (dx > 70) { const stop = ev => { ev.stopPropagation(); ev.preventDefault(); }; document.addEventListener('click', stop, { capture: true, once: true }); setTimeout(() => document.removeEventListener('click', stop, { capture: true }), 400); MCHG = id; render(); } }); })();
 // swipe on a recipe in Meals > Recipes: right = pick a night, left = skip for now
 (function () { let x0 = null, y0 = 0, el = null, inn = null, moved = false;
   document.addEventListener('touchstart', e => { el = e.target.closest('.rcard[data-rid]'); inn = el && el.querySelector('.rin'); moved = false; if (el) { x0 = e.touches[0].clientX; y0 = e.touches[0].clientY; } }, { passive: true });
