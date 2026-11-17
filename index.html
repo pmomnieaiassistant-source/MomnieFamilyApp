@@ -183,6 +183,7 @@
   .plan .ph a { display:inline-flex; align-items:center; font-size:13px; letter-spacing:0; text-transform:none; }
   .prow { display:grid; grid-template-columns:62px minmax(0,1fr); gap:10px; font-size:14px; line-height:1.35; padding:4px 0; } .prow > span:first-child { font-weight:800; color:var(--muted); }
   .prow.past { opacity:.5; }
+  .dur { margin-top:4px; }
   /* recipes search bar with a sort/tags menu */
   .rbar { position:relative; padding:10px 12px 4px; }
   .rsearch { display:flex; align-items:center; background:var(--card); border:1px solid var(--line); border-radius:14px; padding-right:4px; }
@@ -271,6 +272,12 @@ const fmtDate = s => s ? parse(s.slice(0, 10)).toLocaleDateString('en-US', { mon
 const fmtDay = s => s ? parse(s.slice(0, 10)).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }) : '';
 const fmtLong = s => parse(s).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
 const fmtT = s => { if (!s) return ''; const [h, m] = s.split(':').map(Number); return ((h + 11) % 12 + 1) + (m ? ':' + pad(m) : '') + (h < 12 ? ' AM' : ' PM'); };
+// Times are picked in 15-minute steps. A value already saved off the grid (e.g. 8:10) stays selectable.
+const hm = n => pad(Math.floor(n / 60) % 24) + ':' + pad(n % 60), toMin = t => { const [h, m] = String(t).split(':').map(Number); return h * 60 + (m || 0); };
+const TIMES = Array.from({ length: 96 }, (_, i) => hm(((i + 24) % 96) * 15));   // 6 AM first, overnight times at the end
+const timeSelect = (attrs, val, blank) => `<select ${attrs}><option value="">${esc(blank || 'Pick a time')}</option>${(val && !TIMES.includes(val) ? [val] : []).concat(TIMES).map(t => `<option value="${t}" ${t === val ? 'selected' : ''}>${fmtT(t)}</option>`).join('')}</select>`;
+/** Length between two times, e.g. "3.5 hours" or "45 min" (past midnight counts as the next day). */
+const durTxt = (a, b) => { if (!a || !b) return ''; let m = toMin(b) - toMin(a); if (m <= 0) m += 1440; return m < 60 ? m + ' min' : `${+(m / 60).toFixed(2)} hour${m === 60 ? '' : 's'}`; };
 const fmtT2 = s => { const [h, m] = s.split(':').map(Number); return ((h + 11) % 12 + 1) + ':' + pad(m) + (h < 12 ? ' AM' : ' PM'); };
 const nowHM = () => { const n = new Date(); return pad(n.getHours()) + ':' + pad(n.getMinutes()); };
 const money = n => Number(n || 0).toLocaleString('en-US', { style: 'currency', currency: 'USD' });
@@ -581,9 +588,12 @@ function fieldHTML(f, v) {
   if (f.t === 'rows') { const rows = v[f.k] = v[f.k] || (f.init ? f.init(v) : [{}]);
     return `<label>${esc(f.l)}</label>` + rows.map((r, i) => `<div class="irow">${f.cols.map(c => { const at = `class="${c.cls || ''}" data-rk="${f.k}" data-ri="${i}" data-rc="${c.c}"`;
       if (c.t === 'sel') { if (!r[c.c]) r[c.c] = c.o[0]; return `<select ${at}>${c.o.map(o => `<option ${o === r[c.c] ? 'selected' : ''}>${esc(o)}</option>`).join('')}</select>`; }
+      if (c.t === 'time') return timeSelect(at, r[c.c] || '', c.c === 'end' ? 'Ends' : 'Starts');
       return `<input ${at} type="${c.t || 'text'}" value="${esc(r[c.c] || '')}" placeholder="${esc(c.ph || '')}" ${c.list ? `list="${c.list}"` : ''} ${c.im ? `inputmode="${c.im}"` : ''} autocomplete="off">`; }).join('')}
-      <button type="button" class="rm" data-rdel="${f.k}" data-ri="${i}" aria-label="Remove">✕</button></div>`).join('') +
+      <button type="button" class="rm" data-rdel="${f.k}" data-ri="${i}" aria-label="Remove">✕</button></div>${r.start && r.end ? `<div class="small muted dur" style="text-align:right">(${durTxt(r.start, r.end)})</div>` : ''}`).join('') +
       `<button type="button" class="chip" style="margin-top:8px" data-radd="${f.k}">＋ ${esc(f.add || 'Add')}</button>${f.hint ? `<div class="small muted" style="margin-top:6px">${esc(f.hint)}</div>` : ''}${f.dl ? f.dl() : ''}`; }
+  if (f.t === 'time') { const du = f.dur ? durTxt(v[f.dur], val) : '';
+    return `<label>${esc(f.l)}</label>${timeSelect(`data-k="${f.k}"`, val)}${du ? `<div class="small muted dur">(${du})</div>` : ''}`; }
   if (f.t === 'chk') return `<label class="check-row"><input type="checkbox" data-k="${f.k}" ${val === '1' ? 'checked' : ''}> ${esc(f.l)}</label>`;
   if (f.t === 'sel') return `<label>${esc(f.l)}</label><select data-k="${f.k}">${o.map(x => { const [a, b] = Array.isArray(x) ? x : [x, x]; return `<option value="${esc(a)}" ${a === val ? 'selected' : ''}>${esc(noEmo(b))}</option>`; }).join('')}</select>`;
   if (f.t === 'multi') return `<label>${esc(f.l)}</label><div style="display:flex;flex-wrap:wrap;gap:6px">${o.map(x => `<button type="button" class="chip ${list(val).includes(x) ? 'on' : ''}" data-mk="${f.k}" data-mv="${esc(x)}">${esc(x)}</button>`).join('')}</div>`;
@@ -607,7 +617,11 @@ function form(title, fields, vals, onSave, buttons) {
     if (el.dataset.ing) { const q = el.value.trim(), k = el.dataset.ing, box = d.querySelector(`.sugg[data-for="${k}"]`);
       const hits = q ? S.Groceries.filter(g => (g.name + ' ' + g.category + ' ' + g.altNames).toLowerCase().includes(q.toLowerCase())).slice(0, 6) : [];
       box.innerHTML = hits.map(g => `<button type="button" class="chip ok" data-ingadd="${k}" data-mv="${esc(g.name)}">＋ ${esc(g.name)}</button>`).join('') + (q && !groc(q) ? `<button type="button" class="chip" data-ingadd="${k}" data-mv="${esc(q)}" data-new="1">Create new “${esc(q)}”</button>` : ''); } });
-  d.addEventListener('change', ev => { const el = ev.target, k = el.dataset.k; if (rowSet(el) || !k) return; v[k] = el.type === 'checkbox' ? (el.checked ? '1' : '') : el.value; const f = fs(v).find(x => x.k === k); if (f && f.on) f.on(v); if (f && f.re) draw(); });
+  d.addEventListener('change', ev => { const el = ev.target, k = el.dataset.k;
+    if (rowSet(el)) { const r = (v[el.dataset.rk] || [])[+el.dataset.ri]; if (r && el.dataset.rc === 'start' && r.start && !r.end) r.end = hm(toMin(r.start) + 60); if (r && /^(start|end)$/.test(el.dataset.rc)) draw(); return; }
+    if (!k) return; v[k] = el.type === 'checkbox' ? (el.checked ? '1' : '') : el.value; const f = fs(v).find(x => x.k === k); if (f && f.on) f.on(v);
+    const endF = f && f.t === 'time' && fs(v).find(x => x.dur === k); if (endF && v[k] && !v[endF.k]) v[endF.k] = hm(toMin(v[k]) + 60);
+    if (f && (f.re || f.t === 'time')) draw(); });
   d.addEventListener('click', async ev => {
     const t = ev.target, m = t.closest('[data-mk]');
     if (m) { const a = list(v[m.dataset.mk]), x = m.dataset.mv; v[m.dataset.mk] = (a.includes(x) ? a.filter(y => y !== x) : a.concat(x)).join(', '); m.classList.toggle('on'); return; }
@@ -653,7 +667,7 @@ const FORMS = {
     F('due', 'Due date (blank = a week from now)', 'date'), F('repeat', 'Repeats', 'sel', [['', 'Does not repeat'], ['daily', 'Every day'], ['weekly', 'Every week'], ['monthly', 'Every month'], ['yearly', 'Every year']]),
     F('house', 'House', 'sel', [['', 'N/A'], ['Boston', 'Boston'], ['Cape', 'Cape']]), F('notes', 'Notes', 'area'), F('_notify', 'Notify the other person now', 'chk')]; },
   Events: v => [F('title', 'What is it?'), F('category', 'Category', 'sel', ['Family', 'Kids', 'Work'], { re: 1 }), F('date', 'Date', 'date'), F('allDay', 'All day', 'chk', null, { re: 1 }),
-    F('endDate', 'Last day (only if it runs several days)', 'date', null, { show: x => x.allDay === '1' }), F('start', 'Starts', 'time', null, { show: x => x.allDay !== '1' }), F('end', 'Ends', 'time', null, { show: x => x.allDay !== '1' }),
+    F('endDate', 'Last day (only if it runs several days)', 'date', null, { show: x => x.allDay === '1' }), F('start', 'Starts', 'time', null, { show: x => x.allDay !== '1' }), F('end', 'Ends', 'time', null, { show: x => x.allDay !== '1', dur: 'start' }),
     F('people', 'Who is involved', 'multi', S.People.map(p => p.name)), F('location', 'Where'), F('house', 'House', 'sel', HOUSE_O),
     F('dropoff', 'Drop-off', 'sel', rideO, { show: x => x.category === 'Kids' && x.allDay !== '1' }), F('pickup', 'Pickup', 'sel', rideO, { show: x => x.category === 'Kids' && x.allDay !== '1' }),
     F('notes', 'Notes', 'area')],
@@ -663,12 +677,12 @@ const FORMS = {
     F('from', 'First day (optional)', 'date'), F('until', 'Last day (optional, e.g. end of season)', 'date'), F('location', 'Where'), F('teacher', 'Teacher or contact'),
     F('dropoff', 'Usual drop-off, for kids (leave "Not set" to decide each week)', 'sel', rideO), F('pickup', 'Usual pickup, for kids', 'sel', rideO), F('house', 'House', 'sel', HOUSE_O), F('notes', 'Notes', 'area')],
   Childcare: [F('task', 'What do you need?', 'sel', [['babysit', 'Babysit'], ['pick up', 'Pick up'], ['bring to', 'Bring to a place']], { re: 1 }), F('place', 'Place', 'text', null, { show: x => x.task !== 'babysit', ph: 'e.g. soccer practice' }),
-    F('kids', 'Which kids', 'multi', kidN), F('date', 'Date', 'date'), F('start', 'From', 'time'), F('end', 'Until', 'time'), F('roster', 'Which roster to ask', 'sel', ['Boston', 'Cape']), F('notes', 'Notes', 'area')],
+    F('kids', 'Which kids', 'multi', kidN), F('date', 'Date', 'date'), F('start', 'From', 'time'), F('end', 'Until', 'time', null, { dur: 'start' }), F('roster', 'Which roster to ask', 'sel', ['Boston', 'Cape']), F('notes', 'Notes', 'area')],
   Caretakers: [F('name', 'Name'), F('relationship', 'Relationship'), F('phone', 'Phone', 'tel'), F('roster', 'Roster', 'multi', ['Boston', 'Cape']), F('birthday', 'Birthday (optional)', 'date'),
     F('drive', 'Cleared to drive the kids', 'chk'), F('unpaid', 'Unpaid (no "pay caretaker" to-dos)', 'chk'), F('rate', 'Hourly rate', 'num'), F('notes', 'Notes', 'area')],
   People: [F('name', 'Name'), F('kind', 'Adult or kid', 'sel', [['adult', 'Adult'], ['kid', 'Kid']], { re: 1 }), F('schoolId', 'School', 'sel', () => [['', 'None']].concat(S.Schools.map(s => [s.id, s.name])), { show: x => x.kind === 'kid', re: 1 }),
     F('extDays', 'Stays for extended day on', 'multi', DAYS.slice(0, 5), { show: x => x.kind === 'kid' && !!(byId('Schools', x.schoolId) || {}).extEnd }),
-    F('workDays', 'Usual work days', 'multi', DAYS, { show: x => x.kind !== 'kid' }), F('workStart', 'Work starts', 'time', null, { show: x => x.kind !== 'kid' }), F('workEnd', 'Work ends', 'time', null, { show: x => x.kind !== 'kid' }),
+    F('workDays', 'Usual work days', 'multi', DAYS, { show: x => x.kind !== 'kid' }), F('workStart', 'Work starts', 'time', null, { show: x => x.kind !== 'kid' }), F('workEnd', 'Work ends', 'time', null, { show: x => x.kind !== 'kid', dur: 'workStart' }),
     F('birthday', 'Birthday', 'date'), F('notes', 'Notes (sizes, doctors, anything)', 'area')],
   Schools: [F('name', 'School name'), F('short', 'Short name'), F('start', 'Usual start', 'time'), F('end', 'Usual pickup', 'time'),
     F('_hours', 'Different hours on some days', 'rows', null, { add: 'Add a day', hint: 'Only the weekdays that differ from the usual hours, e.g. Wed 8:15–12:30.',
@@ -676,7 +690,7 @@ const FORMS = {
       cols: [{ c: 'day', t: 'sel', o: DAYS.slice(0, 5), cls: 'u' }, { c: 'start', t: 'time', cls: 'n' }, { c: 'end', t: 'time', cls: 'n' }] }),
     F('extEnd', 'Extended day ends (blank if none)', 'time'), F('color', 'Card color (hex)'), F('contacts', 'Contacts and teachers', 'area'), F('notes', 'Notes', 'area')],
   SchoolCal: [F('schoolId', 'School', 'sel', () => S.Schools.map(s => [s.id, s.name])), F('title', 'What is it?', 'text', null, { ph: 'e.g. Teacher in-service' }), F('kind', 'Kind', 'sel', [['event', 'Event (school is on)'], ['off', 'No school'], ['half', 'Half day']]),
-    F('date', 'Date', 'date'), F('endDate', 'Last day (optional)', 'date'), F('start', 'Starts (optional)', 'time'), F('end', 'Ends, or half-day pickup time', 'time'), F('notes', 'Notes', 'area')],
+    F('date', 'Date', 'date'), F('endDate', 'Last day (optional)', 'date'), F('start', 'Starts (optional)', 'time'), F('end', 'Ends, or half-day pickup time', 'time', null, { dur: 'start' }), F('notes', 'Notes', 'area')],
   Birthdays: [F('name', 'Name'), F('date', 'Birthday', 'date'), F('notes', 'Notes', 'area')],
   HouseCards: [F('house', 'House', 'sel', ['Boston', 'Cape']), F('kind', 'Kind', 'sel', [['info', 'Info (reference)'], ['upkeep', 'Upkeep (repeats)']], { re: 1 }), F('title', 'Title', 'text', null, { ph: 'e.g. Replace furnace filters' }),
     F('body', 'Details (which ones, where to buy, how)', 'area'), F('link', 'Link'), F('everyMonths', 'Repeats every __ months', 'num', null, { show: x => x.kind === 'upkeep' }), F('nextDue', 'Next due', 'date', null, { show: x => x.kind === 'upkeep' })],
@@ -1444,7 +1458,7 @@ const PAGES = {
   settings: () => { const q = k => st(k, ''), chk = (c, k, def, l) => `<label class="check-row"><input type="checkbox" data-c="${c}" data-k="${k}" ${st(k, def) === '1' ? 'checked' : ''}> ${l}</label>`;
     return `<h2>Notifications and Feed</h2><h3>Push on this phone</h3>${pushHTML()}<h3>Notifications for ${esc(ME)}</h3>` + Object.keys(NCATS).map(c => chk('setFlag', 'n.' + c, c === 'dinner' ? '0' : '1', NCATS[c])).join('') +
       `<h3>Bundling</h3><div class="small muted">When several things happen close together, you get one notification that sums them up instead of a string of buzzes. Urgent alerts always come right away.</div><label>Bundle alerts that arrive within</label><select data-c="setVal" data-k="bundleMin">${[['0', 'Off (send each one)'], ['5', '5 minutes'], ['15', '15 minutes'], ['30', '30 minutes'], ['60', '1 hour']].map(([v, l]) => `<option value="${v}" ${st('bundleMin', '5') === v ? 'selected' : ''}>${l}</option>`).join('')}</select>` +
-      `<div class="two"><div><label>Quiet hours start</label><input type="time" data-c="setVal" data-k="quietStart" value="${q('quietStart')}"></div><div><label>Quiet hours end</label><input type="time" data-c="setVal" data-k="quietEnd" value="${q('quietEnd')}"></div></div>
+      `<div class="two"><div><label>Quiet hours start</label>${timeSelect('data-c="setVal" data-k="quietStart"', q('quietStart'), 'Off')}</div><div><label>Quiet hours end</label>${timeSelect('data-c="setVal" data-k="quietEnd"', q('quietEnd'), 'Off')}</div></div>
       <div class="actions"><button class="btn gray sm" data-a="ntest">Send me a test</button></div><h3>Show in my Feed</h3>` + FKINDS().map(([k, l]) => chk('setFlag', 'f.' + k, '1', l)).join('') +
       `<h3>Weather</h3><div class="small muted">Weather follows this phone: near Boston or the Cape shows that house, anywhere else shows local weather.</div><div class="actions"><button class="btn gray sm" data-a="geoOn">${store.get('geo') === '1' ? '✓ Using my location' : 'Use my location'}</button></div>
 ` +
