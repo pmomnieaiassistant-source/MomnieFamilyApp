@@ -183,6 +183,26 @@
   .plan .ph a { display:inline-flex; align-items:center; font-size:13px; letter-spacing:0; text-transform:none; }
   .prow { display:grid; grid-template-columns:62px minmax(0,1fr); gap:10px; font-size:14px; line-height:1.35; padding:4px 0; } .prow > span:first-child { font-weight:800; color:var(--muted); }
   .prow.past { opacity:.5; }
+  /* gift ideas */
+  .gcard { margin:0 0 12px; border:1px solid var(--line); border-radius:18px; overflow:hidden; background:var(--card); box-shadow:var(--shadow); }
+  .gcard img { display:block; width:100%; height:160px; object-fit:cover; background:var(--soft); } .gcard .gin { padding:12px 14px; }
+  .gcard .ti { font-weight:800; font-size:17px; }
+  .gdesc { margin-top:3px; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+  /* daily checklist: a lined notepad. Caveat (SIL Open Font License) is bundled so it works offline. */
+  @font-face { font-family:'Caveat'; src:url(fonts/caveat-latin.woff2) format('woff2'); font-weight:400 700; font-display:swap; }
+  .fabl { position:fixed; left:16px; bottom:calc(76px + env(safe-area-inset-bottom)); height:48px; padding:0 16px; border-radius:24px; border:1px solid var(--line); background:var(--card); color:var(--text);
+          font:inherit; font-size:15px; font-weight:700; display:flex; align-items:center; gap:8px; box-shadow:var(--shadow); z-index:4; }
+  dialog.notepad { --np-paper:#fffdf4; --np-line:#dbe4f2; --np-margin:#f1b5b5; --np-ink:#1f2a44; --np-ink2:#1e40af; color:var(--np-ink); background-color:var(--np-paper);
+    background-image:linear-gradient(90deg, transparent 34px, var(--np-margin) 34px, var(--np-margin) 35.5px, transparent 35.5px), repeating-linear-gradient(transparent 0 37px, var(--np-line) 37px 38px);
+    background-attachment:local; }
+  @media (prefers-color-scheme: dark) { dialog.notepad { --np-paper:#1a2232; --np-line:#28344d; --np-margin:#5b3340; --np-ink:#e8eefb; --np-ink2:#bfdbfe; } }
+  dialog.notepad .np-title, dialog.notepad .np-h, dialog.notepad .np-item, dialog.notepad .np-empty { font-family:'Caveat', 'Bradley Hand', 'Segoe Print', 'Comic Sans MS', cursive; }
+  dialog.notepad .np-title { font-size:34px; margin:0 0 0 30px; line-height:1.1; } .np-date { margin-left:30px; color:var(--np-ink); opacity:.65; }
+  .np-sec { margin-top:14px; } .np-h { font-size:27px; font-weight:700; color:var(--np-ink2); padding-left:44px; line-height:1.2; } .np-h span { font-size:19px; font-weight:500; opacity:.7; }
+  .np-sec.now .np-h { text-decoration:underline; text-decoration-thickness:2px; text-underline-offset:4px; }
+  .np-item { display:flex; align-items:center; gap:10px; width:100%; min-height:38px; padding:2px 0 2px 40px; border:0; background:none; color:var(--np-ink); font-size:26px; text-align:left; line-height:1.15; }
+  .np-item .np-box { width:28px; height:28px; flex:0 0 auto; } .np-item.done .np-t { text-decoration:line-through; text-decoration-thickness:2px; opacity:.55; }
+  .np-empty { padding-left:44px; font-size:21px; opacity:.5; line-height:38px; }
   .av.live { box-shadow:0 0 0 2px var(--card), 0 0 0 4px #22c55e; } .av.idle { box-shadow:0 0 0 2px var(--card), 0 0 0 4px #eab308; }
   .dur { margin-top:4px; }
   /* recipes search bar with a sort/tags menu */
@@ -229,7 +249,7 @@
 // Momnie Family app v6.0
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'], DAYN = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'], ADULTS = ['Paul', 'Shana'];
 const TABLES = ['People', 'Schools', 'SchoolCal', 'Activities', 'Overrides', 'Events', 'Caretakers', 'Childcare', 'Birthdays', 'Todos', 'TodoTypes', 'Recipes', 'DinnerRules', 'Weeks', 'Menus',
-  'Groceries', 'GroceryList', 'HouseCards', 'Houses', 'WeatherRules', 'Quotes', 'Memories', 'Updates', 'Messages', 'Activity', 'Comments', 'Reactions', 'Links', 'Settings', 'Photos'];
+  'Groceries', 'GroceryList', 'HouseCards', 'Houses', 'WeatherRules', 'Quotes', 'Memories', 'Updates', 'Messages', 'Activity', 'Comments', 'Reactions', 'Links', 'Settings', 'Photos', 'gifts', 'daily_items', 'daily_completions'];
 const CAT = { Kids: '#4f7cc2', Work: '#64748b', Family: '#5b6fa8', Dinner: '#b08a4f', Caretaker: '#3e9aa6', Shared: '#94a3b8', Birthday: '#c9806a' }, SCHOOL_C = ['#5a72b8', '#7a8597', '#4a6fb0'];
 // Muted person colors (Outlook-style): Clara pink, Conrad green, Charlie blue, Shana purple, Paul grey.
 const PCOL = { Clara: '#c8578f', Conrad: '#3d9a62', Charlie: '#3a7fd5', Shana: '#8b62c7', Paul: '#6b7280' }, PCOL_X = ['#b07a3c', '#3e9aa6', '#a65f5f'];
@@ -388,6 +408,8 @@ const ICONS = {
   note: '<rect x="5" y="3.5" width="14" height="18" rx="2"/><path d="M9 3.5V2h6v1.5M9 10h6M9 14h6M9 18h3"/>',
   chev: '<path d="m9 6 6 6-6 6"/>',
   menu: '<path d="M4 7h16M4 12h16M4 17h16"/>',
+  gift: '<rect x="3.5" y="8" width="17" height="12.5" rx="2"/><path d="M3.5 12h17M12 8v12.5M12 8C10.5 5 7 4 7 6.3S10 8 12 8zM12 8c1.5-3 5-4 5-1.7S14 8 12 8z"/>',
+  list: '<path d="M9 6h11M9 12h11M9 18h11M4 6h.01M4 12h.01M4 18h.01"/>',
   up: '<path d="M12 19V5M6 11l6-6 6 6"/>',
   down: '<path d="M12 5v14M6 13l6 6 6-6"/>',
   filter: '<path d="M3 5h18l-7 8.5V20l-4-2v-4.5z"/>'
@@ -671,8 +693,17 @@ const ING_COLS = [{ c: 'name', ph: 'Ingredient', cls: 'n', list: 'dlGroc' }, { c
 const ingLists = () => `<datalist id="dlGroc">${S.Groceries.map(g => `<option value="${esc(g.name)}">`).join('')}</datalist><datalist id="dlUnit">${UNITS.map(u => `<option value="${u}">`).join('')}</datalist>`;
 // ---------- form definitions ----------
 const FORMS = {
+  gifts: [F('name', 'Gift'), F('recipient', 'For', 'sel', () => S.People.map(p => [p.name, p.name === ME ? p.name + ' (my wish list)' : p.name]), { re: 1 }),
+    F('description', 'Description', 'area'), F('url', 'Website link', 'text', null, { ph: 'https://…' }), F('photo', 'Photo link (optional)', 'text', null, { ph: 'Paste an image link, or add a photo after saving' }),
+    F('assigned_to', 'Who is buying it (optional)', 'text', null, { ph: 'e.g. Nana', show: x => x.recipient !== ME })],
+  daily_items: [F('title', 'What needs doing', 'text', null, { ph: 'e.g. Take out the trash' }), F('days', 'Days', 'multi', DAYS),
+    F('time_of_day', 'Time of day', 'sel', [['Morning', 'Morning (before 10 AM)'], ['Day', 'Day (10 AM to 5 PM)'], ['Evening', 'Evening (5 PM on)']]),
+    F('for_person', "Who it's for", 'sel', () => [['', 'Anyone']].concat(S.People.map(p => [p.name, p.name]))),
+    F('visible_to', 'Who can see it', 'multi', ADULTS)],
   Todos: v => { const fl = list((byId('TodoTypes', v.type) || {}).fields); return [
-    F('type', 'Type', 'sel', S.TodoTypes.filter(t => t.id !== 'paycare' || v.type === 'paycare').map(t => [t.id, t.name]), { re: 1, on: x => { x.assignee = (byId('TodoTypes', x.type) || {}).assignee || ''; } }),
+    F('type', 'Type', 'sel', S.TodoTypes.filter(t => t.id !== 'paycare' || v.type === 'paycare').map(t => [t.id, t.name]).concat(v.id ? [] : [['_daily', 'Daily item (repeats on set days)']]), { re: 1, on: x => {
+      if (x.type === '_daily') { const title = x.title || ''; setTimeout(() => { const d = sheets[sheets.length - 1]; if (d) d.close(); A.dlAdd(null, null, { title }); }, 0); return; }
+      x.assignee = (byId('TodoTypes', x.type) || {}).assignee || ''; } }),
     F('title', v.type === 'bill' ? 'Who is it from?' : 'What needs doing?'), F('amount', 'Amount', 'num', null, { show: () => fl.includes('amount') }),
     F('where', 'Where to pay (link, address or account)', 'text', null, { show: () => fl.includes('where') }), F('kid', 'Which kid', 'sel', [['', 'None']].concat(kidN()), { show: () => fl.includes('kid') }),
     F('link', 'Link', 'text', null, { show: () => fl.includes('link') }), F('assignee', 'For', 'sel', [['', 'Either of us'], 'Paul', 'Shana']),
@@ -717,7 +748,7 @@ const FORMS = {
     F('steps', 'Steps', 'area', null, { ph: '1. …' }), F('link', 'Link (optional)')],
   Messages: [F('text', 'Message', 'area'), F('tags', 'Tag people', 'multi', () => S.People.map(p => p.name)), F('visibility', 'Who can see it', 'sel', [['', 'Everyone'], ['adults', 'Paul and Shana only']]), F('pinUntil', 'Pin to the top of the Feed until (optional)', 'date')]
 };
-const NAMES = { Todos: 'to-do', Events: 'event', Activities: 'activity', Childcare: 'caretaker card', Caretakers: 'caretaker', People: 'family member', Schools: 'school', SchoolCal: 'school calendar item', Birthdays: 'birthday', HouseCards: 'house card', Houses: 'house',
+const NAMES = { gifts: 'gift idea', daily_items: 'daily item', Todos: 'to-do', Events: 'event', Activities: 'activity', Childcare: 'caretaker card', Caretakers: 'caretaker', People: 'family member', Schools: 'school', SchoolCal: 'school calendar item', Birthdays: 'birthday', HouseCards: 'house card', Houses: 'house',
   WeatherRules: 'weather rule', Groceries: 'grocery card', TodoTypes: 'to-do type', Recipes: 'recipe', Messages: 'message' };
 
 // ---------- saving ----------
@@ -736,6 +767,10 @@ function dinnerAwayOps(ev) {
   return hits.map(x => ({ t: 'Menus', row: { id: x.m.id, away: list(x.m.away).concat(x.add).join(', ') }, log: L('away', `${names === ME ? 'is' : 'marked ' + names + ' as'} not home for dinner ${fmtDay(x.m.date)}`, 'dinner') }));
 }
 const SAVE = {
+  gifts(v) { need(v.name && v.name.trim(), 'Name the gift.'); need(v.recipient, 'Who is it for?');
+    const row = Object.assign({}, v, { id: v.id || nid(), url: v.url && !/^https?:\/\//i.test(v.url.trim()) ? 'https://' + v.url.trim() : (v.url || '').trim() });
+    if (row.recipient === ME && !v.id) row.assigned_to = '';
+    return write({ t: 'gifts', row }); },   // no Feed post: gift ideas stay a surprise
   Schools(v) { need(v.name && v.name.trim(), 'School name is required.'); const h = {};
     (v._hours || []).filter(x => x.day && (x.start || x.end)).forEach(x => { h[x.day] = [x.start || v.start || '', x.end || v.end || '']; });
     const row = Object.assign({}, v, { id: v.id || nid(), hours: Object.keys(h).length ? JSON.stringify(h) : '' }); delete row._hours;
@@ -817,7 +852,7 @@ A.edit = (v, el) => { const c = ctx(el); if (c.t === 'GCal') return A.adopt(v, e
 A.del = async (v, el) => {
   const c = ctx(el), r = byId(c.t, c.id); if (!r) return;
   if ((c.t === 'Events' || c.t === 'Activities') && r.gcalId) { if (!confirm(`Delete this ${NAMES[c.t]}? It is also removed from the shared calendar.`)) return; } else if (!confirm(`Delete this ${NAMES[c.t] || 'item'}?`)) return;
-  const ops = [{ t: c.t, del: c.id, log: ['Todos', 'Events', 'Childcare', 'Activities'].includes(c.t) ? L('delete', `removed ${NAMES[c.t].match(/^[aeiou]/) ? 'an' : 'a'} ${NAMES[c.t]}: ${titleOf(c.t, c.id)}`, c.t === 'Todos' ? 'bills' : 'planner') : null }];
+  const ops = S.Photos.filter(p => p.table === c.t && p.ref === c.id).map(p => ({ t: 'Photos', del: p.id })).concat([{ t: c.t, del: c.id, log: ['Todos', 'Events', 'Childcare', 'Activities'].includes(c.t) ? L('delete', `removed ${NAMES[c.t].match(/^[aeiou]/) ? 'an' : 'a'} ${NAMES[c.t]}: ${titleOf(c.t, c.id)}`, c.t === 'Todos' ? 'bills' : 'planner') : null }]);
   if (c.t === 'Activities') actGroup(r).filter(x => x.id !== c.id).forEach(x => ops.push({ t: 'Activities', del: x.id }));
   if (c.t === 'Childcare') S.Todos.filter(x => x.source === 'findcare:' + c.id && x.status !== 'Done').forEach(x => ops.push({ t: 'Todos', del: x.id }));
   S.Links.filter(l => (l.aTable === c.t && l.aRef === c.id) || (l.bTable === c.t && l.bRef === c.id)).forEach(l => ops.push({ t: 'Links', del: l.id }));
@@ -843,6 +878,11 @@ function genericCard(r, d, t) {
     if (f.t === 'date') val = val.length >= 10 ? fmtDay(val) : val; if (f.t === 'time') val = fmtT(val); return f.k === 'link' || f.k === 'where' ? kvh(f.l, linkOr(val)) : kv(f.l, val); }).join('');
 }
 const CARD = {
+  gifts(g) { if (!giftSeen(g)) return '<h2>Gift idea</h2><div class="empty">This one is a surprise.</div>'; const own = g.recipient === ME, img = giftPhoto(g, 1200);
+    return (img ? `<img class="phbig" style="margin-top:28px;max-height:280px;object-fit:cover" src="${esc(img)}" alt="">` : '') + `<h2>${esc(g.name)}</h2>` +
+      kv('For', own ? 'You (your wish list)' : g.recipient) + kv('', g.description) + kvh('Website', g.url && linkOr(g.url)) + (own ? '' : kv('Who is buying it', g.assigned_to || 'No one yet')) +
+      kv('Added', `${g.added_by === ME ? 'You' : g.added_by || ''}${g.created_at ? ' · ' + fmtDay(g.created_at) : ''}`) +
+      `<div class="actions">${!own && !g.assigned_to ? `<button class="btn sm" data-a="giftMine" data-v="${g.id}">${ic('check', 16)}I'll get it</button>` : ''}<button class="btn gray sm" data-a="edit">${ic('pen')}Edit</button><button class="btn danger sm" data-a="del">${ic('trash')}Delete</button></div>`; },
   Schools(r, d, t) { return genericCard(r, d, t) + (r.hours ? kv('Hours by day', schoolHoursTxt(r)) : '') + kv('Kids', kids().filter(k => k.schoolId === r.id).map(k => k.name + (r.extEnd && k.extDays ? ` (extended day ${k.extDays})` : '')).join(', ')) + std(); },
   Todos(r) { const ty = typeOf(r), done = r.status === 'Done', src = r.source.split(':');
     return `<h2>${esc(r.title)}</h2>${r.amount ? `<div class="b" style="font-size:22px">${money(r.amount)}</div>` : ''}` + kv('Type', ty.name) + kvh('Due', `<span class="${!done && r.due < TODAY ? 'red' : ''}">${fmtDay(r.due)}${!done && r.due < TODAY ? ' (overdue)' : ''}</span>`) + kv('For', r.assignee || 'Either of us') +
@@ -930,7 +970,7 @@ function socialHTML(t, id) {
 function cardHTML(t, id, date) {
   const r = t === 'GCal' ? CAL.find(c => c.id === id) : S[t] && byId(t, id);
   if (!r) return null;
-  return (CARD[t] ? CARD[t](r, date, t) : genericCard(r, date, t) + std()) + socialHTML(t, id);
+  return (CARD[t] ? CARD[t](r, date, t) : genericCard(r, date, t) + std()) + (t === 'gifts' ? photosHTML(t, id) : socialHTML(t, id));
 }
 function openCard(t, id, date) { if (cardHTML(t, id, date) === null) { toast('That item is gone.'); return null; } const d = sheet(() => cardHTML(t, id, date)); d._ctx = { t, id, date }; return d; }
 A.open = (v, el) => openCard(el.dataset.t, el.dataset.id, el.dataset.d || '');
@@ -953,7 +993,9 @@ async function photoUpload(file) {
   const f = photoFor; photoFor = null; if (!f || !file) return;
   toast('Adding photo…');
   try { const data = await shrinkPhoto(file), ti = titleOf(f.t, f.id);
-    if (await call('photo_add', { table: f.t, ref: f.id, data, log: L('photo', 'added a photo' + (ti ? ' to ' + ti : ''), 'convo') })) toast('Photo added'); }
+    if (await call('photo_add', { table: f.t, ref: f.id, data, log: f.t === 'gifts' ? null : L('photo', 'added a photo' + (ti ? ' to ' + ti : ''), 'convo') })) {
+      toast('Photo added'); const g = f.t === 'gifts' && byId('gifts', f.id), ph = g && photosOf('gifts', f.id).pop();
+      if (g && ph && !g.photo) write({ t: 'gifts', row: { id: g.id, photo: 'https://drive.google.com/file/d/' + ph.fileId + '/view' } }); } }
   catch (e) { toast(e.message); }
 }
 A.photoView = id => { const p = byId('Photos', id); if (!p) return;
@@ -1030,7 +1072,7 @@ function render() {
   $('hdrGear').style.display = view === 'home' ? '' : 'none';
   $('view').innerHTML = ({ feed: vFeed, planner: vPlanner, meals: vDinner, todo: vTodo, home: vHome })[view]();
 }
-A.nav = v => { view = v; render(); window.scrollTo(0, 0); };
+A.nav = v => { if (v === 'dailyGo') { view = 'todo'; render(); window.scrollTo(0, 0); return A.dailyOpen(); } view = v; render(); window.scrollTo(0, 0); };
 function pcard(i) {
   const n = cmts(i.t, i.id).filter(c => c.system !== '1').length;
   const sub = [i.sub && esc(i.sub), i.ride && rideHTML(i)].filter(Boolean).join(' · ');
@@ -1061,9 +1103,10 @@ function dinnerFlags(d, night) {
 }
 // Reminders show one line for my open to-dos (mine or unassigned), with how many are overdue or due soon. Tapping it opens To-Do.
 function todoSummary(mine, over, due, night) {
-  if (!mine.length) return [];
+  const dc = night ? 0 : dailyCurrent(), dTxt = dc ? dc + ' current daily to-do' + (dc === 1 ? '' : 's') : '';
+  if (!mine.length) return dc ? [{ lvl: 'plain', icon: 'list', text: 'You have ' + dTxt, nav: 'dailyGo' }] : [];
   const today = due.filter(t => t.due === TODAY).length, soon = due.length - today, bits = [over.length && over.length + ' overdue', today && today + ' due today', soon && soon + ' due tomorrow'].filter(Boolean);
-  return [{ lvl: over.length ? 'red' : 'plain', icon: 'todo', text: `You have ${mine.length} outstanding to-do${mine.length === 1 ? '' : 's'}${bits.length ? ' · ' + bits.join(' · ') : ''}`, nav: 'todo' }];
+  return [{ lvl: over.length ? 'red' : 'plain', icon: 'todo', text: `You have ${mine.length} outstanding to-do${mine.length === 1 ? '' : 's'}${bits.length ? ' · ' + bits.join(' · ') : ''}${dTxt ? ' · ' + dTxt : ''}`, nav: 'todo' }];
 }
 /**
  * The plan shown on the Today card: school drop-offs and pickups (with extended day), activities, events made in the app,
@@ -1406,7 +1449,7 @@ function vTodo() {
   const applied = [whoDefault ? '' : 'Showing ' + (WHO.filter(([k]) => TD.who.includes(k)).map(x => x[1]).join(', ') || 'no one'), ty ? ty.name : '', TD.sort === 'type' ? 'By type' : ''].filter(Boolean);
   return `<div class="rbar" style="padding-top:12px"><div class="row" style="align-items:flex-start"><div class="grow">
       <div style="font-size:26px;font-weight:800;letter-spacing:-.5px">${done ? 'Done' : mine.length + ' for you'}</div>
-      <div class="small muted">${done ? 'Checked off recently, newest first' : `${open.length} open in all · ${mine.filter(t => t.due && t.due < TODAY).length} overdue`}</div></div>
+      <div class="small muted">${done ? 'Checked off recently, newest first' : `${open.length} open in all · ${mine.filter(t => t.due && t.due < TODAY).length} overdue${dailyCurrent() ? ' · ' + dailyCurrent() + ' current daily to-do' + (dailyCurrent() === 1 ? '' : 's') : ''}`}</div></div>
       <button class="rmbtn ${on ? 'on' : ''}" data-a="tdMenu" aria-label="Show, type and sort" aria-expanded="${TD.menu}">${ic('menu', 22)}${on ? `<i>${on}</i>` : ''}</button></div>
     ${TD.menu ? `<div class="rshade" data-a="tdMenu"></div><div class="rmenu" role="dialog" aria-label="Show, type and sort" style="top:64px">
       <div class="lbl" style="margin-top:0">Show to-dos for</div><div class="rmtags">${WHO.map(([k, l]) => `<button class="chip ${TD.who.includes(k) ? 'on' : ''}" data-a="tdWho" data-v="${k}">${l}</button>`).join('')}</div>
@@ -1416,19 +1459,106 @@ function vTodo() {
     ${applied.length ? `<div class="small muted rapplied">${esc(applied.join(' · '))} · <a data-a="tdClear">Reset</a></div>` : ''}</div>
     ${items.map(todoRow).join('') || `<div class="empty">${done ? 'Nothing checked off yet.' : 'All clear.'}</div>`}
     <div class="actions" style="justify-content:center;margin:4px 16px 90px">${done ? `<button class="chip" style="padding:8px 14px" data-a="tdTab" data-v="open">${ic('chev', 16)} Back to open to-dos</button>` : `<button class="chip" style="padding:8px 14px" data-a="tdTab" data-v="done">${ic('check', 16)} Show done (${doneAll.length})</button>`}</div>
-    <button class="fab" data-a="add" data-v="Todos" aria-label="Add to-do">${ic('plus', 26)}</button>`;
+    <button class="fab" data-a="add" data-v="Todos" aria-label="Add to-do">${ic('plus', 26)}</button><button class="fabl" data-a="dailyOpen">${ic('list', 18)}View daily checklist</button>`;
 }
 A.tdMenu = () => { TD.menu = !TD.menu; render(); };
 A.tdTab = v => { TD.tab = v; TD.menu = false; render(); window.scrollTo(0, 0); }; A.tdType = v => { TD.type = v; render(); }; A.tdSort = v => { TD.sort = v; render(); };
 A.tdClear = () => { TD.who = [ME, '']; TD.type = ''; TD.sort = 'date'; TD.menu = false; render(); };
 A.tdWho = v => { TD.who = TD.who.includes(v) ? TD.who.filter(x => x !== v) : TD.who.concat(v); render(); };
 
+// ----- Gift ideas -----
+// Everyone sees every list except their own. On your own list you see only what you added, and never who is buying.
+const giftSeen = g => g.recipient !== ME || g.added_by === ME;
+const giftsFor = name => S.gifts.filter(g => g.recipient === name && giftSeen(g)).sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''));
+const giftPhoto = (g, w) => { const c = coverOf('gifts', g.id); return c ? photoSrc(c.fileId, w || 900) : g.photo ? photoUrl(g.photo) : ''; };
+const GFT = { menu: false, show: 'all', sort: 'new' };
+function giftPage(name) {
+  const own = name === ME, adult = ADULTS.includes(name);
+  let gs = giftsFor(name).filter(g => own || GFT.show === 'all' || (GFT.show === 'open' ? !g.assigned_to : !!g.assigned_to));
+  if (GFT.sort === 'az') gs = gs.slice().sort((a, b) => a.name.localeCompare(b.name));
+  const on = (!own && GFT.show !== 'all' ? 1 : 0) + (GFT.sort !== 'new' ? 1 : 0), opt = (a, k, l, cur) => `<button class="rmopt ${cur === k ? 'on' : ''}" data-a="${a}" data-v="${k}">${cur === k ? ic('check', 16) : '<span style="width:16px"></span>'}${l}</button>`;
+  return `<div class="rbar" style="padding:0;margin-right:44px"><div class="row"><h2 style="margin:0">${own ? 'Your wish list' : 'Gift ideas for ' + esc(name)}</h2>
+      <button class="rmbtn ${on ? 'on' : ''}" data-a="giftMenu" aria-label="Show and sort" aria-expanded="${GFT.menu}">${ic('menu', 22)}${on ? `<i>${on}</i>` : ''}</button></div>
+    ${GFT.menu ? `<div class="rshade" data-a="giftMenu"></div><div class="rmenu" role="dialog" aria-label="Show and sort" style="top:44px;right:-40px">
+      ${own ? '' : `<div class="lbl" style="margin-top:0">Show</div>${opt('giftShow', 'all', 'All ideas', GFT.show)}${opt('giftShow', 'open', 'Not taken yet', GFT.show)}${opt('giftShow', 'taken', 'Someone is buying', GFT.show)}`}
+      <div class="lbl" ${own ? 'style="margin-top:0"' : ''}>Sort by</div>${opt('giftSort', 'new', 'Newest first', GFT.sort)}${opt('giftSort', 'az', 'A–Z', GFT.sort)}
+      <div class="actions"><button class="btn gray sm" data-a="giftReset">Reset</button><button class="btn sm" data-a="giftMenu">Done</button></div></div>` : ''}</div>
+    <div class="small muted" style="margin:6px 0 10px">${own ? 'Add things you would like. Ideas other people add for you stay hidden from you.' : adult ? esc(name) + " won't see the ideas you add here." : 'Anyone can add ideas any time of year.'}</div>
+    ${gs.map(g => { const img = giftPhoto(g);
+      return `<div class="gcard" data-a="open" data-t="gifts" data-id="${g.id}">${img ? `<img src="${esc(img)}" alt="" loading="lazy">` : ''}<div class="gin"><div class="ti">${esc(g.name)}</div>
+        ${g.description ? `<div class="small gdesc">${esc(g.description)}</div>` : ''}
+        <div class="small muted" style="margin-top:6px">${g.url ? `<a href="${esc(g.url)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">${ic('link', 14)} Website</a> · ` : ''}${g.added_by === ME ? 'You added' : 'Added by ' + esc(g.added_by || '')}</div>
+        ${!own ? `<div style="margin-top:6px">${g.assigned_to ? `<span class="chip ok">${esc(g.assigned_to)} is buying it</span>` : '<span class="chip">Not taken yet</span>'}</div>` : ''}</div></div>`; }).join('') || `<div class="empty">${own ? 'Nothing on your wish list yet.' : 'No gift ideas yet.'}</div>`}
+    <div class="actions"><button class="btn" data-a="giftAdd" data-v="${esc(name)}">${ic('plus', 16)}Add a gift idea</button></div>`;
+}
+A.giftList = name => { GFT.menu = false; sheet(() => giftPage(name)); };
+A.giftMenu = () => { GFT.menu = !GFT.menu; refresh(); };
+A.giftShow = v => { GFT.show = v; refresh(); }; A.giftSort = v => { GFT.sort = v; refresh(); };
+A.giftReset = () => { GFT.show = 'all'; GFT.sort = 'new'; GFT.menu = false; refresh(); };
+A.giftAdd = name => editForm('gifts', null, { recipient: name });
+A.giftMine = id => write({ t: 'gifts', row: { id, assigned_to: ME } });
+
+// ----- Daily checklist -----
+// Daily items repeat on set weekdays and never show in the to-do list. Check-offs are stored per item per date, so each day starts fresh.
+const DPARTS = [['Morning', 'before 10 AM'], ['Day', '10 AM to 5 PM'], ['Evening', '5 PM on']];
+const nowPart = () => { const h = new Date().getHours(); return h < 10 ? 'Morning' : h < 17 ? 'Day' : 'Evening'; };
+const dailySeen = it => it.created_by === ME || !list(it.visible_to).length || list(it.visible_to).includes(ME);
+const dailyToday = () => S.daily_items.filter(it => it.active !== '0' && dailySeen(it) && list(it.days).includes(DAYS[dowIdx(TODAY)]));
+const dailyDone = it => S.daily_completions.some(c => c.item_id === it.id && c.date === TODAY);
+/** Unchecked items for today, in the current part of the day, that I can see. */
+const dailyCurrent = () => dailyToday().filter(it => it.time_of_day === nowPart() && !dailyDone(it)).length;
+const DL = { menu: false, who: [], hideDone: false };
+const handBox = done => `<svg class="np-box" viewBox="0 0 26 26" aria-hidden="true"><path d="M4.6 5.4c4.2-.7 11.6-1 16.6-.3.5 4.6.6 10.3-.2 16-5 .6-11 .5-15.8-.1-.7-5-1-10.5-.6-15.6z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>${done ? '<path d="M7 13.6c1.7 1.4 3 3.2 4.1 5 2.4-5 5.6-9.4 10.1-13.1" fill="none" stroke="var(--np-ink2)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>' : ''}</svg>`;
+function dailyPanel() {
+  const people = [['', 'Anyone']].concat(S.People.map(p => [p.name, p.name])), part = nowPart();
+  const pass = it => (!DL.who.length || DL.who.includes(it.for_person || '')) && !(DL.hideDone && dailyDone(it));
+  const items = dailyToday().filter(pass), on = (DL.who.length ? 1 : 0) + (DL.hideDone ? 1 : 0);
+  const row = it => { const done = dailyDone(it); return `<button class="np-item ${done ? 'done' : ''}" data-a="dlTick" data-v="${it.id}" aria-pressed="${done}">${handBox(done)}<span class="np-t">${esc(it.title)}${it.for_person ? ` (${esc(it.for_person)})` : ''}</span></button>`; };
+  return `<div class="rbar" style="padding:0;margin-right:44px"><div class="row" style="align-items:flex-start"><div><h2 class="np-title">Daily checklist</h2><div class="small np-date">${fmtLong(TODAY)}</div></div>
+      <button class="rmbtn ${on ? 'on' : ''}" data-a="dlMenu" aria-label="Filter" aria-expanded="${DL.menu}">${ic('menu', 22)}${on ? `<i>${on}</i>` : ''}</button></div>
+    ${DL.menu ? `<div class="rshade" data-a="dlMenu"></div><div class="rmenu" role="dialog" aria-label="Filter" style="top:50px;right:-40px">
+      <div class="lbl" style="margin-top:0">Show items for</div><div class="rmtags">${people.map(([k, l]) => `<button class="chip ${DL.who.includes(k) ? 'on' : ''}" data-a="dlWho" data-v="${esc(k)}">${esc(l)}</button>`).join('')}</div>
+      <div class="small muted" style="margin-top:6px">None picked shows everyone.</div>
+      <label class="check-row"><input type="checkbox" data-c="dlHide" ${DL.hideDone ? 'checked' : ''}> Hide checked items</label>
+      <div class="actions"><button class="btn gray sm" data-a="dlReset">Reset</button><button class="btn sm" data-a="dlMenu">Done</button></div></div>` : ''}</div>
+    ${DPARTS.map(([p, range]) => { const its = items.filter(it => it.time_of_day === p);
+      return `<div class="np-sec ${p === part ? 'now' : ''}"><div class="np-h">${p} <span>${range}${p === part ? ' · now' : ''}</span></div>${its.map(row).join('') || '<div class="np-empty">Nothing today</div>'}</div>`; }).join('')}
+    <div class="actions" style="margin-top:18px"><button class="btn gray sm" data-a="dlManage">${ic('list', 16)}Manage daily items</button><button class="btn sm" data-a="dlAdd">${ic('plus', 16)}Daily item</button></div>`;
+}
+A.dailyOpen = () => { DL.menu = false; sheet(() => dailyPanel(), 'notepad'); };
+A.dlMenu = () => { DL.menu = !DL.menu; refresh(); };
+A.dlWho = v => { DL.who = DL.who.includes(v) ? DL.who.filter(x => x !== v) : DL.who.concat(v); refresh(); };
+A.dlHide = on => { DL.hideDone = !!on; refresh(); };
+A.dlReset = () => { DL.who = []; DL.hideDone = false; DL.menu = false; refresh(); };
+// Ticks show at once and are saved together a moment later, so quick taps aren't lost.
+let dlPend = {}, dlT = 0;
+A.dlTick = id => { const key = id + '|' + TODAY;
+  if (byId('daily_completions', key)) { S.daily_completions = S.daily_completions.filter(c => c.id !== key); dlPend[key] = null; }
+  else { S.daily_completions.push({ id: key, item_id: id, date: TODAY, completed_by: ME, completed_at: new Date().toISOString() }); dlPend[key] = { id: key, item_id: id, date: TODAY }; }
+  refresh(); clearTimeout(dlT); dlT = setTimeout(dlSave, 600); };
+function dlSave() { if (busy) { dlT = setTimeout(dlSave, 500); return; } const ops = Object.keys(dlPend).map(k => dlPend[k] ? { t: 'daily_completions', row: dlPend[k] } : { t: 'daily_completions', del: k }); dlPend = {}; if (ops.length) write(ops); }
+const dailyRow = it => `<div class="li" style="padding:12px 0" data-a="dlEdit" data-v="${it.id}"><div class="grow"><div class="ti">${esc(it.title)}${it.active === '0' ? ' <span class="chip">Paused</span>' : ''}</div>
+  <div class="small muted">${esc(list(it.days).length === 7 ? 'Every day' : it.days || 'No days set')} · ${esc(it.time_of_day || '')}${it.for_person ? ' · for ' + esc(it.for_person) : ''}${list(it.visible_to).length && list(it.visible_to).length < ADULTS.length ? ' · only ' + esc(it.visible_to) + ' sees it' : ''}</div></div><span class="chev">›</span></div>`;
+A.dlManage = () => sheet(() => { const its = S.daily_items.filter(dailySeen).sort((a, b) => DPARTS.findIndex(x => x[0] === a.time_of_day) - DPARTS.findIndex(x => x[0] === b.time_of_day) || a.title.localeCompare(b.title));
+  return '<h2>Daily items</h2><div class="small muted">Tap one to change, pause or delete it.</div>' + (its.map(dailyRow).join('') || '<div class="empty">No daily items yet.</div>') +
+    `<div class="actions"><button class="btn" data-a="dlAdd">${ic('plus', 16)}Add a daily item</button></div>`; });
+function dailyForm(it, extra) {
+  const isNew = !it, v = Object.assign(isNew ? { days: DAYS.join(', '), time_of_day: nowPart(), visible_to: ADULTS.join(', '), active: '1' } : {}, it || {}, extra || {});
+  form(isNew ? 'New daily item' : 'Edit daily item', FORMS.daily_items, v, (x, mode) => {
+    if (mode === 'del') { if (!confirm('Delete this daily item? Past check-offs stay in the Sheet.')) return false; return write({ t: 'daily_items', del: x.id }); }
+    need(x.title && x.title.trim(), 'What needs doing?'); need(list(x.days).length, 'Pick at least one day.');
+    const row = { id: x.id || nid(), title: x.title.trim(), days: DAYS.filter(d => list(x.days).includes(d)).join(', '), time_of_day: x.time_of_day, for_person: x.for_person || '', visible_to: x.visible_to || '', active: mode === 'pause' ? (x.active === '0' ? '1' : '0') : (x.active || '1') };
+    return write({ t: 'daily_items', row }); }, isNew ? [['Save', '']] : [['Save', ''], [v.active === '0' ? 'Resume' : 'Pause', 'pause'], ['Delete', 'del']]);
+}
+A.dlAdd = (v, el, extra) => dailyForm(null, extra && !(extra instanceof Event) ? extra : null);
+A.dlEdit = id => { const it = byId('daily_items', id); if (it) dailyForm(it); };
+
 // ----- Home -----
 const SETTINGS = [['Caretakers', 'care', 'Caretakers', 'Boston and Cape rosters, rates, driving'], ['birthdays', 'cake', 'Birthdays', 'Friends and family'], ['WeatherRules', 'weather', 'Weather rules', 'If-then reminders based on the forecast'],
   ['Groceries', 'cart', 'Grocery library', 'Saved items with brands and notes'], ['TodoTypes', 'tag', 'To-do types', 'Types and who they go to by default'], ['memories', 'quote', 'Quotes and memories', 'The morning splash screen'],
   ['settings', 'bell', 'Notifications and Feed', 'Push alerts, bundling, quiet hours, what shows in your Feed'], ['device', 'phone', 'This phone', 'Your personal link and sign-in']];
 // Muted section colors for the Home icons.
-const HC = { users: '#5b6fa8', school: '#4a7fb5', activity: '#3d9a62', house: '#b07a3c', book: '#a65f5f', gear: '#6b7280', care: '#3e9aa6', cake: '#c8578f', weather: '#4f8fbf', cart: '#8a7a3d', tag: '#7a6aa8', quote: '#9a6b8a', bell: '#b08a4f', phone: '#64748b' };
+const HC = { gift: '#b0567a', users: '#5b6fa8', school: '#4a7fb5', activity: '#3d9a62', house: '#b07a3c', book: '#a65f5f', gear: '#6b7280', care: '#3e9aa6', cake: '#c8578f', weather: '#4f8fbf', cart: '#8a7a3d', tag: '#7a6aa8', quote: '#9a6b8a', bell: '#b08a4f', phone: '#64748b' };
 const hrow = (a, v, icon, l, sub) => `<div class="li" data-a="${a}" data-v="${v}"><div class="hicon" style="--hc:${HC[icon] || 'var(--accent)'}">${ic(icon)}</div><div class="grow"><div class="ti">${l}</div>${sub ? `<div class="small muted">${sub}</div>` : ''}</div><span class="chev">›</span></div>`;
 function vHome() {
   const care = S.Childcare.filter(c => c.date === TODAY).sort((a, b) => a.start.localeCompare(b.start));
@@ -1444,6 +1574,7 @@ function vHome() {
     hrow('homeOpen', 'Schools', 'school', 'Schools', S.Schools.map(x => x.short || x.name).join(', ') || 'Hours, contacts and school calendars') +
     hrow('homeOpen', 'Activities', 'activity', 'Activities', grp.length ? `${grp.length} repeating, for kids and parents` : 'Repeating activities like hockey or piano') +
     hrow('homeOpen', 'houses', 'house', 'House', 'Info and upkeep · ' + houses) +
+    hrow('homeOpen', 'gifts', 'gift', 'Gift ideas', 'Ideas for everyone, any time of year') +
     hrow('homeOpen', 'recipes', 'book', 'Recipes', `${S.Recipes.filter(r => r.status !== 'archived').length} saved, with ratings and history`) +
     hrow('openSettings', '', 'gear', 'Settings', 'Caretakers, birthdays, weather, notifications and more');
 }
@@ -1451,6 +1582,9 @@ A.openSettings = () => sheet(() => '<h2>Settings</h2><div style="clear:both"></d
 const rowLi = (t, id, title, sub) => `<div class="li" style="padding:12px 0" data-a="open" data-t="${t}" data-id="${esc(id)}"><div class="grow"><div class="ti">${esc(title)}</div>${sub ? `<div class="small muted">${esc(sub)}</div>` : ''}</div><span class="chev">›</span></div>`;
 const addBtn = (t, l) => `<div class="actions"><button class="btn" data-a="add" data-v="${t}">＋ ${l}</button></div>`;
 const PAGES = {
+  gifts: () => '<h2>Gift ideas</h2><div class="small muted">Everyone can see everyone\'s list except their own. On your own list you only see what you add.</div><div style="margin-top:8px">' + S.People.map(p => { const gs = giftsFor(p.name), own = p.name === ME;
+    return `<div class="li" style="padding:12px 0" data-a="giftList" data-v="${esc(p.name)}"><div class="hicon" style="--hc:${pcol(p.name)}">${ic('gift')}</div><div class="grow"><div class="ti">${own ? 'Your wish list' : esc(p.name)}</div>
+      <div class="small muted">${gs.length ? gs.length + (own ? ' you added' : ' idea' + (gs.length === 1 ? '' : 's') + ' · ' + gs.filter(g => g.assigned_to).length + ' being bought') : own ? 'Add things you would like' : 'No ideas yet'}</div></div><span class="chev">›</span></div>`; }).join('') + '</div>',
   recipes: () => '<h2>Recipes</h2>' + vRecipes(),
   device: () => `<h2>This phone</h2><div class="kv"><span>Signed in as</span>${esc(ME)}</div><div class="kv small muted" style="white-space:normal">You opened the app from your personal link, so there's no code to type. Anyone with your link can open the app as you, so don't share it. To use a new phone, open your link there and add it to the Home Screen.</div><div class="kv small muted" style="white-space:normal">To turn off a link (for example, a lost phone), Paul changes that person's passcode in Apps Script; the old link stops working.</div><div class="actions"><button class="btn danger" data-a="signOut">Sign out of this phone</button></div>`,
   family: () => '<h2>Family</h2>' + S.People.map(p => rowLi('People', p.id, p.name, p.kind === 'kid' ? ((byId('Schools', p.schoolId) || {}).name || 'No school set') : p.workDays ? `Works ${p.workDays}` : 'No work schedule set')).join('') + addBtn('People', 'Add a family member'),
