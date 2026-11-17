@@ -1014,9 +1014,10 @@ const todoRow = t => { const ty = typeOf(t), done = t.status === 'Done', late = 
     <div class="small muted"><span class="${late || t.due === TODAY ? 'red' : ''}">${done ? 'Done ' + fmtDay(t.doneOn) + ' by ' + esc(t.doneBy) : (late ? 'Overdue · ' : t.due === TODAY ? 'Due today · ' : 'Due ') + fmtDay(t.due)}</span> · ${esc(t.assignee || 'Either of us')}${t.kid ? ' · ' + esc(t.kid) : ''}${t.house ? ' · ' + esc(t.house) : ''}${t.repeat ? ' · ' + ic('repeat', 13) : ''}</div></div></div>`; };
 
 // ----- Feed -----
-// Dinner flags, shown first and on their own: I'm cooking, or a parent isn't home for dinner (tonight, or tomorrow from 7 PM).
+// Dinner flags, shown first and on their own, when a parent isn't home for dinner (tonight, or tomorrow from 7 PM): who's out, and that I'm cooking if I am.
 function dinnerFlags(d, night) {
-  const m = S.Menus.find(x => x.date === d); if (!m || m.skipped === '1') return [];
+  // Only when someone won't be home, and not when someone other than me is cooking that night.
+  const m = S.Menus.find(x => x.date === d); if (!m || m.skipped === '1' || !list(m.away).length || (m.cook && m.cook !== ME)) return [];
   const when = night ? 'tomorrow' : 'tonight', out = [];
   if (m.cook === ME) out.push({ lvl: 'plain', icon: 'meals', tag: 'DINNER', text: `You're making dinner ${when}${dish(m) ? ': ' + dish(m) : ''}`, open: ['Menus', m.id] });
   list(m.away).forEach(p => out.push({ lvl: 'plain', icon: 'home', tag: 'DINNER', text: `${p === ME ? "You won't" : p + " won't"} be home for dinner ${when}`, open: ['Menus', m.id] }));
