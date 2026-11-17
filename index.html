@@ -277,7 +277,7 @@
 // Momnie Family app v6.0
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'], DAYN = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'], ADULTS = ['Paul', 'Shana'];
 // Shown at the bottom of Home. Bump it together with VERSION in sw.js on every release.
-const APP_VERSION = '8.5 · Nov 17, 2026';
+const APP_VERSION = '8.6 · Nov 17, 2026';
 const TABLES = ['People', 'Schools', 'SchoolCal', 'Activities', 'Overrides', 'Events', 'Caretakers', 'Childcare', 'Birthdays', 'Todos', 'TodoTypes', 'Recipes', 'DinnerRules', 'Weeks', 'Menus',
   'Groceries', 'GroceryList', 'HouseCards', 'Houses', 'WeatherRules', 'Quotes', 'Memories', 'Updates', 'Messages', 'Activity', 'Comments', 'Reactions', 'Links', 'Settings', 'Photos', 'gifts', 'daily_items', 'daily_completions'];
 const CAT = { Kids: '#4f7cc2', Work: '#64748b', Family: '#5b6fa8', Dinner: '#b08a4f', Caretaker: '#3e9aa6', Shared: '#94a3b8', Birthday: '#c9806a' }, SCHOOL_C = ['#5a72b8', '#7a8597', '#4a6fb0'];
@@ -477,10 +477,10 @@ async function api(action, data = {}) {
   const url = apiUrl(), passcode = PIN;
   if (!url) throw new Error('Not connected yet. Open Home, then Settings.');
   if (!passcode) { noKey(); throw new Error('Open the app from your personal link.'); }
-  const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ action, passcode, ...data }) });
+  const sent = Date.now(), res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ action, passcode, ...data }) });
   const j = await res.json();
   if (!j.ok) { if (/passcode/i.test(j.error || '')) { store.set('tok', ''); store.set('cache', ''); PIN = ''; noKey(true); } throw new Error(j.error || 'Request failed'); }
-  ME = j.me && j.me.name ? j.me.name : j.me; if (j.tables) Object.assign(S, j.tables); if (j.weather !== undefined) WX = j.weather; if (j.seen) SEEN = j.seen;
+  ME = j.me && j.me.name ? j.me.name : j.me; if (j.tables) { Object.assign(S, j.tables); reapply(sent); } if (j.weather !== undefined) WX = j.weather; if (j.seen) SEEN = j.seen;
   if (j.cal) { const seen = new Set(j.cal.map(c => c.id + '@' + c.start)); CAL = (action === 'cal' ? CAL.filter(c => !seen.has(c.id + '@' + c.start)) : []).concat(j.cal); }
   saveCache();
   return j;
@@ -489,9 +489,45 @@ async function api(action, data = {}) {
 let cacheT = 0;
 function saveCache() { clearTimeout(cacheT); cacheT = setTimeout(() => { try { localStorage.setItem('cache', JSON.stringify({ me: ME, tables: S, cal: CAL, wx: WX, seen: SEEN, at: Date.now() })); } catch (e) {} }, 300); }
 function readCache() { try { const c = JSON.parse(store.get('cache') || 'null'); if (!c || !c.me) return false; ME = c.me; Object.assign(S, c.tables || {}); CAL = c.cal || []; WX = c.wx || null; SEEN = c.seen || {}; return true; } catch (e) { return false; } }
+// ----- Saving -----
+// Changes show on screen right away and are sent to the Sheet in the background, one at a time and in order.
+// If a save fails, the app says so and re-reads everything from the Sheet.
 let busy = false;
-async function call(action, data) { if (busy) return false; busy = true; try { await api(action, data); refresh(); return true; } catch (e) { toast(e.message); return false; } finally { busy = false; } }
-const write = (ops, extra) => call('write', Object.assign({ ops: [].concat(ops) }, extra || {}));
+const outbox = [], recent = [];
+const stamp = () => { const d = new Date(); return ymd(d) + 'T' + pad(d.getHours()) + ':' + pad(d.getMinutes()) + ':' + pad(d.getSeconds()); };
+// Fields the script fills in on new rows, filled in here too so a new post or comment looks right before the script answers.
+const NEWROW = { Messages: () => ({ from: ME, time: stamp() }), Comments: () => ({ who: ME, time: stamp() }), Reactions: () => ({ who: ME, time: stamp() }),
+  gifts: () => ({ added_by: ME, created_at: stamp() }), daily_items: () => ({ created_by: ME }), daily_completions: () => ({ completed_by: ME, completed_at: stamp() }) };
+function applyOps(ops) {
+  (ops || []).forEach(o => { if (!o || !o.t) return; const tb = S[o.t] || (S[o.t] = []);
+    if (o.del) { S[o.t] = tb.filter(x => x.id !== String(o.del)); return; }
+    const r = o.row || {}, ex = tb.find(x => x.id === String(r.id));
+    if (ex) Object.assign(ex, r); else tb.push(Object.assign(NEWROW[o.t] ? NEWROW[o.t]() : {}, r)); });
+}
+/** After fresh tables arrive: put back saves that are still on their way, and saves that finished after this request left. */
+function reapply(sent) {
+  const now = Date.now(); while (recent.length && now - recent[0].at > 120000) recent.shift();
+  recent.forEach(x => { if (x.at > sent) applyOps(x.ops); }); outbox.forEach(x => applyOps(x.ops));
+}
+async function pump() {
+  if (busy || !outbox.length) return; busy = true; $('sync').classList.add('on');
+  let failed = false;
+  while (outbox.length) { const it = outbox[0];
+    try { await api(it.action, it.data); outbox.shift(); if (it.ops) recent.push({ ops: it.ops, at: Date.now() }); it.done(true); }
+    catch (e) { outbox.shift(); toast(it.ops ? "Couldn't save: " + e.message : e.message); if (it.ops) failed = true; it.done(false); }
+    refresh(); }
+  busy = false; $('sync').classList.remove('on');
+  if (failed) load().catch(() => {});
+}
+/** Sends a request in turn and waits for the answer (used for photos, new weeks, calendar deletes). */
+const call = (action, data) => new Promise(done => { outbox.push({ action, data, done }); pump(); });
+/** Saves rows: shows the change now and returns true; the Sheet catches up in the background. */
+function write(ops, extra) {
+  ops = [].concat(ops).filter(Boolean); ops.forEach(o => { if (o.row && !o.row.id) o.row.id = nid(); });
+  applyOps(ops); refresh();
+  outbox.push({ action: 'write', data: Object.assign({ ops }, extra || {}), ops, done: () => {} }); pump();
+  return Promise.resolve(true);
+}
 const setSt = (k, v) => write({ t: 'Settings', row: { id: ME + '|' + k, value: v } });
 
 // ---------- model ----------
