@@ -1012,11 +1012,11 @@ const todoRow = t => { const ty = typeOf(t), done = t.status === 'Done', late = 
     <div class="small muted"><span class="${late || t.due === TODAY ? 'red' : ''}">${done ? 'Done ' + fmtDay(t.doneOn) + ' by ' + esc(t.doneBy) : (late ? 'Overdue · ' : t.due === TODAY ? 'Due today · ' : 'Due ') + fmtDay(t.due)}</span> · ${esc(t.assignee || 'Either of us')}${t.kid ? ' · ' + esc(t.kid) : ''}${t.house ? ' · ' + esc(t.house) : ''}${t.repeat ? ' · ' + ic('repeat', 13) : ''}</div></div></div>`; };
 
 // ----- Feed -----
-// The day after a planned dinner: ask how it was until you've rated it and someone has added a photo.
-function howWas() {
-  const m = S.Menus.find(x => x.date === addDays(TODAY, -1) && x.recipeId && x.skipped !== '1'), r = m && byId('Recipes', m.recipeId);
-  if (!r || (myStars(r) && photosOf('Recipes', r.id).length)) return [];
-  return [{ lvl: 'plain', icon: 'meals', text: `How was the ${r.name}? ${myStars(r) ? 'Add a photo' : 'Rate it' + (photosOf('Recipes', r.id).length ? '' : ' or add a photo')}`, open: ['Recipes', r.id] }];
+// Reminders show one line for my open to-dos (mine or unassigned), with how many are overdue or due soon. Tapping it opens To-Do.
+function todoSummary(mine, over, due, night) {
+  if (!mine.length) return [];
+  const today = due.filter(t => t.due === TODAY).length, soon = due.length - today, bits = [over.length && over.length + ' overdue', today && today + ' due today', soon && soon + ' due tomorrow'].filter(Boolean);
+  return [{ lvl: over.length ? 'red' : 'plain', icon: 'todo', text: `You have ${mine.length} outstanding to-do${mine.length === 1 ? '' : 's'}${bits.length ? ' · ' + bits.join(' · ') : ''}`, nav: 'todo' }];
 }
 /**
  * The plan shown on the Today card: school drop-offs and pickups (with extended day), activities, events made in the app,
@@ -1047,9 +1047,8 @@ function vFeed() {
   const bdays = itemsFor(sd).filter(i => i.src === 'birthday');
   const rem = al.map(a => ({ lvl: a.lvl || 'plain', icon: a.icon, text: a.text, open: a.open }))
     .concat(bdays.map(b => ({ lvl: 'plain', icon: 'cake', text: b.title + (night ? ' tomorrow' : ' today'), open: [b.t, b.id] })),
-      over.concat(due).map(t => ({ lvl: t.due < TODAY ? 'red' : 'plain', ty: typeOf(t), text: t.title + (t.due < TODAY ? ' · overdue' : t.due === TODAY ? ' · due today' : ' · due tomorrow'), open: ['Todos', t.id] })),
-      night ? [] : howWas());
-  const remHTML = r => `<div class="alert ${r.lvl}" ${r.open ? `data-a="open" data-t="${r.open[0]}" data-id="${esc(r.open[1])}" data-d="${r.open[2] || ''}"` : ''}>${r.ty ? tyIcon(r.ty, 16) : ic(r.icon || 'alert', 16)}<span>${esc(r.text)}</span></div>`;
+      todoSummary(mine, over, due, night));
+  const remHTML = r => `<div class="alert ${r.lvl}" ${r.nav ? `data-a="nav" data-v="${r.nav}"` : r.open ? `data-a="open" data-t="${r.open[0]}" data-id="${esc(r.open[1])}" data-d="${r.open[2] || ''}"` : ''}>${r.ty ? tyIcon(r.ty, 16) : ic(r.icon || 'alert', 16)}<span>${esc(r.text)}</span></div>`;
   const code = wd ? (night || WX.code === null ? wd.code : WX.code) : null;
   const weather = wd ? `<div class="lbl">${night ? "Tomorrow's" : "Today's"} weather</div>
     <div class="wxrow">${WXI(code, 30)}<b>${night || WX.now === null ? wd.high : WX.now}°</b><span class="small muted">${WXW[wxKind(code)]}${WX.place ? ' · ' + esc(WX.place) : ''}</span></div>
