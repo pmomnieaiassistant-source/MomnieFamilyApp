@@ -183,6 +183,8 @@
   .plan .ph a { display:inline-flex; align-items:center; font-size:13px; letter-spacing:0; text-transform:none; }
   .prow { display:grid; grid-template-columns:62px minmax(0,1fr); gap:10px; font-size:14px; line-height:1.35; padding:4px 0; } .prow > span:first-child { font-weight:800; color:var(--muted); }
   .prow.past { opacity:.5; }
+  .alert.flag { background:var(--accsoft); color:var(--text); font-weight:600; } .alert.flag .ic { color:var(--accent); }
+  .ftag { flex:0 0 auto; font-size:10px; font-weight:800; letter-spacing:.6px; padding:3px 7px; border-radius:6px; background:var(--accent); color:var(--onacc); }
   input[type=checkbox] { accent-color:var(--accent); }
   .ride { display:inline-flex; align-items:center; gap:1px; white-space:nowrap; }
   .fhead { display:flex; align-items:center; justify-content:space-between; gap:10px; padding:2px 16px 4px; }
@@ -1012,6 +1014,14 @@ const todoRow = t => { const ty = typeOf(t), done = t.status === 'Done', late = 
     <div class="small muted"><span class="${late || t.due === TODAY ? 'red' : ''}">${done ? 'Done ' + fmtDay(t.doneOn) + ' by ' + esc(t.doneBy) : (late ? 'Overdue · ' : t.due === TODAY ? 'Due today · ' : 'Due ') + fmtDay(t.due)}</span> · ${esc(t.assignee || 'Either of us')}${t.kid ? ' · ' + esc(t.kid) : ''}${t.house ? ' · ' + esc(t.house) : ''}${t.repeat ? ' · ' + ic('repeat', 13) : ''}</div></div></div>`; };
 
 // ----- Feed -----
+// Dinner flags, shown first and on their own: I'm cooking, or a parent isn't home for dinner (tonight, or tomorrow from 7 PM).
+function dinnerFlags(d, night) {
+  const m = S.Menus.find(x => x.date === d); if (!m || m.skipped === '1') return [];
+  const when = night ? 'tomorrow' : 'tonight', out = [];
+  if (m.cook === ME) out.push({ lvl: 'plain', icon: 'meals', tag: 'DINNER', text: `You're making dinner ${when}${dish(m) ? ': ' + dish(m) : ''}`, open: ['Menus', m.id] });
+  list(m.away).forEach(p => out.push({ lvl: 'plain', icon: 'home', tag: 'DINNER', text: `${p === ME ? "You won't" : p + " won't"} be home for dinner ${when}`, open: ['Menus', m.id] }));
+  return out;
+}
 // Reminders show one line for my open to-dos (mine or unassigned), with how many are overdue or due soon. Tapping it opens To-Do.
 function todoSummary(mine, over, due, night) {
   if (!mine.length) return [];
@@ -1045,10 +1055,10 @@ function vFeed() {
   const wx = wxHits(wi, 'morning').concat(wxHits(wi, 'night')).filter(r => !seen.has(r.message) && seen.add(r.message)).map(r => ({ icon: WXR[r.metric] || 'weather', text: r.message }));
   const mine = myTodos(), over = mine.filter(t => t.due && t.due < TODAY), due = mine.filter(t => t.due === TODAY || (night && t.due === sd));
   const bdays = itemsFor(sd).filter(i => i.src === 'birthday');
-  const rem = al.map(a => ({ lvl: a.lvl || 'plain', icon: a.icon, text: a.text, open: a.open }))
+  const rem = dinnerFlags(sd, night).concat(al.map(a => ({ lvl: a.lvl || 'plain', icon: a.icon, text: a.text, open: a.open })))
     .concat(bdays.map(b => ({ lvl: 'plain', icon: 'cake', text: b.title + (night ? ' tomorrow' : ' today'), open: [b.t, b.id] })),
       todoSummary(mine, over, due, night));
-  const remHTML = r => `<div class="alert ${r.lvl}" ${r.nav ? `data-a="nav" data-v="${r.nav}"` : r.open ? `data-a="open" data-t="${r.open[0]}" data-id="${esc(r.open[1])}" data-d="${r.open[2] || ''}"` : ''}>${r.ty ? tyIcon(r.ty, 16) : ic(r.icon || 'alert', 16)}<span>${esc(r.text)}</span></div>`;
+  const remHTML = r => `<div class="alert ${r.lvl}${r.tag ? ' flag' : ''}" ${r.nav ? `data-a="nav" data-v="${r.nav}"` : r.open ? `data-a="open" data-t="${r.open[0]}" data-id="${esc(r.open[1])}" data-d="${r.open[2] || ''}"` : ''}>${r.ty ? tyIcon(r.ty, 16) : ic(r.icon || 'alert', 16)}<span class="grow">${esc(r.text)}</span>${r.tag ? `<span class="ftag">${esc(r.tag)}</span>` : ''}</div>`;
   const code = wd ? (night || WX.code === null ? wd.code : WX.code) : null;
   const weather = wd ? `<div class="lbl">${night ? "Tomorrow's" : "Today's"} weather</div>
     <div class="wxrow">${WXI(code, 30)}<b>${night || WX.now === null ? wd.high : WX.now}°</b><span class="small muted">${WXW[wxKind(code)]}${WX.place ? ' · ' + esc(WX.place) : ''}</span></div>
