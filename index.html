@@ -183,6 +183,10 @@
   .plan .ph a { display:inline-flex; align-items:center; font-size:13px; letter-spacing:0; text-transform:none; }
   .prow { display:grid; grid-template-columns:62px minmax(0,1fr); gap:10px; font-size:14px; line-height:1.35; padding:4px 0; } .prow > span:first-child { font-weight:800; color:var(--muted); }
   .prow.past { opacity:.5; }
+  input[type=checkbox] { accent-color:var(--accent); }
+  .ride { display:inline-flex; align-items:center; gap:1px; white-space:nowrap; }
+  .fhead { display:flex; align-items:center; justify-content:space-between; gap:10px; padding:2px 16px 4px; }
+  .fhead .small { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .wxrow { display:flex; align-items:center; gap:8px; margin-top:8px; } .wxrow b { font-size:30px; font-weight:800; letter-spacing:-.5px; }
   .stack { display:flex; flex-direction:column; gap:6px; margin-top:8px; } .amb { color:var(--amber); font-weight:700; }
   .hero .plan { margin-top:16px; }
@@ -352,7 +356,10 @@ const ICONS = {
   x: '<path d="M6 6l12 12M18 6 6 18"/>',
   wrench: '<path d="M14.5 6.5a4 4 0 0 0 5 5L21 13l-8 8-3-3 8-8-1.5-1.5a4 4 0 0 1-5-5L13 2z"/>',
   note: '<rect x="5" y="3.5" width="14" height="18" rx="2"/><path d="M9 3.5V2h6v1.5M9 10h6M9 14h6M9 18h3"/>',
-  chev: '<path d="m9 6 6 6-6 6"/>'
+  chev: '<path d="m9 6 6 6-6 6"/>',
+  up: '<path d="M12 19V5M6 11l6-6 6 6"/>',
+  down: '<path d="M12 5v14M6 13l6 6 6-6"/>',
+  filter: '<path d="M3 5h18l-7 8.5V20l-4-2v-4.5z"/>'
 };
 const ic = (n, s) => `<svg class="ic" width="${s || 20}" height="${s || 20}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[n] || ''}</svg>`;
 // Reactions are stored as emoji (so older ones keep counting) but drawn as line icons.
@@ -987,12 +994,14 @@ function render() {
 }
 A.nav = v => { view = v; render(); window.scrollTo(0, 0); };
 function pcard(i) {
-  const ride = i.ride ? `${i.dropoff || '?'} → ${i.pickup || '?'}` : '', n = cmts(i.t, i.id).filter(c => c.system !== '1').length;
-  const sub = [i.sub && esc(i.sub), ride && ic('car', 14) + ' ' + esc(ride)].filter(Boolean).join(' · ');
+  const n = cmts(i.t, i.id).filter(c => c.system !== '1').length;
+  const sub = [i.sub && esc(i.sub), i.ride && rideHTML(i)].filter(Boolean).join(' · ');
   return `<div class="pc" style="--c:${esc(i.color)}" data-a="open" data-t="${i.t}" data-id="${esc(i.id)}" data-d="${i.date || ''}">${i.start ? `<div class="t">${fmtT(i.start)}</div>` : i.label ? `<div class="t">${esc(i.label)}</div>` : ''}${i.logo ? `<img src="${esc(i.logo)}" alt="">` : i.icon ? `<span class="pci">${ic(i.icon, 18)}</span>` : ''}
     <div class="grow"><div class="ti">${esc(i.title)}</div>${sub ? `<div class="small ${i.warn || (i.ride && (!i.dropoff || !i.pickup)) ? 'red' : 'muted'}">${sub}</div>` : ''}</div>${whoDots(i.people)}${n ? `<span class="small muted">${ic('msg', 14)}${n}</span>` : ''}</div>`;
 }
 const wxKind = c => c === 0 ? 'sun' : c <= 2 ? 'cloudsun' : c === 3 ? 'cloud' : c <= 48 ? 'fog' : c <= 67 || (c >= 80 && c <= 82) ? 'rain' : c <= 77 || c === 85 || c === 86 ? 'snow' : 'storm';
+// Rides: up arrow = who drops off, down arrow = who picks up.
+const rideHTML = i => `<span class="ride">${ic('up', 13)}${esc(i.dropoff || 'not set')}</span> <span class="ride">${ic('down', 13)}${esc(i.pickup || 'not set')}</span>`;
 const WXI = (c, s) => ic(wxKind(c), s || 26);
 const WXW = { sun: 'Sunny', cloudsun: 'Some sun', cloud: 'Cloudy', fog: 'Fog', rain: 'Rain', snow: 'Snow', storm: 'Storms' };
 const uvWord = u => u < 3 ? 'low' : u < 6 ? 'moderate' : u < 8 ? 'high' : 'very high';
@@ -1022,7 +1031,7 @@ function planRows(d, after) {
   Object.values(drop).forEach(x => rows.push({ s: x.s, title: x.n + ' drop-off', sub: esc(kidNames(x.k)) }));
   Object.values(pick).forEach(x => rows.push({ s: x.s, title: x.n + ' pickup', sub: esc(kidNames(x.k)) }));
   itemsFor(d).filter(i => i.t !== 'GCal' && i.src !== 'gcal' && i.src !== 'birthday').forEach(i => {
-    const ride = i.ride ? (!i.dropoff || !i.pickup ? `<span class="red">${!i.dropoff && !i.pickup ? 'rides' : !i.dropoff ? 'drop-off' : 'pickup'} not set</span>` : `${esc(i.dropoff)} → ${esc(i.pickup)}`) : '';
+    const ride = i.ride ? (!i.dropoff || !i.pickup ? `<span class="red">${!i.dropoff && !i.pickup ? 'rides' : !i.dropoff ? 'drop-off' : 'pickup'} not set</span>` : rideHTML(i)) : '';
     const sub = i.src === 'dinner' ? (i.sub ? `<span class="amb">${esc(i.sub)}</span>` : '') : [i.sub && (i.warn ? `<span class="red">${esc(i.sub)}</span>` : esc(i.sub)), ride].filter(Boolean).join(' · ');
     rows.push({ s: i.start || '', e: i.end || '', title: i.title, sub, dinner: i.src === 'dinner' }); });
   return rows.filter(r => !after || !r.s || (r.e || r.s) >= after)
@@ -1104,21 +1113,33 @@ function actPost(a) {
 }
 
 // ----- Planner -----
-let PW = '', PF = 'all', calLoaded = ['', ''];
+let PW = '', calLoaded = ['', ''];
+// Planner filter: everything shows unless unchecked in the Filter sheet. Kept on this phone only.
+const PKINDS = () => [['k:events', 'Events made in the app'], ['k:activities', 'Activities'], ['k:care', 'Childcare'], ['k:dinner', 'Dinner']]
+  .concat(S.Schools.map(s => ['k:school:' + s.id, (s.short || s.name) + ' calendar']), [['k:birthday', 'Birthdays'], ['k:gcal', 'Shared calendar']]);
+const pHidden = () => { try { return new Set(JSON.parse(store.get('plHide') || '[]')); } catch (e) { return new Set(); } };
+const pKind = i => i.src === 'gcal' || i.t === 'GCal' ? 'gcal' : i.src === 'birthday' ? 'birthday' : i.src === 'dinner' ? 'dinner' : i.t === 'SchoolCal' ? i.src : i.t === 'Activities' ? 'activities' : i.t === 'Childcare' ? 'care' : 'events';
+const pShown = (i, hid) => !hid.has('k:' + pKind(i)) && !(i.people.length && i.people.every(n => hid.has('p:' + n)));
+A.pfilterOpen = () => sheet(() => { const hid = pHidden(), row = (k, l, c) => `<label class="check-row"><input type="checkbox" data-c="pfToggle" data-k="${esc(k)}" ${hid.has(k) ? '' : 'checked'}>${c ? `<span class="pdot" style="background:${c}"></span>` : ''}${esc(l)}</label>`;
+  return `<h2>Show on the Planner</h2><div class="small muted">Uncheck anything you don't want to see. Kept on this phone.</div>
+    <h3>People</h3>${S.People.map(p => row('p:' + p.name, p.name, pcol(p.name))).join('')}<div class="small muted" style="margin-top:6px">Unchecking someone hides items that are only for them.</div>
+    <h3>What to show</h3>${PKINDS().map(([k, l]) => row(k, l)).join('')}
+    <div class="actions"><button class="btn gray" data-a="pfAll">Show everything</button><button class="btn" data-a="close">Done</button></div>`; });
+A.pfToggle = (on, el) => { const hid = pHidden(), k = el.dataset.k; if (on) hid.delete(k); else hid.add(k); store.set('plHide', JSON.stringify([...hid])); refresh(); };
+A.pfAll = () => { store.set('plHide', '[]'); refresh(); };
 function vPlanner() {
   PW = PW || mondayOf(TODAY);
-  const chips = [['all', 'Everyone']].concat(S.People.map(p => ['p:' + p.name, p.name, pcol(p.name)]), S.Schools.map(s => ['school:' + s.id, s.short || s.name]), [['birthday', 'Birthdays']]);
-  const pass = i => PF === 'all' || (PF.startsWith('p:') ? (i.people.includes(PF.slice(2)) || i.dropoff === PF.slice(2) || i.pickup === PF.slice(2)) : i.src === PF);
+  const hid = pHidden(), pass = i => pShown(i, hid), names = Object.fromEntries(PKINDS().concat(S.People.map(p => ['p:' + p.name, p.name])));
+  const off = [...hid].map(k => names[k]).filter(Boolean);
   let html = `<div class="weekbar"><button class="icon-btn" data-a="pweek" data-v="-7">‹</button><span>${PW === mondayOf(TODAY) ? 'This week · ' : ''}${fmtDate(PW)} – ${fmtDate(addDays(PW, 6))}</span><button class="icon-btn" data-a="pweek" data-v="7">›</button></div>
-    <div class="chips">${chips.map(([k, l, c]) => `<button class="chip ${PF === k ? 'on' : ''}" data-a="pfilter" data-v="${esc(k)}" ${c ? `style="${PF === k ? `background:${c};color:#fff` : `background:color-mix(in srgb, ${c} 14%, var(--bg));color:${c}`}"` : ''}>${esc(l)}</button>`).join('')}</div>`;
+    <div class="fhead"><span class="small muted">${off.length ? 'Hiding: ' + esc(off.join(', ')) : 'Showing everything'}</span><button class="chip ${off.length ? 'on' : ''}" data-a="pfilterOpen">${ic('filter', 14)} Filter${off.length ? ' (' + off.length + ')' : ''}</button></div>`;
   for (let n = 0; n < 7; n++) { const d = addDays(PW, n), it = itemsFor(d).filter(pass), all = it.filter(i => !i.start && i.src !== 'dinner'), timed = it.filter(i => i.start || i.src === 'dinner');
     html += `<div class="dayhead ${d === TODAY ? 'today' : ''}" id="day-${d}"><span><b>${DAYN[n]}</b> <span class="muted">${fmtDate(d)}</span></span><button class="chip" data-a="dayAdd" data-v="${d}">＋ Add</button></div><div class="pad">
       ${all.length ? `<div class="allday">${all.map(pcard).join('')}</div>` : ''}${timed.map(pcard).join('')}${it.length ? '' : '<div class="muted small" style="padding:4px 0 8px">Nothing planned</div>'}</div>`; }
-  return html + `<div class="chips" style="padding-top:16px;flex-wrap:wrap">${[...S.People.map(p => [p.name === 'Paul' ? 'Dad (Paul)' : p.name, pcol(p.name)]), ['Family', CAT.Family], ...S.Schools.map((s, i) => [s.short || s.name, SCHOOL_C[i % 3]]), ['Dinner', CAT.Dinner], ['Caretaker', CAT.Caretaker], ['Shared calendar', CAT.Shared], ['Birthdays', CAT.Birthday]].map(([l, c]) => `<span class="small muted" style="white-space:nowrap"><span class="dot" style="background:${c}"></span>${l}</span>`).join('')}</div>`;
+  return html + `<div class="chips" style="padding-top:16px;flex-wrap:wrap">${[...S.People.map(p => [p.name === 'Paul' ? 'Dad (Paul)' : p.name, pcol(p.name)]), ['Family', CAT.Family], ...S.Schools.map((s, i) => [s.short || s.name, SCHOOL_C[i % 3]]), ['Dinner', CAT.Dinner], ['Caretaker', CAT.Caretaker], ['Shared calendar', CAT.Shared], ['Birthdays', CAT.Birthday]].map(([l, c]) => `<span class="small muted" style="white-space:nowrap"><span class="dot" style="background:${c}"></span>${l}</span>`).join('')}<span class="small muted" style="white-space:nowrap">${ic('up', 13)}drops off ${ic('down', 13)}picks up</span></div>`;
 }
-A.pfilter = v => { PF = v; render(); };
 // From the Feed's plan: open the Planner on that day.
-A.planDay = d => { view = 'planner'; PF = 'all'; PW = mondayOf(d); render(); const el = $('day-' + d); window.scrollTo(0, el ? el.getBoundingClientRect().top + window.scrollY - 70 : 0); };
+A.planDay = d => { view = 'planner'; PW = mondayOf(d); render(); const el = $('day-' + d); window.scrollTo(0, el ? el.getBoundingClientRect().top + window.scrollY - 70 : 0); };
 A.pweek = async n => { PW = addDays(PW, +n); render(); if (PW < addDays(TODAY, -7) || addDays(PW, 6) > addDays(TODAY, 48)) { try { await api('cal', { start: PW, days: 7 }); render(); } catch (e) {} } };
 A.dayAdd = d => { const s = sheet(`<h2>Add to ${fmtDay(d)}</h2><div class="actions" style="flex-direction:column"><button class="btn gray" data-a="addOn" data-v="Events" data-d="${d}">${ic('planner', 16)}Event</button><button class="btn gray" data-a="addOn" data-v="Childcare" data-d="${d}">${ic('care', 16)}Caretaker card</button><button class="btn gray" data-a="addOn" data-v="Todos" data-d="${d}">${ic('todo', 16)}To-do due that day</button><button class="btn gray" data-a="addOn" data-v="Activities" data-d="${d}">${ic('repeat', 16)}Repeating activity (kids or parents)</button><button class="btn gray" data-a="addOn" data-v="SchoolCal" data-d="${d}">${ic('school', 16)}School calendar item</button></div>`); };
 A.addOn = (t, el) => { A.close(null, el); editForm(t, null, t === 'Todos' ? { due: el.dataset.d } : t === 'Activities' ? { days: DAYS[dowIdx(el.dataset.d)], from: el.dataset.d } : { date: el.dataset.d }); };
