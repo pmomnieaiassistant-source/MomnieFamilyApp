@@ -1349,20 +1349,32 @@ function vRecipes() {
 }
 
 // ----- To-Do -----
-const TD = { tab: 'open', who: null, type: '', sort: 'date' };
+const TD = { tab: 'open', who: null, type: '', sort: 'date', menu: false };
 function vTodo() {
   if (!TD.who) TD.who = [ME, ''];
-  const open = S.Todos.filter(t => t.status !== 'Done'), mine = myTodos();
-  let items = (TD.tab === 'open' ? open : S.Todos.filter(t => t.status === 'Done')).filter(t => TD.who.includes(t.assignee) && (!TD.type || t.type === TD.type));
-  items = TD.tab === 'done' ? items.sort((a, b) => b.doneOn.localeCompare(a.doneOn)).slice(0, 60) : items.sort((a, b) => (TD.sort === 'type' ? a.type.localeCompare(b.type) : 0) || (a.due || '9').localeCompare(b.due || '9'));
-  return `<div class="pad" style="padding-top:10px"><div style="font-size:26px;font-weight:800">${mine.length} for you</div><div class="small muted">${open.length} open in all · ${mine.filter(t => t.due < TODAY).length} overdue</div></div>
-    <div class="seg" style="margin-top:8px"><button class="${TD.tab === 'open' ? 'on' : ''}" data-a="tdTab" data-v="open">To do</button><button class="${TD.tab === 'done' ? 'on' : ''}" data-a="tdTab" data-v="done">Done</button></div>
-    <div class="chips"><span class="small muted" style="align-self:center">Show</span>${[['Paul', 'Paul'], ['Shana', 'Shana'], ['', 'Unassigned']].map(([k, l]) => `<button class="chip ${TD.who.includes(k) ? 'on' : ''}" data-a="tdWho" data-v="${k}">${TD.who.includes(k) ? '✓ ' : ''}${l}</button>`).join('')}</div>
-    <div class="pad two" style="margin-top:6px"><div><select data-c="tdType" style="padding:9px 12px;font-size:14px"><option value="">All types</option>${S.TodoTypes.map(t => `<option value="${t.id}" ${TD.type === t.id ? 'selected' : ''}>${esc(t.name)}</option>`).join('')}</select></div>
-      <div><select data-c="tdSort" style="padding:9px 12px;font-size:14px"><option value="date">Sort by date</option><option value="type" ${TD.sort === 'type' ? 'selected' : ''}>Sort by type</option></select></div></div>
-    ${items.map(todoRow).join('') || `<div class="empty">${TD.tab === 'open' ? 'All clear.' : 'Nothing checked off yet.'}</div>`}<button class="fab" data-a="add" data-v="Todos" aria-label="Add to-do">${ic('plus', 26)}</button>`;
+  const open = S.Todos.filter(t => t.status !== 'Done'), mine = myTodos(), doneAll = S.Todos.filter(t => t.status === 'Done'), done = TD.tab === 'done';
+  let items = (done ? doneAll : open).filter(t => TD.who.includes(t.assignee) && (!TD.type || t.type === TD.type));
+  items = done ? items.sort((a, b) => b.doneOn.localeCompare(a.doneOn)).slice(0, 60) : items.sort((a, b) => (TD.sort === 'type' ? a.type.localeCompare(b.type) : 0) || (a.due || '9').localeCompare(b.due || '9'));
+  const WHO = [['Paul', 'Paul'], ['Shana', 'Shana'], ['', 'Unassigned']], whoDefault = TD.who.length === 2 && TD.who.includes(ME) && TD.who.includes('');
+  const on = (whoDefault ? 0 : 1) + (TD.type ? 1 : 0) + (TD.sort !== 'date' ? 1 : 0), ty = TD.type && byId('TodoTypes', TD.type);
+  const applied = [whoDefault ? '' : 'Showing ' + (WHO.filter(([k]) => TD.who.includes(k)).map(x => x[1]).join(', ') || 'no one'), ty ? ty.name : '', TD.sort === 'type' ? 'By type' : ''].filter(Boolean);
+  return `<div class="rbar" style="padding-top:12px"><div class="row" style="align-items:flex-start"><div class="grow">
+      <div style="font-size:26px;font-weight:800;letter-spacing:-.5px">${done ? 'Done' : mine.length + ' for you'}</div>
+      <div class="small muted">${done ? 'Checked off recently, newest first' : `${open.length} open in all · ${mine.filter(t => t.due && t.due < TODAY).length} overdue`}</div></div>
+      <button class="rmbtn ${on ? 'on' : ''}" data-a="tdMenu" aria-label="Show, type and sort" aria-expanded="${TD.menu}">${ic('menu', 22)}${on ? `<i>${on}</i>` : ''}</button></div>
+    ${TD.menu ? `<div class="rshade" data-a="tdMenu"></div><div class="rmenu" role="dialog" aria-label="Show, type and sort" style="top:64px">
+      <div class="lbl" style="margin-top:0">Show to-dos for</div><div class="rmtags">${WHO.map(([k, l]) => `<button class="chip ${TD.who.includes(k) ? 'on' : ''}" data-a="tdWho" data-v="${k}">${l}</button>`).join('')}</div>
+      <div class="lbl">Type</div><div class="rmtags">${[['', 'All types']].concat(S.TodoTypes.map(t => [t.id, t.name])).map(([k, l]) => `<button class="chip ${TD.type === k ? 'on' : ''}" data-a="tdType" data-v="${esc(k)}">${esc(l)}</button>`).join('')}</div>
+      ${done ? '' : `<div class="lbl">Sort by</div>${[['date', 'Due date'], ['type', 'Type']].map(([k, l]) => `<button class="rmopt ${TD.sort === k ? 'on' : ''}" data-a="tdSort" data-v="${k}">${TD.sort === k ? ic('check', 16) : '<span style="width:16px"></span>'}${l}</button>`).join('')}`}
+      <div class="actions"><button class="btn gray sm" data-a="tdClear">Reset</button><button class="btn sm" data-a="tdMenu">Done</button></div></div>` : ''}
+    ${applied.length ? `<div class="small muted rapplied">${esc(applied.join(' · '))} · <a data-a="tdClear">Reset</a></div>` : ''}</div>
+    ${items.map(todoRow).join('') || `<div class="empty">${done ? 'Nothing checked off yet.' : 'All clear.'}</div>`}
+    <div class="actions" style="justify-content:center;margin:4px 16px 90px">${done ? `<button class="chip" style="padding:8px 14px" data-a="tdTab" data-v="open">${ic('chev', 16)} Back to open to-dos</button>` : `<button class="chip" style="padding:8px 14px" data-a="tdTab" data-v="done">${ic('check', 16)} Show done (${doneAll.length})</button>`}</div>
+    <button class="fab" data-a="add" data-v="Todos" aria-label="Add to-do">${ic('plus', 26)}</button>`;
 }
-A.tdTab = v => { TD.tab = v; render(); }; A.tdType = v => { TD.type = v; render(); }; A.tdSort = v => { TD.sort = v; render(); };
+A.tdMenu = () => { TD.menu = !TD.menu; render(); };
+A.tdTab = v => { TD.tab = v; TD.menu = false; render(); window.scrollTo(0, 0); }; A.tdType = v => { TD.type = v; render(); }; A.tdSort = v => { TD.sort = v; render(); };
+A.tdClear = () => { TD.who = [ME, '']; TD.type = ''; TD.sort = 'date'; TD.menu = false; render(); };
 A.tdWho = v => { TD.who = TD.who.includes(v) ? TD.who.filter(x => x !== v) : TD.who.concat(v); render(); };
 
 // ----- Home -----
