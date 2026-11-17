@@ -644,7 +644,7 @@ const FORMS = {
     F('endDate', 'Last day (only if it runs several days)', 'date', null, { show: x => x.allDay === '1' }), F('start', 'Starts', 'time', null, { show: x => x.allDay !== '1' }), F('end', 'Ends', 'time', null, { show: x => x.allDay !== '1' }),
     F('people', 'Who is involved', 'multi', S.People.map(p => p.name)), F('location', 'Where'), F('house', 'House', 'sel', HOUSE_O),
     F('dropoff', 'Drop-off', 'sel', rideO, { show: x => x.category === 'Kids' && x.allDay !== '1' }), F('pickup', 'Pickup', 'sel', rideO, { show: x => x.category === 'Kids' && x.allDay !== '1' }),
-    F('notes', 'Notes', 'area'), F('gcal', 'Update Cal (also put this on the shared Google Calendar)', 'chk')],
+    F('notes', 'Notes', 'area')],
   Activities: [F('name', 'Activity', 'text', null, { ph: 'e.g. Hockey' }), F('kids', 'Who (kids or parents)', 'multi', () => S.People.map(p => p.name)),
     F('_slots', 'Days and times', 'rows', null, { add: 'Add another day', hint: 'Each day can have its own time, e.g. Sat 11–12 and Sun 12–1.', init: x => list(x.days).length ? list(x.days).map(dd => ({ day: dd, start: x.start || '', end: x.end || '' })) : [{ day: 'Mon' }],
       cols: [{ c: 'day', t: 'sel', o: DAYS, cls: 'u' }, { c: 'start', t: 'time', cls: 'n' }, { c: 'end', t: 'time', cls: 'n' }] }),
@@ -715,7 +715,6 @@ const SAVE = {
     if (v.category === 'Kids') { const dc = driveCheck([v.dropoff, v.pickup].filter(Boolean)); if (!dc) return false; ops.push(...dc); }
     if (isNew && !v.gcalId) { const k = norm(v.title), dup = itemsFor(v.date).find(i => ['GCal', 'Events', 'SchoolCal'].includes(i.t) && (norm(i.title) === k || norm(i.title).includes(k) || k.includes(norm(i.title))));
       if (dup && confirm(`This looks like a duplicate of “${dup.title}”. Merge them into one card?`)) { if (dup.t === 'GCal') row.gcalId = dup.id; else { openCard(dup.t, dup.id, v.date); return; } } }
-    if (row.gcal === '1' && !confirm('This will update the calendar. Are you sure?')) return false;
     ops.push({ t: 'Events', row, log: L(isNew ? 'event_add' : 'event_edit', `${isNew ? 'added plans' : 'updated'}: ${v.title} (${fmtDay(v.date)}${v.allDay !== '1' && v.start ? ', ' + fmtT(v.start) : ''})`, 'planner') });
     if (v._link) ops.push({ t: 'Links', row: { id: nid(), aTable: v._link[0], aRef: v._link[1], bTable: 'Events', bRef: row.id } }, sys(v._link[0], v._link[1], `added a Planner event and linked this ${NAMES[v._link[0]] || 'card'}`));
     if (v._todoDone) ops.push({ t: 'Todos', row: { id: v._todoDone, status: 'Done', doneOn: TODAY, doneBy: ME } });
@@ -779,7 +778,7 @@ A.add = (t, el) => editForm(t, null, el && el.dataset.d ? { date: el.dataset.d, 
 A.edit = (v, el) => { const c = ctx(el); if (c.t === 'GCal') return A.adopt(v, el); editForm(c.t, byId(c.t, c.id)); };
 A.del = async (v, el) => {
   const c = ctx(el), r = byId(c.t, c.id); if (!r) return;
-  if (c.t === 'Events' && r.gcal === '1' && r.gcalId) { if (!confirm('This will also delete it from the calendar. Are you sure?')) return; } else if (!confirm(`Delete this ${NAMES[c.t] || 'item'}?`)) return;
+  if ((c.t === 'Events' || c.t === 'Activities') && r.gcalId) { if (!confirm(`Delete this ${NAMES[c.t]}? It is also removed from the shared calendar.`)) return; } else if (!confirm(`Delete this ${NAMES[c.t] || 'item'}?`)) return;
   const ops = [{ t: c.t, del: c.id, log: ['Todos', 'Events', 'Childcare', 'Activities'].includes(c.t) ? L('delete', `removed ${NAMES[c.t].match(/^[aeiou]/) ? 'an' : 'a'} ${NAMES[c.t]}: ${titleOf(c.t, c.id)}`, c.t === 'Todos' ? 'bills' : 'planner') : null }];
   if (c.t === 'Activities') actGroup(r).filter(x => x.id !== c.id).forEach(x => ops.push({ t: 'Activities', del: x.id }));
   if (c.t === 'Childcare') S.Todos.filter(x => x.source === 'findcare:' + c.id && x.status !== 'Done').forEach(x => ops.push({ t: 'Todos', del: x.id }));
@@ -815,13 +814,13 @@ const CARD = {
       `<div class="actions"><button class="btn ${done ? 'gray' : 'dark'}" data-a="todoDone" data-v="${r.id}">${done ? 'Reopen' : r.type === 'bill' || r.type === 'paycare' ? 'Mark paid' : 'Mark done'}</button>${r.type === 'appt' && !done ? '<button class="btn gray" data-a="toEvent">' + ic('planner', 16) + 'Add to Planner</button>' : ''}</div>` + std(); },
   Events(r, d) { const all = r.allDay === '1' || !r.start;
     return `<h2>${esc(r.title)}</h2>` + kv('When', fmtDay(r.date) + (r.endDate && r.endDate > r.date ? ' – ' + fmtDay(r.endDate) : '') + (all ? ' · all day' : ` · ${fmtT(r.start)}${r.end ? '–' + fmtT(r.end) : ''}`)) + kv('Category', r.category) + kv('Who', r.people) + kv('Where', r.location) + kv('House', r.house) + kv('Notes', r.notes) +
-      kv('Calendar', r.gcalId ? (r.gcal === '1' ? 'On the shared calendar; edits here update it' : 'Linked to a shared calendar event') : '') + (r.category === 'Kids' && !all ? rideBox('Rides', r.dropoff, r.pickup) : '') + std({ care: 1 }); },
+      kv('Calendar', r.gcalId ? 'Copied to the shared calendar; change it here, not in Google Calendar' : '') + (r.category === 'Kids' && !all ? rideBox('Rides', r.dropoff, r.pickup) : '') + std({ care: 1 }); },
   GCal(r) { return `<h2>${esc(r.title)}</h2>` + kv('When', r.allDay ? fmtDay(r.start) + (addDays(r.end, -1) > r.start ? ' – ' + fmtDay(addDays(r.end, -1)) : '') + ' · all day' : `${fmtDay(r.start)} · ${fmtT(r.start.slice(11))}–${fmtT(r.end.slice(11))}`) + kv('Where', r.location) + kv('From', 'Shared calendar') +
       (r.recurring ? '<div class="kv muted small">This is a repeating calendar event. Change its time in Google Calendar; you can still comment, link and add a caretaker here.</div>' : '') +
       `<div class="actions">${r.recurring ? '' : '<button class="btn gray sm" data-a="adopt">' + ic('pen') + 'Edit</button>'}<button class="btn gray sm" data-a="link">${ic('link')}Link</button><button class="btn gray sm" data-a="careFor">${ic('care')}Add caretaker</button>${r.recurring ? '' : '<button class="btn danger sm" data-a="gcalDel">' + ic('trash') + 'Delete</button>'}</div>`; },
   Activities(r, d) { const o = d ? ovr(r.id, d) : {};
     return `<h2>${esc(r.name)}</h2>` + kvh('Who', list(r.kids).map(n => `<span class="pdot" style="background:${pcol(n)}"></span>${esc(n)}`).join('&nbsp;&nbsp; ')) + kv('When', schedTxt(actGroup(r))) + kv('Season', r.from || r.until ? `${r.from ? fmtDate(r.from) : 'now'} to ${r.until ? fmtDate(r.until) : 'ongoing'}` : '') + kv('Where', r.location) + kv('Teacher or contact', r.teacher) +
-      (list(r.kids).some(n => kidN().includes(n)) ? kv('Usual rides', `Drop-off: ${r.dropoff || 'not set'} · Pickup: ${r.pickup || 'not set'}`) : '') + kv('House', r.house) + kv('Notes', r.notes) + (d && list(r.kids).some(n => kidN().includes(n)) ? rideBox('Rides for ' + fmtDay(d), o.dropoff || r.dropoff, o.pickup || r.pickup, true) : '') + std({ care: 1 }); },
+      (list(r.kids).some(n => kidN().includes(n)) ? kv('Usual rides', `Drop-off: ${r.dropoff || 'not set'} · Pickup: ${r.pickup || 'not set'}`) : '') + kv('House', r.house) + kv('Notes', r.notes) + kv('Calendar', actGroup(r).some(x => x.gcalId) ? 'Copied to the shared calendar; change it here, not in Google Calendar' : '') + (d && list(r.kids).some(n => kidN().includes(n)) ? rideBox('Rides for ' + fmtDay(d), o.dropoff || r.dropoff, o.pickup || r.pickup, true) : '') + std({ care: 1 }); },
   SchoolCal(r, d, t) { const s = byId('Schools', r.schoolId) || {}; return (s.logo ? `<img src="${esc(s.logo)}" alt="" style="width:44px;height:44px;float:left;margin-right:10px;border-radius:50%;background:#fff">` : '') + genericCard(r, d, t) + kv('School', s.name) + std({ care: 1 }); },
   Childcare(c) { let asks = {}; try { asks = JSON.parse(c.asks || '{}'); } catch (e) {}
     const roster = S.Caretakers.filter(k => !c.roster || !k.roster || list(k.roster).includes(c.roster)), LBL = { '': 'Not asked', asked: 'Asked, waiting', cant: "Can't do it", confirmed: 'Confirmed' };
