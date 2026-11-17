@@ -234,6 +234,24 @@
   .phpost { display:block; width:100%; max-height:420px; object-fit:cover; border-radius:16px; margin-top:8px; background:var(--soft); }
   #view input, #view select, #view textarea { background:var(--card); border:1px solid var(--line); }
   .av i[data-p="App"] { background:var(--accsoft); color:var(--accent); }
+  /* ---- v8 shape system: one set of corners everywhere, matched to the Feed cards ----
+     cards 18 · panels, buttons, inputs 12 (small buttons 10) · chips 8 · tags 6 · avatars, checks, dots and the close button stay round */
+  :root { --r-card:18px; --r-panel:12px; --r-btn:12px; --r-btn-sm:10px; --r-chip:8px; --r-tag:6px; }
+  .swipe, .hero, .rcard, .gcard, .box, #view .card, .rmenu { border-radius:var(--r-card); }
+  #view > .li:first-child, #view > :not(.li) + .li { border-top-left-radius:var(--r-card); border-top-right-radius:var(--r-card); }
+  #view > .li:last-child, #view > .li:has(+ :not(.li)), #view > .li:has(+ .fab:last-child) { border-bottom-left-radius:var(--r-card); border-bottom-right-radius:var(--r-card); }
+  dialog { border-radius:20px 20px 0 0; } dialog.splash { border-radius:var(--r-card); }
+  .btn { border-radius:var(--r-btn); } .btn.sm { border-radius:var(--r-btn-sm); }
+  .fab, .fabl { border-radius:14px; } .fab { width:auto; }
+  .chip, .rx { border-radius:var(--r-chip); }
+  .ftag, .rmbtn i, .phgrid .cv { border-radius:var(--r-tag); }
+  .seg { border-radius:var(--r-panel); } .seg button { border-radius:9px; }
+  .alert, .tile, .tiles3 > div, .plan, .night, .ptext, .rsearch, input, select, textarea, .phgrid button { border-radius:var(--r-panel); }
+  .plan { border-radius:14px; } .phbig, .phpost { border-radius:14px; }
+  .rmbtn, .rmopt { border-radius:var(--r-btn-sm); }
+  #toast { border-radius:var(--r-btn); }
+  .dchg .btn { border-radius:var(--r-btn); }
+  .rpick { color:var(--accent); padding:9px 12px; }
 </style>
 </head>
 <body>
@@ -1402,7 +1420,7 @@ function vRecFeed() {
       <div class="small">${a ? `<span class="rstars stars">${starTxt(a)}</span> ${a.toFixed(1)}` : '<span class="muted">Not rated yet</span>'}${my ? ` <span class="muted">· you ${my}★</span>` : ''}</div>
       <div class="small muted">${s.last ? 'Had ' + daysAgo(s.last) : 'Never made'}${s.n > 1 ? ` · made ${s.n} times` : ''}${r.tags ? ' · ' + list(r.tags).map(t => '#' + esc(t)).join(' ') : ''}</div>
       ${nx || paused ? `<div style="margin-top:4px">${nx ? `<span class="chip ok">${nx.date === TODAY ? 'Tonight' : 'On ' + nightName(nx.date)}</span> ` : ''}${paused ? `<span class="chip">Paused until ${fmtDate(r.pausedUntil)}</span>` : ''}</div>` : ''}</div>
-      <button class="btn ${RPICK === r.id ? 'gray' : ''} sm" data-a="recPick" data-v="${r.id}" aria-label="Add to a night">${RPICK === r.id ? ic('x', 16) : ic('plus', 16)}</button></div></div>${RPICK === r.id ? `<div class="rnights">${nightsHTML(r.id)}</div>` : ''}</div>`; };
+      <button class="btn gray sm rpick" data-a="recPick" data-v="${r.id}" aria-label="Add to a night">${RPICK === r.id ? ic('x', 16) : ic('plus', 16)}</button></div></div>${RPICK === r.id ? `<div class="rnights">${nightsHTML(r.id)}</div>` : ''}</div>`; };
   const SORTS = [['stale', 'Not had lately'], ['top', 'Top rated'], ['recent', 'Recently made'], ['az', 'A–Z']], on = (RS !== 'stale' ? 1 : 0) + RT.length;
   const applied = [RS !== 'stale' ? SORTS.find(x => x[0] === RS)[1] : ''].concat(RT.map(t => '#' + t)).filter(Boolean);
   return `<div class="rbar"><div class="rsearch"><input placeholder="Search recipes" value="${esc(RFQ)}" onchange="RFQ=this.value;refresh()"><button class="rmbtn ${on ? 'on' : ''}" data-a="recMenu" aria-label="Sort and tags" aria-expanded="${RMENU}">${ic('menu', 22)}${on ? `<i>${on}</i>` : ''}</button></div>
