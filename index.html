@@ -183,6 +183,9 @@
   .plan .ph a { display:inline-flex; align-items:center; font-size:13px; letter-spacing:0; text-transform:none; }
   .prow { display:grid; grid-template-columns:62px minmax(0,1fr); gap:10px; font-size:14px; line-height:1.35; padding:4px 0; } .prow > span:first-child { font-weight:800; color:var(--muted); }
   .prow.past { opacity:.5; }
+  .wxrow { display:flex; align-items:center; gap:8px; margin-top:8px; } .wxrow b { font-size:30px; font-weight:800; letter-spacing:-.5px; }
+  .stack { display:flex; flex-direction:column; gap:6px; margin-top:8px; } .amb { color:var(--amber); font-weight:700; }
+  .hero .plan { margin-top:16px; }
   /* photos */
   .phgrid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:6px; margin-top:8px; }
   .phgrid button { border:0; padding:0; border-radius:12px; overflow:hidden; aspect-ratio:1; background:var(--soft); position:relative; }
@@ -459,7 +462,7 @@ function wxHits(dayIdx, when) {
 }
 /** "Needs attention" list for the Today section. */
 function alerts() {
-  const out = [], tm = addDays(TODAY, 1), late = new Date().getHours() >= 20;
+  const out = [], tm = addDays(TODAY, 1), late = new Date().getHours() >= 19;
   [TODAY].concat(late ? [tm] : []).forEach(d => itemsFor(d).forEach(i => {
     if (i.ride && (!i.dropoff || !i.pickup) && !(d === TODAY && (i.end || i.start) < nowHM()))
       out.push({ lvl: 'red', icon: 'car', text: `${kidNames(i.people) || 'Kids'}, ${i.title} ${fmtT(i.start)}${d === tm ? ' tomorrow' : ''}: ${!i.dropoff && !i.pickup ? 'drop-off and pickup' : !i.dropoff ? 'drop-off' : 'pickup'} not set`, open: [i.t, i.id, d] });
@@ -673,6 +676,20 @@ const NAMES = { Todos: 'to-do', Events: 'event', Activities: 'activity', Childca
   WeatherRules: 'weather rule', Groceries: 'grocery card', TodoTypes: 'to-do type', Recipes: 'recipe', Messages: 'message' };
 
 // ---------- saving ----------
+// When an event keeps a parent out over dinner (about 5:30–7:30, or all day), ask before marking them not home for that night's dinner.
+function dinnerAwayOps(ev) {
+  const who = list(ev.people).filter(p => ADULTS.includes(p)); if (!who.length) return [];
+  const last = ev.endDate && ev.endDate > ev.date ? ev.endDate : ev.date, hits = [];
+  for (let d = ev.date; d <= last; d = addDays(d, 1)) {
+    const allDay = ev.allDay === '1' || !ev.start, from = d === ev.date && !allDay ? ev.start : '00:00', to = d === last && !allDay ? (ev.end || ev.start) : '23:59';
+    const m = S.Menus.find(x => x.date === d); if (!m || d < TODAY || from >= '19:30' || to <= '17:30') continue;
+    const add = who.filter(p => !list(m.away).includes(p)); if (add.length) hits.push({ m, add });
+  }
+  if (!hits.length) return [];
+  const names = joinNames([...new Set(hits.flatMap(x => x.add))]), days = hits.map(x => fmtDay(x.m.date)).join(', ');
+  if (!confirm(`${names} won't be home for dinner on ${days}?\n\nOK marks ${hits.length > 1 ? 'those nights' : 'that night'} in the dinner plan.`)) return [];
+  return hits.map(x => ({ t: 'Menus', row: { id: x.m.id, away: list(x.m.away).concat(x.add).join(', ') }, log: L('away', `${names === ME ? 'is' : 'marked ' + names + ' as'} not home for dinner ${fmtDay(x.m.date)}`, 'dinner') }));
+}
 const SAVE = {
   Schools(v) { need(v.name && v.name.trim(), 'School name is required.'); const h = {};
     (v._hours || []).filter(x => x.day && (x.start || x.end)).forEach(x => { h[x.day] = [x.start || v.start || '', x.end || v.end || '']; });
@@ -695,6 +712,7 @@ const SAVE = {
     ops.push({ t: 'Events', row, log: L(isNew ? 'event_add' : 'event_edit', `${isNew ? 'added plans' : 'updated'}: ${v.title} (${fmtDay(v.date)}${v.allDay !== '1' && v.start ? ', ' + fmtT(v.start) : ''})`, 'planner') });
     if (v._link) ops.push({ t: 'Links', row: { id: nid(), aTable: v._link[0], aRef: v._link[1], bTable: 'Events', bRef: row.id } }, sys(v._link[0], v._link[1], `added a Planner event and linked this ${NAMES[v._link[0]] || 'card'}`));
     if (v._todoDone) ops.push({ t: 'Todos', row: { id: v._todoDone, status: 'Done', doneOn: TODAY, doneBy: ME } });
+    ops.push(...dinnerAwayOps(row));
     return write(ops);
   },
   async Activities(v) {
@@ -991,45 +1009,51 @@ function howWas() {
   if (!r || (myStars(r) && photosOf('Recipes', r.id).length)) return [];
   return [{ lvl: 'plain', icon: 'meals', text: `How was the ${r.name}? ${myStars(r) ? 'Add a photo' : 'Rate it' + (photosOf('Recipes', r.id).length ? '' : ' or add a photo')}`, open: ['Recipes', r.id] }];
 }
+/**
+ * The plan shown on the Today card: school drop-offs and pickups (with extended day), activities, events made in the app,
+ * school calendar items, booked childcare and dinner (with who isn't home). Nothing from the shared Google Calendar.
+ * after = 'HH:MM' drops things already over (afternoon view).
+ */
+function planRows(d, after) {
+  const rows = [], drop = {}, pick = {};
+  kids().forEach(k => blocksFor(k, d).filter(b => b.school && !b.off).forEach(b => {
+    const base = b.n.replace(/ extended day$/, ''), dk = b.s + '|' + base, pk = b.e + '|' + b.n;
+    (drop[dk] = drop[dk] || { s: b.s, n: base, k: [] }).k.push(k.name); (pick[pk] = pick[pk] || { s: b.e, n: b.n, k: [] }).k.push(k.name); }));
+  Object.values(drop).forEach(x => rows.push({ s: x.s, title: x.n + ' drop-off', sub: esc(kidNames(x.k)) }));
+  Object.values(pick).forEach(x => rows.push({ s: x.s, title: x.n + ' pickup', sub: esc(kidNames(x.k)) }));
+  itemsFor(d).filter(i => i.t !== 'GCal' && i.src !== 'gcal' && i.src !== 'birthday').forEach(i => {
+    const ride = i.ride ? (!i.dropoff || !i.pickup ? `<span class="red">${!i.dropoff && !i.pickup ? 'rides' : !i.dropoff ? 'drop-off' : 'pickup'} not set</span>` : `${esc(i.dropoff)} → ${esc(i.pickup)}`) : '';
+    const sub = i.src === 'dinner' ? (i.sub ? `<span class="amb">${esc(i.sub)}</span>` : '') : [i.sub && (i.warn ? `<span class="red">${esc(i.sub)}</span>` : esc(i.sub)), ride].filter(Boolean).join(' · ');
+    rows.push({ s: i.start || '', e: i.end || '', title: i.title, sub, dinner: i.src === 'dinner' }); });
+  return rows.filter(r => !after || !r.s || (r.e || r.s) >= after)
+    .sort((a, b) => (a.dinner ? 2 : a.s ? 1 : 0) - (b.dinner ? 2 : b.s ? 1 : 0) || a.s.localeCompare(b.s));
+}
 function vFeed() {
-  const d = WX && WX.days && WX.days[0], h = new Date().getHours(), al = alerts(), items = itemsFor(TODAY), now = nowHM();
-  const WXR = { rain: 'rain', snow: 'snow', low: 'snow', high: 'sun', uv: 'sun' };
-  const wx = wxHits(0, 'morning').concat(wxHits(0, 'night')).map(r => ({ icon: WXR[r.metric] || 'weather', text: r.message }))
-    .concat(h >= 17 ? wxHits(1, 'night').map(r => ({ icon: WXR[r.metric] || 'weather', text: 'Tomorrow: ' + r.message })) : []);
-  const m = S.Menus.find(x => x.date === TODAY);
-  const mine = myTodos(), over = mine.filter(t => t.due && t.due < TODAY), due = mine.filter(t => t.due === TODAY);
-  const bdays = items.filter(i => i.src === 'birthday');
-  // Caretaker tile only shows next to plans for Paul and Shana, or when a caretaker is booked.
-  let plan = null; for (let i = 0; i < 8 && !plan; i++) { const dd = addDays(TODAY, i); plan = itemsFor(dd).find(x => x.t === 'Events' && ADULTS.every(a => x.people.includes(a)) && !(dd === TODAY && (x.end || x.start || '99') < now)); }
-  const careOn = dd => S.Childcare.filter(c => c.date === dd).sort((a, b) => a.start.localeCompare(b.start))[0];
-  const care = plan ? careOn(plan.date) : S.Childcare.filter(c => c.date >= TODAY && c.date <= addDays(TODAY, 7) && !(c.date === TODAY && c.end < now)).sort((a, b) => (a.date + a.start).localeCompare(b.date + b.start))[0];
-  const dayW = dd => dd === TODAY ? 'Today' : dd === addDays(TODAY, 1) ? 'Tomorrow' : fmtDay(dd).split(',')[0];
-  const dinTile = `<div class="tile" data-a="nav" data-v="meals" ${plan || care ? '' : 'style="grid-column:1/-1"'}><div class="small muted b">${ic('meals', 14)} Dinner tonight</div><div class="tv">${esc(dish(m) || 'Nothing planned')}</div>${m && m.away ? `<div class="small red">${esc(m.away)} not home</div>` : ''}</div>`;
-  const planTile = plan ? `<div class="tile" data-a="open" data-t="Events" data-id="${esc(plan.id)}" data-d="${plan.date}"><div class="small muted b">${ic('planner', 14)} Your plans</div><div class="tv">${esc(plan.title)}</div><div class="small muted">${dayW(plan.date)}${plan.start ? ' · ' + fmtT(plan.start) : ''}</div></div>` : '';
-  const careTile = care ? `<div class="tile" data-a="open" data-t="Childcare" data-id="${care.id}"><div class="small muted b">${ic('care', 14)} Caretaker</div><div class="tv">${esc(care.confirmedId ? careName(care.confirmedId) : 'Needed')}</div><div class="small ${care.confirmedId ? 'grn' : 'red'}">${dayW(care.date)} · ${fmtT(care.start)}–${fmtT(care.end)}${care.confirmedId ? '' : ' · not confirmed'}</div></div>`
-    : plan ? `<div class="tile" data-a="add" data-v="Childcare" data-d="${plan.date}"><div class="small muted b">${ic('care', 14)} Caretaker</div><div class="tv muted">None booked</div><div class="small muted">Tap to add</div></div>` : '';
-  const tiles = plan ? `<div class="tiles">${planTile}${careTile}</div><div class="tiles" style="margin-top:8px">${dinTile.replace('<div class="tile"', '<div class="tile" style="grid-column:1/-1"')}</div>` : `<div class="tiles">${dinTile}${careTile}</div>`;
-  // Today's plan: everything on the Planner today (after 5 PM, tomorrow's once today is done). Tapping it opens the Planner on that day.
-  let sd = TODAY, pl = items.filter(i => i.src !== 'birthday');
-  if (h >= 17 && !pl.some(i => i.start && (i.end || i.start) >= now)) { sd = addDays(TODAY, 1); pl = itemsFor(sd).filter(i => i.src !== 'birthday'); }
-  const prow = i => { const ride = i.ride ? (!i.dropoff || !i.pickup ? `<span class="red">${!i.dropoff && !i.pickup ? 'rides' : !i.dropoff ? 'drop-off' : 'pickup'} not set</span>` : `${esc(i.dropoff)} → ${esc(i.pickup)}`) : '';
-    const sub = [i.sub && esc(i.sub), ride].filter(Boolean).join(' · ');
-    return `<div class="prow ${sd === TODAY && i.start && (i.end || i.start) < now ? 'past' : ''}"><span>${i.start ? fmtT(i.start) : i.src === 'dinner' ? 'Dinner' : 'All day'}</span><span><b>${esc(i.title)}</b>${sub ? ' · ' + sub : ''}</span></div>`; };
-  // Reminders: needs-attention items, weather rules, birthdays and my to-dos due today or overdue.
+  // The Today card changes with the time of day: the morning shows today, the afternoon shows the rest of today,
+  // and from 7 PM it switches to tomorrow (weather for tomorrow's clothes, tomorrow's to-dos and plan).
+  const h = new Date().getHours(), now = nowHM(), night = h >= 19, sd = night ? addDays(TODAY, 1) : TODAY, wi = night ? 1 : 0, al = alerts();
+  const wd = WX && WX.days && WX.days[wi], WXR = { rain: 'rain', snow: 'snow', low: 'snow', high: 'sun', uv: 'sun' }, seen = new Set();
+  const wx = wxHits(wi, 'morning').concat(wxHits(wi, 'night')).filter(r => !seen.has(r.message) && seen.add(r.message)).map(r => ({ icon: WXR[r.metric] || 'weather', text: r.message }));
+  const mine = myTodos(), over = mine.filter(t => t.due && t.due < TODAY), due = mine.filter(t => t.due === TODAY || (night && t.due === sd));
+  const bdays = itemsFor(sd).filter(i => i.src === 'birthday');
   const rem = al.map(a => ({ lvl: a.lvl || 'plain', icon: a.icon, text: a.text, open: a.open }))
-    .concat(wx.map(w => ({ lvl: 'amber', icon: w.icon, text: w.text })), bdays.map(b => ({ lvl: 'plain', icon: 'cake', text: b.title + ' today', open: [b.t, b.id] })),
-      over.concat(due).map(t => ({ lvl: t.due < TODAY ? 'red' : 'plain', ty: typeOf(t), text: t.title + (t.due < TODAY ? ' · overdue' : ' · due today'), open: ['Todos', t.id] })),
-      howWas());
+    .concat(bdays.map(b => ({ lvl: 'plain', icon: 'cake', text: b.title + (night ? ' tomorrow' : ' today'), open: [b.t, b.id] })),
+      over.concat(due).map(t => ({ lvl: t.due < TODAY ? 'red' : 'plain', ty: typeOf(t), text: t.title + (t.due < TODAY ? ' · overdue' : t.due === TODAY ? ' · due today' : ' · due tomorrow'), open: ['Todos', t.id] })),
+      night ? [] : howWas());
   const remHTML = r => `<div class="alert ${r.lvl}" ${r.open ? `data-a="open" data-t="${r.open[0]}" data-id="${esc(r.open[1])}" data-d="${r.open[2] || ''}"` : ''}>${r.ty ? tyIcon(r.ty, 16) : ic(r.icon || 'alert', 16)}<span>${esc(r.text)}</span></div>`;
-  const d1 = WX && WX.days && WX.days[1], code = WX ? (WX.code === null && d ? d.code : WX.code) : null;
-  const wxTop = d ? `<div style="text-align:right;flex:0 0 auto"><div class="wxnow">${WXI(code)}${WX.now !== null ? WX.now : d.high}°</div><div class="small muted">${esc(WX.place || '')} · ${d.high}° / ${d.low}°</div></div>` : '';
-  const wxTiles = d ? `<div class="tiles3"><div><span>RAIN</span><b>${d.rain}%</b></div><div><span>UV</span><b>${d.uv} ${uvWord(d.uv)}</b></div><div><span>TOMORROW</span><b>${d1 ? d1.high + '° ' + (d1.rain >= 50 ? 'Rain' : d1.snow > 0 ? 'Snow' : WXW[wxKind(d1.code)]) : '–'}</b></div></div>` : '';
-  let html = `<div class="hero"><div class="row" style="align-items:flex-start"><div><div class="small muted b">${new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}</div>
-      <div style="font-size:21px;font-weight:800;letter-spacing:-.5px">Good ${h < 12 ? 'morning' : h < 17 ? 'afternoon' : 'evening'}, ${esc(ME)}</div></div>${wxTop}</div>${wxTiles}
-    ${rem.length ? `<div class="lbl">Reminders</div><div style="display:flex;flex-direction:column;gap:6px;margin-top:6px">${rem.map(remHTML).join('')}</div>` : ''}
-    <div class="plan" data-a="planDay" data-v="${sd}"><div class="ph"><span>${sd === TODAY ? "Today's plan" : "Tomorrow's plan"}</span><a>Planner${ic('chev', 16)}</a></div>
-      ${pl.length ? pl.slice(0, 8).map(prow).join('') + (pl.length > 8 ? `<div class="small muted" style="padding-top:4px">+${pl.length - 8} more</div>` : '') : '<div class="small muted" style="padding-top:6px">Nothing on the Planner.</div>'}</div>
-    <div style="margin-top:10px">${tiles}</div></div>`;
+  const code = wd ? (night || WX.code === null ? wd.code : WX.code) : null;
+  const weather = wd ? `<div class="lbl">${night ? "Tomorrow's" : "Today's"} weather</div>
+    <div class="wxrow">${WXI(code, 30)}<b>${night || WX.now === null ? wd.high : WX.now}°</b><span class="small muted">${WXW[wxKind(code)]}${WX.place ? ' · ' + esc(WX.place) : ''}</span></div>
+    <div class="tiles3"><div><span>HIGH / LOW</span><b>${wd.high}° / ${wd.low}°</b></div><div><span>RAIN</span><b>${wd.rain}%</b></div><div><span>UV</span><b>${wd.uv} ${uvWord(wd.uv)}</b></div></div>
+    ${wx.length ? `<div class="stack">${wx.map(w => `<div class="alert amber">${ic(w.icon, 16)}<span>${esc(w.text)}</span></div>`).join('')}</div>` : ''}` : '';
+  const pl = planRows(sd, !night && h >= 12 ? now : '');
+  const prow = r => `<div class="prow ${!night && h < 12 && r.s && (r.e || r.s) < now ? 'past' : ''}"><span>${r.s ? fmtT(r.s) : r.dinner ? 'Dinner' : 'All day'}</span><span><b>${esc(r.title)}</b>${r.sub ? ' · ' + r.sub : ''}</span></div>`;
+  let html = `<div class="hero"><div class="small muted b">${new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}</div>
+      <div style="font-size:22px;font-weight:800;letter-spacing:-.5px">Good ${h < 12 ? 'morning' : h < 17 ? 'afternoon' : 'evening'}, ${esc(ME)}</div>
+    ${weather}
+    ${rem.length ? `<div class="lbl">Reminders</div><div class="stack">${rem.map(remHTML).join('')}</div>` : ''}
+    <div class="plan" data-a="planDay" data-v="${sd}"><div class="ph"><span>${night ? "Tomorrow's plan" : h >= 12 ? 'Rest of today' : "Today's plan"}</span><a>Planner${ic('chev', 16)}</a></div>
+      ${pl.length ? pl.slice(0, 10).map(prow).join('') + (pl.length > 10 ? `<div class="small muted" style="padding-top:4px">+${pl.length - 10} more</div>` : '') : `<div class="small muted" style="padding-top:6px">Nothing planned${night ? ' for tomorrow' : ''}.</div>`}</div></div>`;
   const hide = c => c && st('f.' + c, '1') === '0';
   const gone = feedHidden();
   const stream = S.Activity.filter(a => a.type !== 'message' && !hide(a.cat) && !gone.has('A:' + a.id)).map(a => ({ time: a.time, a })).concat(S.Messages.filter(mm => !gone.has('M:' + mm.id)).map(mm => ({ time: mm.time, m: mm, pin: mm.pinUntil >= TODAY && mm.resolved !== '1' })))
