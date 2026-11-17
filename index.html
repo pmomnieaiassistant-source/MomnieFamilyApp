@@ -185,6 +185,7 @@
   .prow.past { opacity:.5; }
   /* person pages and @mentions */
   .phead { display:flex; gap:12px; align-items:center; margin-right:44px; } .phead .av { width:52px; height:52px; } .phead .av i { font-size:20px; }
+  .hfoot { text-align:center; padding:28px 24px 36px; font-size:13px; color:var(--muted); line-height:1.6; } .hfoot a { color:var(--accent); font-weight:600; cursor:pointer; }
   .psec { margin-top:16px; } .psec .lbl { margin:0 0 4px; } .li.plain { padding:10px 0; border-bottom:1px solid var(--line); }
   a.mention { color:var(--accent); font-weight:700; } .plink { cursor:pointer; }
   .msugg { display:flex; flex-wrap:wrap; gap:6px; margin-top:6px; }
@@ -323,7 +324,8 @@ const fmtT = s => { if (!s) return ''; const [h, m] = s.split(':').map(Number); 
 // Times are picked in 15-minute steps. A value already saved off the grid (e.g. 8:10) stays selectable.
 const hm = n => pad(Math.floor(n / 60) % 24) + ':' + pad(n % 60), toMin = t => { const [h, m] = String(t).split(':').map(Number); return h * 60 + (m || 0); };
 const TIMES = Array.from({ length: 96 }, (_, i) => hm(((i + 24) % 96) * 15));   // 6 AM first, overnight times at the end
-const timeSelect = (attrs, val, blank) => `<select ${attrs}><option value="">${esc(blank || 'Pick a time')}</option>${(val && !TIMES.includes(val) ? [val] : []).concat(TIMES).map(t => `<option value="${t}" ${t === val ? 'selected' : ''}>${fmtT(t)}</option>`).join('')}</select>`;
+const TIMES5 = Array.from({ length: 288 }, (_, i) => hm(((i + 72) % 288) * 5));   // 5-minute steps for school times
+const timeSelect = (attrs, val, blank, step) => { const ts = step === 5 ? TIMES5 : TIMES; return `<select ${attrs}><option value="">${esc(blank || 'Pick a time')}</option>${(val && !ts.includes(val) ? [val] : []).concat(ts).map(t => `<option value="${t}" ${t === val ? 'selected' : ''}>${fmtT(t)}</option>`).join('')}</select>`; };
 /** Length between two times, e.g. "3.5 hours" or "45 min" (past midnight counts as the next day). */
 const durTxt = (a, b) => { if (!a || !b) return ''; let m = toMin(b) - toMin(a); if (m <= 0) m += 1440; return m < 60 ? m + ' min' : `${+(m / 60).toFixed(2)} hour${m === 60 ? '' : 's'}`; };
 const fmtT2 = s => { const [h, m] = s.split(':').map(Number); return ((h + 11) % 12 + 1) + ':' + pad(m) + (h < 12 ? ' AM' : ' PM'); };
@@ -605,7 +607,7 @@ const kidWeekTxt = (kid, sch) => groupDays(kidWeekRows(kid, sch).filter(r => r.s
 const dayRun = ds => { const out = []; let a = null, b = null; ds.forEach(d => { if (b && DAYS.indexOf(d) === DAYS.indexOf(b) + 1) b = d; else { if (a) out.push(a === b ? a : a + '–' + b); a = b = d; } }); if (a) out.push(a === b ? a : a + '–' + b); return out.join(', '); };
 const groupDays = (rows, key) => { const g = new Map(); rows.forEach(r => { const k = key(r); if (k) g.set(k, (g.get(k) || []).concat(r.day)); }); return [...g].map(([k, ds]) => ({ k, ds })); };
 const schoolHoursTxt = sch => { const wk = schoolWeek(sch), hrs = groupDays(wk, r => r.start ? fmtT(r.start) + '–' + fmtT(r.end) : ''), ext = groupDays(wk, r => r.start && r.ext ? fmtT(r.ext) : '');
-  return [...hrs.map(g => (hrs.length > 1 || g.ds.length < 5 ? dayRun(g.ds) + ' ' : '') + g.k), ...ext.map(g => 'extended day ' + (g.ds.length < 5 ? dayRun(g.ds) + ' ' : '') + 'until ' + g.k)].join(' · '); };
+  return [...hrs.map(g => dayRun(g.ds) + ' ' + g.k), ...ext.map(g => 'extended day ' + dayRun(g.ds) + ' until ' + g.k)].join(' · '); };
 /** Where a kid is now and next, e.g. "CHS until 3:00 PM, then Soccer 4:30 PM". */
 function whereIs(kid) {
   const now = nowHM(), segs = [], items = itemsFor(TODAY), sch = byId('Schools', kid.schoolId), wd = dowIdx(TODAY) < 5;
@@ -686,7 +688,7 @@ function fieldHTML(f, v) {
     return `<label>${esc(f.l)}</label>` + rows.map((r, i) => `<div class="irow">${f.cols.map(c => { const at = `class="${c.cls || ''}" data-rk="${f.k}" data-ri="${i}" data-rc="${c.c}"`;
       if (c.t === 'sel') { if (!r[c.c]) r[c.c] = c.o[0]; return `<select ${at}>${c.o.map(o => `<option ${o === r[c.c] ? 'selected' : ''}>${esc(o)}</option>`).join('')}</select>`; }
       if (c.t === 'label') return `<span class="${c.cls || ''} irl">${esc(r[c.c] || '')}</span>`;
-      if (c.t === 'time') return timeSelect(at, r[c.c] || '', typeof c.ph === 'function' ? c.ph(r) : (c.ph || (c.c === 'end' ? 'Ends' : 'Starts')));
+      if (c.t === 'time') return timeSelect(at, r[c.c] || '', typeof c.ph === 'function' ? c.ph(r) : (c.ph || (c.c === 'end' ? 'Ends' : 'Starts')), f.step);
       return `<input ${at} type="${c.t || 'text'}" value="${esc(r[c.c] || '')}" placeholder="${esc(c.ph || '')}" ${c.list ? `list="${c.list}"` : ''} ${c.im ? `inputmode="${c.im}"` : ''} autocomplete="off">`; }).join('')}
       ${f.fixed ? '' : `<button type="button" class="rm" data-rdel="${f.k}" data-ri="${i}" aria-label="Remove">✕</button>`}</div>${!f.noDur && r.start && r.end ? `<div class="small muted dur" style="text-align:right">(${durTxt(r.start, r.end)})</div>` : ''}`).join('') +
       (f.fixed ? '' : `<button type="button" class="chip" style="margin-top:8px" data-radd="${f.k}">＋ ${esc(f.add || 'Add')}</button>`) + (f.copy ? `<button type="button" class="chip" style="margin-top:8px" data-rcopy="${f.k}">Same as Monday for every day</button>` : '') +
@@ -791,7 +793,7 @@ const FORMS = {
   Caretakers: [F('name', 'Name'), F('relationship', 'Relationship'), F('phone', 'Phone', 'tel'), F('roster', 'Roster', 'multi', ['Boston', 'Cape']), F('birthday', 'Birthday (optional)', 'date'),
     F('drive', 'Cleared to drive the kids', 'chk'), F('unpaid', 'Unpaid (no "pay caretaker" to-dos)', 'chk'), F('rate', 'Hourly rate', 'num'), F('notes', 'Notes', 'area')],
   People: [F('name', 'Name'), F('kind', 'Adult or kid', 'sel', [['adult', 'Adult'], ['kid', 'Kid']], { re: 1 }), F('schoolId', 'School', 'sel', () => [['', 'None']].concat(S.Schools.map(s => [s.id, s.name])), { show: x => x.kind === 'kid', re: 1, on: x => { delete x._sched; } }),
-    F('_sched', 'School day for this kid', 'rows', null, { fixed: 1, noDur: 1, copy: 1, show: x => x.kind === 'kid' && !!x.schoolId,
+    F('_sched', 'School day for this kid', 'rows', null, { fixed: 1, noDur: 1, copy: 1, step: 5, show: x => x.kind === 'kid' && !!x.schoolId,
       hint: 'Starts from the school. Change a pickup only if it differs. Set an extended-day pickup for days they stay late. Extended day shows as its own Planner event. After-school classes go under Home → Activities.',
       init: x => { const sc = schoolWeek(byId('Schools', x.schoolId) || {}), raw = x.id && kidSchedRaw(x),
         saved = raw || Object.fromEntries(sc.filter(w => w.start && w.ext && list(x.extDays).includes(w.day)).map(w => [w.day, { x: w.ext }]));
@@ -800,7 +802,7 @@ const FORMS = {
     F('workDays', 'Usual work days', 'multi', DAYS, { show: x => x.kind !== 'kid' }), F('workStart', 'Work starts', 'time', null, { show: x => x.kind !== 'kid' }), F('workEnd', 'Work ends', 'time', null, { show: x => x.kind !== 'kid', dur: 'workStart' }),
     F('birthday', 'Birthday', 'date'), F('notes', 'Notes (sizes, doctors, anything)', 'area')],
   Schools: [F('name', 'School name'), F('short', 'Short name'),
-    F('_week', 'School schedule', 'rows', null, { fixed: 1, noDur: 1, copy: 1, init: x => schoolWeek(x).map(w => ({ day: w.day, start: w.start, end: w.end })), hint: 'Start and pickup for each day. Leave a day blank if there is no school.',
+    F('_week', 'School schedule', 'rows', null, { fixed: 1, noDur: 1, copy: 1, step: 5, init: x => schoolWeek(x).map(w => ({ day: w.day, start: w.start, end: w.end })), hint: 'Start and pickup for each day. Leave a day blank if there is no school.',
       cols: [{ c: 'day', t: 'label', cls: 'u' }, { c: 'start', t: 'time', cls: 'n', ph: 'No school' }, { c: 'end', t: 'time', cls: 'n', ph: 'Pickup' }] }),
     F('color', 'Card color (hex)'), F('contacts', 'Contacts and teachers', 'area'), F('notes', 'Notes', 'area')],
   SchoolCal: [F('schoolId', 'School', 'sel', () => S.Schools.map(s => [s.id, s.name])), F('title', 'What is it?', 'text', null, { ph: 'e.g. Teacher in-service' }), F('kind', 'Kind', 'sel', [['event', 'Event (school is on)'], ['off', 'No school'], ['half', 'Half day']]),
@@ -1649,7 +1651,7 @@ A.dlManage = () => sheet(() => { const its = S.daily_items.filter(dailySeen).sor
   return '<h2>Daily items</h2><div class="small muted">Tap one to change, pause or delete it.</div>' + (its.map(dailyRow).join('') || '<div class="empty">No daily items yet.</div>') +
     `<div class="actions"><button class="btn" data-a="dlAdd">${ic('plus', 16)}Add a daily item</button></div>`; });
 function dailyForm(it, extra) {
-  const isNew = !it, v = Object.assign(isNew ? { days: DAYS.join(', '), time_of_day: nowPart(), visible_to: ADULTS.join(', '), active: '1' } : {}, it || {}, extra || {});
+  const isNew = !it, v = Object.assign(isNew ? { days: '', time_of_day: nowPart(), visible_to: ADULTS.join(', '), active: '1' } : {}, it || {}, extra || {});
   form(isNew ? 'New daily item' : 'Edit daily item', FORMS.daily_items, v, (x, mode) => {
     if (mode === 'del') { if (!confirm('Delete this daily item? Past check-offs stay in the Sheet.')) return false; return write({ t: 'daily_items', del: x.id }); }
     need(x.title && x.title.trim(), 'What needs doing?'); need(list(x.days).length, 'Pick at least one day.');
@@ -1682,8 +1684,12 @@ function vHome() {
     hrow('homeOpen', 'houses', 'house', 'House', 'Info and upkeep · ' + houses) +
     hrow('homeOpen', 'gifts', 'gift', 'Gift ideas', 'Ideas for everyone, any time of year') +
     hrow('homeOpen', 'recipes', 'book', 'Recipes', `${S.Recipes.filter(r => r.status !== 'archived').length} saved, with ratings and history`) +
-    hrow('openSettings', '', 'gear', 'Settings', 'Caretakers, birthdays, weather, notifications and more');
+    hrow('openSettings', '', 'gear', 'Settings', 'Caretakers, birthdays, weather, notifications and more') +
+    `<div class="hfoot">Made with love by your husband Paul.<br><a data-a="feedback">Click here to provide constructive feedback</a></div>`;
 }
+A.feedback = () => form('Constructive feedback', [F('idea', 'What would make the app better?', 'area', null, { ph: 'Ideas, annoyances, anything' })], {}, async v => {
+  need(v.idea && v.idea.trim(), 'Write your idea first.');
+  const ok = await write({ t: 'ideas', row: { id: nid(), text: v.idea.trim() } }); if (ok) toast('Thank you! Paul will see it.'); return ok; });
 A.openSettings = () => sheet(() => '<h2>Settings</h2><div style="clear:both"></div>' + SETTINGS.map(([k, icon, l, sub]) => hrow('homeOpen', k, icon, l, sub)).join(''));
 const rowLi = (t, id, title, sub) => `<div class="li" style="padding:12px 0" data-a="open" data-t="${t}" data-id="${esc(id)}"><div class="grow"><div class="ti">${esc(title)}</div>${sub ? `<div class="small muted">${esc(sub)}</div>` : ''}</div><span class="chev">›</span></div>`;
 const addBtn = (t, l) => `<div class="actions"><button class="btn" data-a="add" data-v="${t}">＋ ${l}</button></div>`;
