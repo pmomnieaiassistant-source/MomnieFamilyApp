@@ -697,7 +697,7 @@ const FORMS = {
     F('description', 'Description', 'area'), F('url', 'Website link', 'text', null, { ph: 'https://…' }), F('photo', 'Photo link (optional)', 'text', null, { ph: 'Paste an image link, or add a photo after saving' }),
     F('assigned_to', 'Who is buying it (optional)', 'text', null, { ph: 'e.g. Nana', show: x => x.recipient !== ME })],
   daily_items: [F('title', 'What needs doing', 'text', null, { ph: 'e.g. Take out the trash' }), F('days', 'Days', 'multi', DAYS),
-    F('time_of_day', 'Time of day', 'sel', [['Morning', 'Morning (before 10 AM)'], ['Day', 'Day (10 AM to 5 PM)'], ['Evening', 'Evening (5 PM on)']]),
+    F('time_of_day', 'Time of day', 'sel', [['Morning', 'Morning'], ['Day', 'Day'], ['Evening', 'Evening']]),
     F('for_person', "Who it's for", 'sel', () => [['', 'Anyone']].concat(S.People.map(p => [p.name, p.name]))),
     F('visible_to', 'Who can see it', 'multi', ADULTS)],
   Todos: v => { const fl = list((byId('TodoTypes', v.type) || {}).fields); return [
@@ -1514,7 +1514,7 @@ function dailyPanel() {
   const pass = it => (!DL.who.length || DL.who.includes(it.for_person || '')) && !(DL.hideDone && dailyDone(it));
   const items = dailyToday().filter(pass), on = (DL.who.length ? 1 : 0) + (DL.hideDone ? 1 : 0);
   const row = it => { const done = dailyDone(it); return `<button class="np-item ${done ? 'done' : ''}" data-a="dlTick" data-v="${it.id}" aria-pressed="${done}">${handBox(done)}<span class="np-t">${esc(it.title)}${it.for_person ? ` (${esc(it.for_person)})` : ''}</span></button>`; };
-  return `<div class="rbar" style="padding:0;margin-right:44px"><div class="row" style="align-items:flex-start"><div><h2 class="np-title">Daily checklist</h2><div class="small np-date">${fmtLong(TODAY)}</div></div>
+  return `<div class="rbar" style="padding:0;margin-right:44px"><div class="row" style="align-items:flex-start"><div><h2 class="np-title">daily checklist</h2><div class="small np-date">${fmtLong(TODAY)}</div></div>
       <button class="rmbtn ${on ? 'on' : ''}" data-a="dlMenu" aria-label="Filter" aria-expanded="${DL.menu}">${ic('menu', 22)}${on ? `<i>${on}</i>` : ''}</button></div>
     ${DL.menu ? `<div class="rshade" data-a="dlMenu"></div><div class="rmenu" role="dialog" aria-label="Filter" style="top:50px;right:-40px">
       <div class="lbl" style="margin-top:0">Show items for</div><div class="rmtags">${people.map(([k, l]) => `<button class="chip ${DL.who.includes(k) ? 'on' : ''}" data-a="dlWho" data-v="${esc(k)}">${esc(l)}</button>`).join('')}</div>
@@ -1522,7 +1522,7 @@ function dailyPanel() {
       <label class="check-row"><input type="checkbox" data-c="dlHide" ${DL.hideDone ? 'checked' : ''}> Hide checked items</label>
       <div class="actions"><button class="btn gray sm" data-a="dlReset">Reset</button><button class="btn sm" data-a="dlMenu">Done</button></div></div>` : ''}</div>
     ${DPARTS.map(([p, range]) => { const its = items.filter(it => it.time_of_day === p);
-      return `<div class="np-sec ${p === part ? 'now' : ''}"><div class="np-h">${p} <span>${range}${p === part ? ' · now' : ''}</span></div>${its.map(row).join('') || '<div class="np-empty">Nothing today</div>'}</div>`; }).join('')}
+      return `<div class="np-sec ${p === part ? 'now' : ''}"><div class="np-h">${p}</div>${its.map(row).join('') || '<div class="np-empty">Nothing today</div>'}</div>`; }).join('')}
     <div class="actions" style="margin-top:18px"><button class="btn gray sm" data-a="dlManage">${ic('list', 16)}Manage daily items</button><button class="btn sm" data-a="dlAdd">${ic('plus', 16)}Daily item</button></div>`;
 }
 A.dailyOpen = () => { DL.menu = false; sheet(() => dailyPanel(), 'notepad'); };
