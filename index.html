@@ -198,8 +198,6 @@
   .ftag { flex:0 0 auto; font-size:10px; font-weight:800; letter-spacing:.6px; padding:3px 7px; border-radius:6px; background:var(--accent); color:var(--onacc); }
   input[type=checkbox] { accent-color:var(--accent); }
   .ride { display:inline-flex; align-items:center; gap:1px; white-space:nowrap; }
-  .fhead { display:flex; align-items:center; justify-content:space-between; gap:10px; padding:2px 16px 4px; }
-  .fhead .small { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .wxrow { display:flex; align-items:center; gap:8px; margin-top:8px; } .wxrow b { font-size:30px; font-weight:800; letter-spacing:-.5px; }
   .stack { display:flex; flex-direction:column; gap:6px; margin-top:8px; } .amb { color:var(--amber); font-weight:700; }
   .hero .plan { margin-top:16px; }
@@ -1142,19 +1140,24 @@ const PKINDS = () => [['k:events', 'Events made in the app'], ['k:activities', '
 const pHidden = () => { try { return new Set(JSON.parse(store.get('plHide') || '[]')); } catch (e) { return new Set(); } };
 const pKind = i => i.src === 'gcal' || i.t === 'GCal' ? 'gcal' : i.src === 'birthday' ? 'birthday' : i.src === 'dinner' ? 'dinner' : i.t === 'SchoolCal' ? i.src : i.t === 'Activities' ? 'activities' : i.t === 'Childcare' ? 'care' : 'events';
 const pShown = (i, hid) => !hid.has('k:' + pKind(i)) && !(i.people.length && i.people.every(n => hid.has('p:' + n)));
-A.pfilterOpen = () => sheet(() => { const hid = pHidden(), row = (k, l, c) => `<label class="check-row"><input type="checkbox" data-c="pfToggle" data-k="${esc(k)}" ${hid.has(k) ? '' : 'checked'}>${c ? `<span class="pdot" style="background:${c}"></span>` : ''}${esc(l)}</label>`;
-  return `<h2>Show on the Planner</h2><div class="small muted">Uncheck anything you don't want to see. Kept on this phone.</div>
-    <h3>People</h3>${S.People.map(p => row('p:' + p.name, p.name, pcol(p.name))).join('')}<div class="small muted" style="margin-top:6px">Unchecking someone hides items that are only for them.</div>
-    <h3>What to show</h3>${PKINDS().map(([k, l]) => row(k, l)).join('')}
-    <div class="actions"><button class="btn gray" data-a="pfAll">Show everything</button><button class="btn" data-a="close">Done</button></div>`; });
+let PMENU = false;
+A.pfilterOpen = () => { PMENU = !PMENU; render(); };
 A.pfToggle = (on, el) => { const hid = pHidden(), k = el.dataset.k; if (on) hid.delete(k); else hid.add(k); store.set('plHide', JSON.stringify([...hid])); refresh(); };
-A.pfAll = () => { store.set('plHide', '[]'); refresh(); };
+A.pfAll = () => { store.set('plHide', '[]'); PMENU = false; refresh(); };
 function vPlanner() {
   PW = PW || mondayOf(TODAY);
   const hid = pHidden(), pass = i => pShown(i, hid), names = Object.fromEntries(PKINDS().concat(S.People.map(p => ['p:' + p.name, p.name])));
   const off = [...hid].map(k => names[k]).filter(Boolean);
-  let html = `<div class="weekbar"><button class="icon-btn" data-a="pweek" data-v="-7">‹</button><span>${PW === mondayOf(TODAY) ? 'This week · ' : ''}${fmtDate(PW)} – ${fmtDate(addDays(PW, 6))}</span><button class="icon-btn" data-a="pweek" data-v="7">›</button></div>
-    <div class="fhead"><span class="small muted">${off.length ? 'Hiding: ' + esc(off.join(', ')) : 'Showing everything'}</span><button class="chip ${off.length ? 'on' : ''}" data-a="pfilterOpen">${ic('filter', 14)} Filter${off.length ? ' (' + off.length + ')' : ''}</button></div>`;
+  const row = (k, l, c) => `<label class="check-row" style="margin-top:8px"><input type="checkbox" data-c="pfToggle" data-k="${esc(k)}" ${hid.has(k) ? '' : 'checked'}>${c ? `<span class="pdot" style="background:${c}"></span>` : ''}${esc(l)}</label>`;
+  let html = `<div class="rbar" style="padding:6px 8px 4px"><div class="weekbar" style="margin:0"><button class="icon-btn" data-a="pweek" data-v="-7" aria-label="Previous week">‹</button><span>${PW === mondayOf(TODAY) ? 'This week · ' : ''}${fmtDate(PW)} – ${fmtDate(addDays(PW, 6))}</span><button class="icon-btn" data-a="pweek" data-v="7" aria-label="Next week">›</button>
+      <button class="rmbtn ${off.length ? 'on' : ''}" data-a="pfilterOpen" aria-label="What to show" aria-expanded="${PMENU}">${ic('menu', 22)}${off.length ? `<i>${off.length}</i>` : ''}</button></div>
+    ${PMENU ? `<div class="rshade" data-a="pfilterOpen"></div><div class="rmenu" role="dialog" aria-label="What to show" style="top:56px;right:8px">
+      <div class="lbl" style="margin-top:0">People</div>${S.People.map(p => row('p:' + p.name, p.name, pcol(p.name))).join('')}
+      <div class="small muted" style="margin-top:6px">Unchecking someone hides items that are only for them.</div>
+      <div class="lbl">What to show</div>${PKINDS().map(([k, l]) => row(k, l)).join('')}
+      <div class="actions"><button class="btn gray sm" data-a="pfAll">Show everything</button><button class="btn sm" data-a="pfilterOpen">Done</button></div>
+      <div class="small muted" style="margin-top:10px">Kept on this phone.</div></div>` : ''}
+    ${off.length ? `<div class="small muted rapplied" style="padding:2px 8px 0">Hiding ${esc(off.join(', '))} · <a data-a="pfAll">Show everything</a></div>` : ''}</div>`;
   for (let n = 0; n < 7; n++) { const d = addDays(PW, n), it = itemsFor(d).filter(pass), all = it.filter(i => !i.start && i.src !== 'dinner'), timed = it.filter(i => i.start || i.src === 'dinner');
     html += `<div class="dayhead ${d === TODAY ? 'today' : ''}" id="day-${d}"><span><b>${DAYN[n]}</b> <span class="muted">${fmtDate(d)}</span></span><button class="chip" data-a="dayAdd" data-v="${d}">＋ Add</button></div><div class="pad">
       ${all.length ? `<div class="allday">${all.map(pcard).join('')}</div>` : ''}${timed.map(pcard).join('')}${it.length ? '' : '<div class="muted small" style="padding:4px 0 8px">Nothing planned</div>'}</div>`; }
