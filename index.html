@@ -183,6 +183,17 @@
   .plan .ph a { display:inline-flex; align-items:center; font-size:13px; letter-spacing:0; text-transform:none; }
   .prow { display:grid; grid-template-columns:62px minmax(0,1fr); gap:10px; font-size:14px; line-height:1.35; padding:4px 0; } .prow > span:first-child { font-weight:800; color:var(--muted); }
   .prow.past { opacity:.5; }
+  /* recipes search bar with a sort/tags menu */
+  .rbar { position:relative; padding:10px 12px 4px; }
+  .rsearch { display:flex; align-items:center; background:var(--card); border:1px solid var(--line); border-radius:14px; padding-right:4px; }
+  #view .rsearch input { border:0; background:none; flex:1; min-width:0; }
+  .rmbtn { position:relative; flex:0 0 auto; width:44px; height:44px; border:0; border-radius:10px; background:none; color:var(--muted); display:flex; align-items:center; justify-content:center; padding:0; }
+  .rmbtn.on { color:var(--accent); } .rmbtn i { position:absolute; top:5px; right:4px; min-width:16px; height:16px; border-radius:8px; background:var(--accent); color:var(--onacc); font:800 10px/16px inherit; font-style:normal; text-align:center; }
+  .rshade { position:fixed; inset:0; z-index:6; }
+  .rmenu { position:absolute; right:12px; top:62px; z-index:7; width:min(320px, calc(100% - 24px)); max-height:70vh; overflow:auto; padding:14px; border-radius:18px; background:var(--card); border:1px solid var(--line); box-shadow:0 12px 32px rgba(15,23,42,.22); }
+  .rmopt { display:flex; align-items:center; gap:8px; width:100%; border:0; background:none; padding:9px 4px; font:inherit; font-size:15px; font-weight:600; color:var(--text); text-align:left; border-radius:10px; }
+  .rmopt.on { color:var(--accent); } .rmtags { display:flex; flex-wrap:wrap; gap:6px; margin-top:8px; }
+  .rapplied { padding:6px 4px 0; } .rapplied a { cursor:pointer; }
   .alert.flag { background:var(--accsoft); color:var(--text); font-weight:600; } .alert.flag .ic { color:var(--accent); }
   .ftag { flex:0 0 auto; font-size:10px; font-weight:800; letter-spacing:.6px; padding:3px 7px; border-radius:6px; background:var(--accent); color:var(--onacc); }
   input[type=checkbox] { accent-color:var(--accent); }
@@ -359,6 +370,7 @@ const ICONS = {
   wrench: '<path d="M14.5 6.5a4 4 0 0 0 5 5L21 13l-8 8-3-3 8-8-1.5-1.5a4 4 0 0 1-5-5L13 2z"/>',
   note: '<rect x="5" y="3.5" width="14" height="18" rx="2"/><path d="M9 3.5V2h6v1.5M9 10h6M9 14h6M9 18h3"/>',
   chev: '<path d="m9 6 6 6-6 6"/>',
+  menu: '<path d="M4 7h16M4 12h16M4 17h16"/>',
   up: '<path d="M12 19V5M6 11l6-6 6 6"/>',
   down: '<path d="M12 5v14M6 13l6 6 6-6"/>',
   filter: '<path d="M3 5h18l-7 8.5V20l-4-2v-4.5z"/>'
@@ -1155,7 +1167,7 @@ A.dayAdd = d => { const s = sheet(`<h2>Add to ${fmtDay(d)}</h2><div class="actio
 A.addOn = (t, el) => { A.close(null, el); editForm(t, null, t === 'Todos' ? { due: el.dataset.d } : t === 'Activities' ? { days: DAYS[dowIdx(el.dataset.d)], from: el.dataset.d } : { date: el.dataset.d }); };
 
 // ----- Dinner -----
-let DT = 'menu', MW = '', GH = '', GF = false, RQ = '', RFQ = '', RS = 'stale', RT = '', RPICK = '';
+let DT = 'menu', MW = '', GH = '', GF = false, RQ = '', RFQ = '', RS = 'stale', RT = [], RPICK = '', RMENU = false;
 const RHIDE = new Set();
 const gchk = () => { try { return new Set(JSON.parse(store.get('gchk') || '[]')); } catch (e) { return new Set(); } };
 function vDinner() {
@@ -1278,7 +1290,7 @@ function nightsHTML(rid) {
 function vRecFeed() {
   const q = RFQ.toLowerCase(), live = S.Recipes.filter(r => r.name && r.status !== 'archived');
   const tagsOf = r => list(String(r.tags || '').toLowerCase()), tags = [...new Set(live.flatMap(tagsOf))].sort();
-  const rs = live.filter(r => !RHIDE.has(r.id) && (!RT || tagsOf(r).includes(RT)) && (!q || (r.name + ' ' + r.tags + ' ' + (r.description || '')).toLowerCase().includes(q)));
+  const rs = live.filter(r => !RHIDE.has(r.id) && RT.every(t => tagsOf(r).includes(t)) && (!q || (r.name + ' ' + r.tags + ' ' + (r.description || '')).toLowerCase().includes(q)));
   const st = new Map(rs.map(r => [r.id, recipeStats(r.id)])), last = r => st.get(r.id).last, byName = (a, b) => a.name.localeCompare(b.name);
   const cmp = {
     stale: (a, b) => (!last(a) - !last(b)) || last(a).localeCompare(last(b)) || byName(a, b),   // longest since you had it first; never made at the end
@@ -1294,15 +1306,22 @@ function vRecFeed() {
       <div class="small muted">${s.last ? 'Had ' + daysAgo(s.last) : 'Never made'}${s.n > 1 ? ` · made ${s.n} times` : ''}${r.tags ? ' · ' + list(r.tags).map(t => '#' + esc(t)).join(' ') : ''}</div>
       ${nx || paused ? `<div style="margin-top:4px">${nx ? `<span class="chip ok">${nx.date === TODAY ? 'Tonight' : 'On ' + nightName(nx.date)}</span> ` : ''}${paused ? `<span class="chip">Paused until ${fmtDate(r.pausedUntil)}</span>` : ''}</div>` : ''}</div>
       <button class="btn ${RPICK === r.id ? 'gray' : ''} sm" data-a="recPick" data-v="${r.id}" aria-label="Add to a night">${RPICK === r.id ? ic('x', 16) : ic('plus', 16)}</button></div></div>${RPICK === r.id ? `<div class="rnights">${nightsHTML(r.id)}</div>` : ''}</div>`; };
-  return `<div class="pad" style="margin-top:10px"><input placeholder="Search recipes or #keywords" value="${esc(RFQ)}" onchange="RFQ=this.value;refresh()"></div>
-    <div class="chips">${[['stale', 'Not had lately'], ['top', 'Top rated'], ['recent', 'Recently made'], ['az', 'A–Z']].map(([k, l]) => `<button class="chip ${RS === k ? 'on' : ''}" data-a="recSort" data-v="${k}">${l}</button>`).join('')}</div>
-    ${tags.length ? `<div class="chips">${tags.map(t => `<button class="chip ${RT === t ? 'on' : ''}" data-a="recTag" data-v="${esc(t)}">#${esc(t)}</button>`).join('')}</div>` : ''}
-    <div class="pad small muted" style="margin:6px 0 4px">Swipe right to put a recipe on a night, left to skip it for now.</div>` +
+  const SORTS = [['stale', 'Not had lately'], ['top', 'Top rated'], ['recent', 'Recently made'], ['az', 'A–Z']], on = (RS !== 'stale' ? 1 : 0) + RT.length;
+  const applied = [RS !== 'stale' ? SORTS.find(x => x[0] === RS)[1] : ''].concat(RT.map(t => '#' + t)).filter(Boolean);
+  return `<div class="rbar"><div class="rsearch"><input placeholder="Search recipes" value="${esc(RFQ)}" onchange="RFQ=this.value;refresh()"><button class="rmbtn ${on ? 'on' : ''}" data-a="recMenu" aria-label="Sort and tags" aria-expanded="${RMENU}">${ic('menu', 22)}${on ? `<i>${on}</i>` : ''}</button></div>
+    ${RMENU ? `<div class="rshade" data-a="recMenu"></div><div class="rmenu" role="dialog" aria-label="Sort and tags"><div class="lbl" style="margin-top:0">Sort by</div>
+      ${SORTS.map(([k, l]) => `<button class="rmopt ${RS === k ? 'on' : ''}" data-a="recSort" data-v="${k}">${RS === k ? ic('check', 16) : '<span style="width:16px"></span>'}${l}</button>`).join('')}
+      ${tags.length ? `<div class="lbl">Tags</div><div class="rmtags">${tags.map(t => `<button class="chip ${RT.includes(t) ? 'on' : ''}" data-a="recTag" data-v="${esc(t)}">#${esc(t)}</button>`).join('')}</div>` : ''}
+      <div class="actions"><button class="btn gray sm" data-a="recClear">Clear</button><button class="btn sm" data-a="recMenu">Done</button></div>
+      <div class="small muted" style="margin-top:10px">Swipe a recipe right to put it on a night, left to skip it for now.</div></div>` : ''}
+    ${applied.length ? `<div class="small muted rapplied">${esc(applied.join(' · '))} · <a data-a="recClear">Clear</a></div>` : ''}</div>` +
     (rs.map(card).join('') || `<div class="empty">${live.length ? 'Nothing matches.' : 'No recipes yet. Add some under Home, then Recipes.'}</div>`) +
     (RHIDE.size ? `<div class="actions pad" style="margin:12px 0"><button class="chip" data-a="recUnhide">Show ${RHIDE.size} skipped</button></div>` : '') + '<div style="height:16px"></div>';
 }
+A.recMenu = () => { RMENU = !RMENU; render(); };
 A.recSort = v => { RS = v; render(); };
-A.recTag = v => { RT = RT === v ? '' : v; render(); };
+A.recTag = v => { RT = RT.includes(v) ? RT.filter(t => t !== v) : RT.concat(v); render(); };
+A.recClear = () => { RS = 'stale'; RT = []; RMENU = false; render(); };
 A.recPick = id => { RPICK = RPICK === id ? '' : id; render(); };
 A.recHide = id => { RHIDE.add(id); if (RPICK === id) RPICK = ''; render(); undoToast('Skipped for now', () => { RHIDE.delete(id); render(); }); };
 A.recUnhide = () => { RHIDE.clear(); render(); };
