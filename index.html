@@ -324,9 +324,9 @@
 // Momnie Family app v6.0
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'], DAYN = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'], ADULTS = ['Paul', 'Shana'];
 // Shown at the bottom of Home. Bump it together with VERSION in sw.js on every release.
-const APP_VERSION = '12.2 · Nov 18, 2026';
+const APP_VERSION = '12.3 · Nov 18, 2026';
 const TABLES = ['People', 'Schools', 'SchoolCal', 'Activities', 'Overrides', 'Events', 'Caretakers', 'Childcare', 'Birthdays', 'Todos', 'TodoTypes', 'Recipes', 'DinnerRules', 'Weeks', 'Menus',
-  'Groceries', 'GroceryList', 'HouseCards', 'Houses', 'WeatherRules', 'Quotes', 'Memories', 'Updates', 'Messages', 'Activity', 'Comments', 'Reactions', 'Links', 'Settings', 'Photos', 'gifts', 'daily_items', 'daily_completions'];
+  'Groceries', 'GroceryList', 'HouseCards', 'Houses', 'WeatherRules', 'Quotes', 'Memories', 'Updates', 'Messages', 'Activity', 'Comments', 'Reactions', 'Links', 'Settings', 'Photos', 'gifts', 'ai_rules', 'daily_items', 'daily_completions'];
 const CAT = { School: '#3f6fb5', Kids: '#4f7cc2', Work: '#64748b', Family: '#5b6fa8', Dinner: '#b08a4f', Caretaker: '#3e9aa6', Shared: '#94a3b8', Birthday: '#c9806a' }, SCHOOL_C = ['#5a72b8', '#7a8597', '#4a6fb0'];
 // Muted person colors (Outlook-style): Clara pink, Conrad green, Charlie blue, Shana purple, Paul grey.
 const PCOL = { Clara: '#c8578f', Conrad: '#3d9a62', Charlie: '#3a7fd5', Shana: '#8b62c7', Paul: '#6b7280' }, PCOL_X = ['#b07a3c', '#3e9aa6', '#a65f5f'];
@@ -1011,6 +1011,7 @@ A.impAll = async (v, el) => { const seen = new Set(), add = (IMP.res ? IMP.res.r
   A.close(null, el); await write(add.flatMap(x => recipeOps(Object.assign({}, x), seen))); toast(`Added ${add.length} recipe${add.length === 1 ? '' : 's'}`); };
 // Home, Meals: the dinner rules and the instructions to give an AI.
 A.mealsHome = () => sheet(() => `<h2>Meals</h2>` + hrow('rules', '', 'gear', 'Dinner rules', 'Each night, who cooks, who is out, draft day, pause length') +
+  hrow('aiRuleNew', 'meals', 'spark', 'Ask assistant', 'A meal rule in plain English, e.g. suggest a dinner if tomorrow is empty') +
   hrow('llmCopy', '', 'copy', 'Copy LLM instructions', 'Paste into ChatGPT or Claude with a recipe, then import the answer under Meals, Recipes, ＋') +
   `<details style="margin-top:14px"><summary class="small muted">See the instructions</summary><pre class="llmtxt">${esc(LLM_INSTRUCTIONS)}</pre></details>`);
 A.llmCopy = async () => { try { await navigator.clipboard.writeText(LLM_INSTRUCTIONS); toast('Copied. Paste into ChatGPT or Claude with a recipe.'); }
@@ -1636,7 +1637,7 @@ function vFeed() {
   const hide = c => c && st('f.' + c, '1') === '0';
   const gone = feedHidden();
   const kindHidden = a => a.table === 'Photos' ? !fOn('photos') : a.type === 'daily' ? !fOn('daily') : hide(a.cat);
-  const stream = S.Activity.filter(a => a.type !== 'message' && (a.type !== 'ai' || aiSees(ME)) && !kindHidden(a) && !gone.has('A:' + a.id)).map(a => ({ time: a.time, a })).concat(S.Messages.filter(mm => fOn('messages') && !gone.has('M:' + mm.id)).map(mm => ({ time: mm.time, m: mm, pin: mm.pinUntil >= TODAY && mm.resolved !== '1' })))
+  const stream = S.Activity.filter(a => a.type !== 'message' && (a.type !== 'ai' || aiNoteFor(a).includes(ME)) && !kindHidden(a) && !gone.has('A:' + a.id)).map(a => ({ time: a.time, a })).concat(S.Messages.filter(mm => fOn('messages') && !gone.has('M:' + mm.id)).map(mm => ({ time: mm.time, m: mm, pin: mm.pinUntil >= TODAY && mm.resolved !== '1' })))
     .sort((x, y) => (y.pin ? 1 : 0) - (x.pin ? 1 : 0) || y.time.localeCompare(x.time)).slice(0, 70);
   // Bundle bursts: several changes by the same person within a few minutes become one post.
   const win = (+st('bundleMin', '5') || 0) * 60000, out = [];
@@ -1691,7 +1692,8 @@ function actPost(a) {
   if (a.table === 'Photos') { const p = byId('Photos', a.ref), ti = p ? titleOf(p.table, p.ref) : '';
     if (p) return `<div class="post" data-a="photoView" data-v="${p.id}">${avatar(a.who)}<div class="pbody"><div><b>${esc(a.who)}</b> added a photo${ti ? ` to <b>${esc(ti)}</b>` : ''} <span class="muted">· ${ago(a.time)}</span></div>
       <img class="phpost" src="${esc(photoSrc(p.fileId, 1200))}" alt="" loading="lazy">${postFoot(p.table, p.ref, '')}</div></div>`; }
-  if (a.type === 'ai') return `<div class="post"><span class="av aiav">${ic('spark', 18)}</span><div class="pbody"><div><b>AI assistant</b> <span class="muted">· ${ago(a.time)}</span></div><div class="ptext" style="font-weight:400">${withMentions(a.text)}</div></div></div>`;
+  if (a.type === 'ai') { const aud = aiNoteFor(a), rule = String(a.ref || '').startsWith('rule:') ? byId('ai_rules', a.ref.slice(5)) : null;
+    return `<div class="post"><span class="av aiav">${ic('spark', 18)}</span><div class="pbody"><div><b>AI assistant</b> <span class="muted">· ${ago(a.time)}</span>${aud.length === 1 ? ' <span class="chip">Just for you</span>' : ''}</div>${rule ? `<div class="small muted" data-a="aiRuleEdit" data-v="${rule.id}" style="cursor:pointer">${ic('spark', 12)} Your rule: ${esc(rule.text.length > 70 ? rule.text.slice(0, 70) + '…' : rule.text)}</div>` : ''}<div class="ptext" style="font-weight:400">${withMentions(a.text)}</div></div></div>`; }
   if (a.type === 'daily') return `<div class="post">${avatar('App')}<div class="pbody"><div><b>Today's memory</b> <span class="muted">· ${fmtDay(a.time)}</span></div><div class="ptext" style="font-weight:400">${dailyHTML(a)}</div></div></div>`;
   if (a.type.startsWith('summary')) { let extra = ''; if (a.type === 'summary_week' && a.ref) { const c = []; for (let i = 0; i < 7; i++) c.push(...conflictsFor(addDays(a.ref, i))); if (c.length) extra = '<div class="lbl">Conflicts to sort out</div>' + c.map(x => `<div class="alert amber" data-a="open" data-t="${x.open[0]}" data-id="${esc(x.open[1])}" data-d="${x.open[2]}">${esc(x.text)}</div>`).join(''); }
     return `<div class="post">${avatar('App')}<div class="pbody"><div><b>${a.type === 'summary_week' ? 'The week ahead' : 'This month'}</b> <span class="muted">· ${ago(a.time)}</span></div><div class="ptext" style="font-weight:400;white-space:normal">${md(stripEmo(a.text))}${extra}</div></div></div>`; }
@@ -1871,6 +1873,26 @@ const autofillDays = () => { const r = byId('Settings', 'app|autofillDays'); ret
 // AI assistant: who sees its Feed notes (Settings app|ai.who; Paul only until he chooses).
 const aiWho = () => list((byId('Settings', 'app|ai.who') || {}).value || 'Paul');
 const aiSees = name => aiWho().includes(name);
+const aiNoteFor = a => a.audience ? list(a.audience) : aiWho();
+// ----- Assistant rules: plain-English rules the AI assistant checks every time it runs -----
+const AI_AREAS = [['general', 'Anything'], ['weather', 'Weather'], ['meals', 'Meals'], ['todos', 'To-dos and bills'], ['rides', 'Rides and school runs'], ['house', 'House'], ['family', 'Family and birthdays']];
+const AI_EXAMPLES = { general: 'e.g. If we both have evening plans and no caretaker is booked, tag us both.', weather: 'e.g. If soccer is outside and rain is over 50%, remind whoever is driving to pack rain gear the night before.',
+  meals: 'e.g. If no dinner is planned for tomorrow by 8 PM, suggest something we haven\'t had in a while.', todos: 'e.g. If a bill has been unpaid for two weeks, tell Paul privately to do it today.',
+  rides: 'e.g. If the person picking up from school has a work event that day, ask who is covering.', house: 'e.g. Remind us a week before any house upkeep is due.', family: 'e.g. Two weeks before a kid\'s birthday, tell us if fewer than 3 gift ideas are saved.' };
+function aiRuleForm(rule, area) { const r = rule || {}, a = r.area || area || 'general';
+  form(rule ? 'Assistant rule' : '✨ Ask assistant', v => [F('text', 'What should the assistant watch for?', 'area', null, { ph: AI_EXAMPLES[v.area] || AI_EXAMPLES.general }),
+      F('audience', 'Who should hear about it', 'multi', ADULTS, { hint: 'Just one person makes it a private note. Each time it runs, the assistant checks this rule and posts only when it applies.' }),
+      F('area', 'About', 'sel', AI_AREAS, { re: 1 }), F('active', 'On', 'chk')],
+    { id: r.id || '', text: r.text || '', audience: r.audience || ME, area: a, active: rule ? (r.active === '0' ? '' : '1') : '1' },
+    (x, mode) => { if (mode === 'del') { if (!confirm('Delete this rule?')) return false; return write({ t: 'ai_rules', del: x.id }); }
+      need(x.text && x.text.trim().length > 8, 'Describe the rule in a sentence.'); need(list(x.audience).length, 'Pick who should hear about it.');
+      return write({ t: 'ai_rules', row: { id: x.id || nid(), text: x.text.trim(), audience: ADULTS.filter(n => list(x.audience).includes(n)).join(', '), area: x.area, active: x.active === '1' ? '1' : '0' } }); },
+    rule ? [['Save', ''], ['Delete', 'del']] : [['Save', '']]); }
+A.aiRuleNew = area => aiRuleForm(null, area || 'general');
+A.aiRuleEdit = id => { const r = byId('ai_rules', id); if (r) aiRuleForm(r); };
+const aiRuleRow = r => `<div class="li" style="padding:12px 0" data-a="aiRuleEdit" data-v="${r.id}"><div class="hicon">${ic('spark')}</div><div class="grow"><div class="ti" style="font-weight:600">${esc(r.text)}</div>
+  <div class="small muted">${esc((AI_AREAS.find(x => x[0] === r.area) || AI_AREAS[0])[1])} · tells ${esc(joinNames(list(r.audience)) || 'everyone')}${list(r.audience).length === 1 ? ' (private)' : ''}${r.active === '0' ? ' · off' : ''}${r.created_by ? ' · added by ' + esc(r.created_by) : ''}</div></div><span class="chev">›</span></div>`;
+const aiAskBtn = area => `<button class="btn gray" data-a="aiRuleNew" data-v="${area}">${ic('spark', 16)}Ask assistant</button>`;
 const AI_TOPICS = [['meals', 'Meals and recipes'], ['birthdays', 'Birthdays and gift-idea counts'], ['todos', 'To-dos and bills'], ['rides', 'Rides and caretakers'], ['week', 'The week ahead'], ['house', 'House upkeep']];
 A.aiEdit = (v, el) => { if (ME !== 'Paul') return; const g = k => (byId('Settings', 'app|ai.' + k) || {}).value;
   form('AI assistant', [F('on', 'Post daily notes to the Feed', 'chk'), F('who', 'Who sees the AI posts', 'multi', ADULTS, { hint: 'Only these people see its notes in the Feed and get its notifications.' }),
@@ -2182,6 +2204,7 @@ function vHome() {
     hrow('homeOpen', 'houses', 'house', 'House', 'Info and upkeep · ' + houses) +
     hrow('homeOpen', 'gifts', 'gift', 'Gift ideas', 'Ideas for everyone, any time of year') +
     hrow('mealsHome', '', 'book', 'Meals', 'Dinner rules and the LLM instructions for importing recipes') +
+    hrow('homeOpen', 'airules', 'spark', 'Assistant rules', S.ai_rules.length ? `${S.ai_rules.filter(r => r.active !== '0').length} rules in plain English` : 'Tell the assistant what to watch for, in plain English') +
     hrow('openSettings', '', 'gear', 'Settings', 'Caretakers, birthdays, weather, notifications and more') +
     `<div class="hfoot"><div class="ver">Version ${APP_VERSION}</div>Made with love by your husband Paul.<br><a data-a="feedback">Click here to provide constructive feedback</a></div>`;
 }
@@ -2206,11 +2229,16 @@ const PAGES = {
   birthdays: () => '<h2>Birthdays</h2>' + (allBirthdays().sort((a, b) => a.name.localeCompare(b.name)).map(b => rowLi(b.t, b.id, b.name, parse('2024-' + b.md).toLocaleDateString('en-US', { month: 'long', day: 'numeric' }) + (b.year ? ` · turns ${ageOn(b, TODAY) + 1} next` : ''))).join('') || '<div class="empty">No birthdays yet.</div>') + addBtn('Birthdays', 'Add a birthday'),
   houses: () => '<h2>House</h2>' + ['Boston', 'Cape'].map(h => `<h3>${h === 'Cape' ? 'Cape house' : h}</h3>` + (S.HouseCards.filter(c => c.house === h).sort((a, b) => a.kind.localeCompare(b.kind)).map(c => rowLi('HouseCards', c.id, c.title, c.kind === 'upkeep' ? `Every ${c.everyMonths || '?'} months · next ${c.nextDue ? fmtDay(c.nextDue) : 'not set'}` : (c.body || '').slice(0, 50))).join('') || '<div class="small muted">Nothing here yet.</div>')).join('') +
     addBtn('HouseCards', 'Add info or upkeep') + '<h3>Locations (for weather)</h3>' + S.Houses.map(h => `<div class="li" style="padding:10px 0" data-a="editH" data-v="${h.id}"><div class="grow"><div class="ti">${esc(h.name)}</div><div class="small muted">${esc(h.lat)}, ${esc(h.lon)}</div></div><span class="chev">›</span></div>`).join(''),
-  WeatherRules: () => '<h2>Weather rules</h2>' + S.WeatherRules.map(r => rowLi('WeatherRules', r.id, r.message, `If ${r.metric} is ${r.op === '<' ? 'below' : 'above'} ${r.threshold} · ${r.when === 'night' ? 'evening before' : 'morning of'}${r.push === '1' ? ' · sends a notification' : ''}${r.enabled === '0' ? ' · off' : ''}`)).join('') + addBtn('WeatherRules', 'Add a rule'),
+  WeatherRules: () => '<h2>Weather rules</h2>' + S.WeatherRules.map(r => rowLi('WeatherRules', r.id, r.message, `If ${r.metric} is ${r.op === '<' ? 'below' : 'above'} ${r.threshold} · ${r.when === 'night' ? 'evening before' : 'morning of'}${r.push === '1' ? ' · sends a notification' : ''}${r.enabled === '0' ? ' · off' : ''}`)).join('') + S.ai_rules.filter(r => r.area === 'weather').map(aiRuleRow).join('') +
+    `<div class="actions"><button class="btn" data-a="add" data-v="WeatherRules">＋ Basic rule</button>${aiAskBtn('weather')}</div>`,
   Groceries: () => '<h2>Grocery library</h2>' + (S.Groceries.slice().sort((a, b) => a.name.localeCompare(b.name)).map(g => rowLi('Groceries', g.id, g.name, [g.category, g.details, +g.recurDays ? 'every ' + g.recurDays + ' days' : ''].filter(Boolean).join(' · '))).join('') || '<div class="empty">Empty so far.</div>') + addBtn('Groceries', 'Add a grocery card'),
   TodoTypes: () => '<h2>To-do types</h2>' + S.TodoTypes.map(t => rowLi('TodoTypes', t.id, t.name, `Goes to ${t.assignee || 'either of us'}${t.builtin === '1' ? ' · built in' : ''}`)).join('') + addBtn('TodoTypes', 'Add a type'),
   memories: () => `<h2>Quotes and memories</h2><div class="kv">${S.Quotes.length} wedding quote${S.Quotes.length === 1 ? '' : 's'} and ${S.Memories.length} "this day" memor${S.Memories.length === 1 ? 'y' : 'ies'} saved.</div><div class="kv muted small">Add them in the Sheet: the Quotes tab (quote, author) and the Memories tab (date, note, and an optional link to a photo in Google Drive). On a day with a quote or memory, a splash screen shows the first time each of you opens the app.</div>
     <div class="actions"><button class="btn gray" data-a="splashAgain">Show today's splash again</button></div>`,
+  airules: () => { const on = (byId('Settings', 'app|ai.on') || {}).value === '1';
+    return '<h2>Assistant rules</h2><div class="small muted">Rules in plain English. Each time the AI assistant runs it checks them all and posts a note only when one applies, to the people that rule names.</div>' +
+      (on ? '' : '<div class="alert amber" style="margin-top:10px">The AI assistant is off, so these rules are not being checked yet. Paul can turn it on in Settings, AI assistant.</div>') +
+      (S.ai_rules.map(aiRuleRow).join('') || '<div class="empty">No rules yet.</div>') + `<div class="actions">${aiAskBtn('general')}</div>`; },
   ai: () => { if (ME !== 'Paul') return '<h2>AI assistant</h2><div class="small muted">Only Paul can change these settings.</div>';
     const on = (byId('Settings', 'app|ai.on') || {}).value === '1', last = (byId('Settings', 'app|ai.last') || {}).value, topics = list((byId('Settings', 'app|ai.topics') || {}).value || AI_TOPICS.map(x => x[0]).join(', '));
     const hour = (byId('Settings', 'app|ai.hour') || {}).value || '7';
@@ -2219,6 +2247,7 @@ const PAGES = {
       <div class="kv"><span>Seen by</span>${esc(joinNames(aiWho()))}</div>
       <div class="kv"><span>Topics</span>${esc(AI_TOPICS.filter(x => topics.includes(x[0])).map(x => x[1]).join(', ') || 'None')}</div>
       ${last ? `<div class="kv"><span>Last run</span>${esc(last.replace('T', ' '))}</div>` : ''}
+      <div class="kv"><span>Assistant rules</span>${S.ai_rules.filter(r => r.active !== '0').length} on · <a data-a="homeOpen" data-v="airules">See and add rules</a></div>
       <div class="actions"><button class="btn" data-a="aiEdit">${ic('pen', 16)}Change</button><button class="btn gray" data-a="aiRun">${ic('spark', 16)}Post now</button></div>
       <div class="small muted" style="margin-top:12px">Needs an Anthropic API key in Apps Script: Project Settings, Script properties, ANTHROPIC_API_KEY. Each person can mute its notifications under Notifications and Feed.</div>`; },
   settings: () => { const q = k => st(k, ''), chk = (c, k, def, l) => `<label class="check-row"><input type="checkbox" data-c="${c}" data-k="${k}" ${st(k, def) === '1' ? 'checked' : ''}> ${l}</label>`;
