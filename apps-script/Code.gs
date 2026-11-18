@@ -1,6 +1,7 @@
 /**
  * Momnie Family app backend
- * Version 3.14 (2026-11-18)
+ * Version 3.15 (2026-11-18)
+ *   3.15: Paul chooses who gets the AI Today card (app|ai.card; just Paul until he adds others).
  *   3.14: AI Today card. For each person who turns it on, the assistant writes their Today card: a short headline, a
  *         practical weather line and the 2 to 5 things that matter most, each linked to the real item. Written early
  *         each morning (for today) and at 7 PM (for tomorrow), or on demand from the card's refresh button.
@@ -301,6 +302,7 @@ function route_(b, me) {
       return { ai: aiPosts_(today_(), true) };
     case 'ai_brief':   // the refresh button on someone's AI Today card (their own card only)
       if (setting_('app|ai.on', '') !== '1') return { ok: false, error: 'The AI assistant is off.' };
+      if (aiCardFor_().indexOf(me) < 0) return { ok: false, error: 'The AI Today card is not turned on for you.' };
       return { brief: aiBrief_(me, isDate_(b.date) ? b.date : today_(), b.mode === 'night' ? 'night' : 'day') };
     case 'notify_test':
       var sent = send_(me, 'Test from the Momnie Family app', 'Notifications are working.');
@@ -922,7 +924,9 @@ function aiPosts_(t, manual) {
 }
 
 // ---------- AI Today card ----------
-function briefAll_(d, mode) { ADULTS.forEach(function (p) { if (setting_(p + '|ai.card', '') === '1') { try { aiBrief_(p, d, mode); } catch (e) { console.error(e); } } }); }
+/** Who gets the AI Today card: Paul's choice in the app (app|ai.card), Paul only until he adds others. */
+function aiCardFor_() { var v = setting_('app|ai.card', 'Paul'); return v === 'none' ? [] : list_(v); }
+function briefAll_(d, mode) { aiCardFor_().forEach(function (p) { try { aiBrief_(p, d, mode); } catch (e) { console.error(e); } }); }
 /** Everything on person p's plate for date d, each with a ref the app can open. Gift ideas are never included. */
 function briefCands_(p, d, mode) {
   var t = today_(), day = DAYS[dow_(d)], c = [], add = function (ref, text) { c.push({ ref: ref, what: text }); };
