@@ -303,7 +303,7 @@
 // Momnie Family app v6.0
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'], DAYN = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'], ADULTS = ['Paul', 'Shana'];
 // Shown at the bottom of Home. Bump it together with VERSION in sw.js on every release.
-const APP_VERSION = '9.2 · Nov 18, 2026';
+const APP_VERSION = '9.3 · Nov 18, 2026';
 const TABLES = ['People', 'Schools', 'SchoolCal', 'Activities', 'Overrides', 'Events', 'Caretakers', 'Childcare', 'Birthdays', 'Todos', 'TodoTypes', 'Recipes', 'DinnerRules', 'Weeks', 'Menus',
   'Groceries', 'GroceryList', 'HouseCards', 'Houses', 'WeatherRules', 'Quotes', 'Memories', 'Updates', 'Messages', 'Activity', 'Comments', 'Reactions', 'Links', 'Settings', 'Photos', 'gifts', 'daily_items', 'daily_completions'];
 const CAT = { Kids: '#4f7cc2', Work: '#64748b', Family: '#5b6fa8', Dinner: '#b08a4f', Caretaker: '#3e9aa6', Shared: '#94a3b8', Birthday: '#c9806a' }, SCHOOL_C = ['#5a72b8', '#7a8597', '#4a6fb0'];
@@ -588,7 +588,7 @@ function titleOf(t, id) {
 const ovr = (aid, d) => S.Overrides.find(o => o.ref === aid && o.date === d) || {};
 /** Every Planner card for one date. */
 function itemsFor(d) {
-  const out = [], dow = DAYS[dowIdx(d)], adopted = new Set(S.Events.map(e => e.gcalId).filter(Boolean));
+  const out = [], dow = DAYS[dowIdx(d)], adopted = new Set(S.Events.map(e => e.gcalId).concat(S.Activities.map(a => a.gcalId)).filter(Boolean));
   S.SchoolCal.forEach(c => { if (c.date && d >= c.date && d <= (c.endDate || c.date)) { const s = byId('Schools', c.schoolId) || {};
     out.push({ t: 'SchoolCal', id: c.id, title: c.title, sub: (s.short || s.name || 'School') + (c.kind === 'off' ? ' · no school' : c.kind === 'half' ? ' · half day' : ''), start: c.kind === 'event' || !c.kind ? c.start : '', end: c.end, color: SCHOOL_C[S.Schools.indexOf(s) % 3] || CAT.Kids, logo: s.logo, people: kids().filter(k => k.schoolId === s.id).map(k => k.name), src: 'school:' + s.id, kind: c.kind }); } });
   S.Activities.forEach(a => { if (!list(a.days).includes(dow) || (a.from && d < a.from) || (a.until && d > a.until)) return; const o = ovr(a.id, d); if (o.cancelled === '1') return;
@@ -596,7 +596,7 @@ function itemsFor(d) {
     out.push({ t: 'Activities', id: a.id, title: a.name, sub: a.location, start: a.start, end: a.end, color: ppl.length ? pcol(ppl[0]) : CAT.Kids, people: ppl, dropoff: o.dropoff || a.dropoff, pickup: o.pickup || a.pickup, ride: kidIn }); });
   S.Events.forEach(e => { if (!e.date || d < e.date || d > (e.endDate || e.date)) return; const all = e.allDay === '1' || !e.start;
     out.push({ t: 'Events', id: e.id, title: e.title, sub: e.location, start: all ? '' : e.start, end: all ? '' : e.end, color: list(e.people).length ? pcol(list(e.people)[0]) : CAT[e.category] || CAT.Family, people: list(e.people), dropoff: e.dropoff, pickup: e.pickup, ride: e.category === 'Kids' && !all, cat: e.category }); });
-  CAL.forEach(c => { if (adopted.has(c.id)) return; const on = c.allDay ? (c.start <= d && d < c.end) : c.start.slice(0, 10) === d;
+  CAL.forEach(c => { if (adopted.has(c.id) || (c.series && adopted.has(c.series))) return; const on = c.allDay ? (c.start <= d && d < c.end) : c.start.slice(0, 10) === d;
     if (on) out.push({ t: 'GCal', id: c.id, title: c.title, sub: c.location, start: c.allDay ? '' : c.start.slice(11), end: c.allDay ? '' : c.end.slice(11), color: CAT.Shared, people: [], src: 'gcal' }); });
   allBirthdays().forEach(b => { if (b.md === d.slice(5)) { const a = ageOn(b, d); out.push({ t: b.t, id: b.id, icon: 'cake', title: b.name + "'s birthday" + (a !== null && a > 0 ? ' (' + a + ')' : ''), start: '', color: CAT.Birthday, people: [], src: 'birthday' }); } });
   // Extended day is its own Planner event: from the school pickup to the extended-day pickup. Tapping it opens the kid's card.
@@ -958,7 +958,7 @@ const SAVE = {
     if (v.category === 'Kids') { const dc = driveCheck([v.dropoff, v.pickup].filter(Boolean)); if (!dc) return false; ops.push(...dc); }
     if (isNew && !v.gcalId) { const k = norm(v.title), dup = itemsFor(v.date).find(i => ['GCal', 'Events', 'SchoolCal'].includes(i.t) && (norm(i.title) === k || norm(i.title).includes(k) || k.includes(norm(i.title))));
       if (dup && confirm(`This looks like a duplicate of “${dup.title}”. Merge them into one card?`)) { if (dup.t === 'GCal') row.gcalId = dup.id; else { openCard(dup.t, dup.id, v.date); return; } } }
-    ops.push({ t: 'Events', row, log: L(isNew ? 'event_add' : 'event_edit', `${isNew ? 'added plans' : 'updated'}: ${v.title} (${fmtDay(v.date)}${v.allDay !== '1' && v.start ? ', ' + fmtT(v.start) : ''})`, 'planner') });
+    ops.push({ t: 'Events', row, adopt: isNew && row.gcalId ? row.gcalId : undefined, log: L(isNew ? 'event_add' : 'event_edit', `${isNew ? (row.gcalId ? 'moved a calendar item into the app' : 'added plans') : 'updated'}: ${v.title} (${fmtDay(v.date)}${v.allDay !== '1' && v.start ? ', ' + fmtT(v.start) : ''})`, 'planner') });
     if (v._link) ops.push({ t: 'Links', row: { id: nid(), aTable: v._link[0], aRef: v._link[1], bTable: 'Events', bRef: row.id } }, sys(v._link[0], v._link[1], `added a Planner event and linked this ${NAMES[v._link[0]] || 'card'}`));
     if (v._todoDone) ops.push({ t: 'Todos', row: { id: v._todoDone, status: 'Done', doneOn: TODAY, doneBy: ME } });
     ops.push(...dinnerAwayOps(row));
@@ -973,8 +973,8 @@ const SAVE = {
     const groups = []; slots.slice().sort((a, b) => DAYS.indexOf(a.day) - DAYS.indexOf(b.day)).forEach(x => { const g = groups.find(y => y.start === x.start && y.end === (x.end || '')); if (g) g.days.push(x.day); else groups.push({ days: [x.day], start: x.start, end: x.end || '' }); });
     const ids = v._grp || (v.id ? [v.id] : []), isNew = !ids.length, base = {};
     Object.keys(v).forEach(k => { if (k[0] !== '_' && !['id', 'days', 'start', 'end'].includes(k)) base[k] = v[k]; });
-    const rows = groups.map((g, i) => Object.assign({}, base, { id: ids[i] || nid(), days: g.days.join(', '), start: g.start, end: g.end }));
-    const ops = dc.concat(rows.map((r, i) => ({ t: 'Activities', row: r, log: i ? null : L('activity', `${isNew ? 'added an activity' : 'updated'}: ${v.name} (${schedTxt(rows)})`, 'planner') })), ids.slice(groups.length).map(id => ({ t: 'Activities', del: id })));
+    const rows = groups.map((g, i) => Object.assign({}, base, { id: ids[i] || nid(), days: g.days.join(', '), start: g.start, end: g.end }, isNew && i === 0 && v._adopt ? { gcalId: v._adopt } : {}));
+    const ops = dc.concat(rows.map((r, i) => ({ t: 'Activities', row: r, adopt: isNew && i === 0 && v._adopt ? v._adopt : undefined, log: i ? null : L('activity', `${isNew ? (v._adopt ? 'moved a repeating calendar item into the app' : 'added an activity') : 'updated'}: ${v.name} (${schedTxt(rows)})`, 'planner') })), ids.slice(groups.length).map(id => ({ t: 'Activities', del: id })));
     const ok = await write(ops);
     if (ok && isNew) { const c = []; for (let i = 0; i < 14; i++) c.push(...conflictsFor(addDays(TODAY, i))); if (c.length) alert('Heads up, this creates a conflict:\n\n' + c.slice(0, 3).map(x => x.text).join('\n')); }
     return ok;
@@ -1020,7 +1020,7 @@ function editForm(t, row, extra) {
   return form((isNew ? 'New ' : 'Edit ') + (NAMES[t] || 'item'), FORMS[t], v, x => saveRow(t, x));
 }
 A.add = (t, el) => editForm(t, null, el && el.dataset.d ? { date: el.dataset.d, due: el.dataset.d } : null);
-A.edit = (v, el) => { const c = ctx(el); if (c.t === 'GCal') return A.adopt(v, el); editForm(c.t, byId(c.t, c.id)); };
+A.edit = (v, el) => { const c = ctx(el); if (c.t === 'GCal') return A.convert(v, el); editForm(c.t, byId(c.t, c.id)); };
 A.del = async (v, el) => {
   const c = ctx(el), r = byId(c.t, c.id); if (!r) return;
   if ((c.t === 'Events' || c.t === 'Activities') && r.gcalId) { if (!confirm(`Delete this ${NAMES[c.t]}? It is also removed from the shared calendar.`)) return; } else if (!confirm(`Delete this ${NAMES[c.t] || 'item'}?`)) return;
@@ -1066,8 +1066,8 @@ const CARD = {
     return `<h2>${esc(r.title)}</h2>` + kv('When', fmtDay(r.date) + (r.endDate && r.endDate > r.date ? ' – ' + fmtDay(r.endDate) : '') + (all ? ' · all day' : ` · ${fmtT(r.start)}${r.end ? '–' + fmtT(r.end) : ''}`)) + kv('Category', r.category) + kv('Who', r.people) + kv('Where', r.location) + kv('House', r.house) + kv('Notes', r.notes) +
       kv('Calendar', r.gcalId ? 'Copied to the shared calendar; change it here, not in Google Calendar' : '') + (r.category === 'Kids' && !all ? rideBox('Rides', r.dropoff, r.pickup) : '') + std({ care: 1 }); },
   GCal(r) { return `<h2>${esc(r.title)}</h2>` + kv('When', r.allDay ? fmtDay(r.start) + (addDays(r.end, -1) > r.start ? ' – ' + fmtDay(addDays(r.end, -1)) : '') + ' · all day' : `${fmtDay(r.start)} · ${fmtT(r.start.slice(11))}–${fmtT(r.end.slice(11))}`) + kv('Where', r.location) + kv('From', 'Shared calendar') +
-      (r.recurring ? '<div class="kv muted small">This is a repeating calendar event. Change its time in Google Calendar; you can still comment, link and add a caretaker here.</div>' : '') +
-      `<div class="actions">${r.recurring ? '' : '<button class="btn gray sm" data-a="adopt">' + ic('pen') + 'Edit</button>'}<button class="btn gray sm" data-a="link">${ic('link')}Link</button><button class="btn gray sm" data-a="careFor">${ic('care')}Add caretaker</button>${r.recurring ? '' : '<button class="btn danger sm" data-a="gcalDel">' + ic('trash') + 'Delete</button>'}</div>`; },
+      `<div class="kv muted small">${r.recurring ? 'A repeating entry from the shared calendar. Make it an app activity to manage it here, with rides and the kids it is for.' : 'From the shared calendar. Make it an app item to add who it is for, rides and caretakers, and edit it here.'}</div>` +
+      `<div class="actions"><button class="btn sm" data-a="convert">${ic('plus', 16)}Make it an app item</button><button class="btn gray sm" data-a="link">${ic('link')}Link</button><button class="btn gray sm" data-a="careFor">${ic('care')}Add caretaker</button>${r.recurring ? '' : '<button class="btn danger sm" data-a="gcalDel">' + ic('trash') + 'Delete</button>'}</div>`; },
   Activities(r, d) { const o = d ? ovr(r.id, d) : {};
     return `<h2>${esc(r.name)}</h2>` + kvh('Who', list(r.kids).map(n => `<span class="pdot" style="background:${pcol(n)}"></span>${esc(n)}`).join('&nbsp;&nbsp; ')) + kv('When', schedTxt(actGroup(r))) + kv('Season', r.from || r.until ? `${r.from ? fmtDate(r.from) : 'now'} to ${r.until ? fmtDate(r.until) : 'ongoing'}` : '') + kv('Where', r.location) + kv('Teacher or contact', r.teacher) +
       (list(r.kids).some(n => kidN().includes(n)) ? kv('Usual rides', `Drop-off: ${r.dropoff || 'not set'} · Pickup: ${r.pickup || 'not set'}`) : '') + kv('House', r.house) + kv('Notes', r.notes) + kv('Calendar', actGroup(r).some(x => x.gcalId) ? 'Copied to the shared calendar; change it here, not in Google Calendar' : '') + (d && list(r.kids).some(n => kidN().includes(n)) ? rideBox('Rides for ' + fmtDay(d), o.dropoff || r.dropoff, o.pickup || r.pickup, true) : '') + std({ care: 1 }); },
@@ -1321,6 +1321,20 @@ A.rideSave = async (v, el) => { const d = el.closest('dialog'), c = d._ctx, dr =
   if (await write(dc)) toast('Rides saved'); };
 A.skipDay = async (v, el) => { const c = ctx(el); if (!confirm(`Cancel ${titleOf(c.t, c.id)} on ${fmtDay(c.date)} only?`)) return;
   if (await write({ t: 'Overrides', row: { id: ovr(c.id, c.date).id || nid(), ref: c.id, date: c.date, cancelled: '1' }, log: L('cancel', `canceled ${titleOf(c.t, c.id)} for ${fmtDay(c.date)}`, 'planner', { table: 'Activities', ref: c.id }) })) A.close(v, el); };
+// ----- Make a shared-calendar entry an app item -----
+// The script tags the existing calendar entry (or repeating series) so it isn't shown twice, and the app controls it from then on.
+A.convert = (v, el) => { const r = CAL.find(x => x.id === ctx(el).id); if (!r) return; A.close(null, el);
+  const opt = (k, icon, t, sub) => `<div class="li" style="padding:12px 0" data-a="convertAs" data-v="${k}" data-id="${esc(r.id)}"><div class="hicon">${ic(icon)}</div><div class="grow"><div class="ti">${t}</div><div class="small muted">${sub}</div></div><span class="chev">›</span></div>`;
+  sheet(() => `<h2>Make it an app item</h2><div class="small muted" style="margin-bottom:8px">“${esc(r.title)}” becomes an app ${r.recurring ? 'activity' : 'event'}. The app takes over the calendar entry instead of copying it, so it shows once. Edit it in the app from now on.</div>` +
+    (r.recurring ? opt('activity', 'activity', 'Repeating activity', 'Swimming, lessons, practice, a standing meeting. Weekly, with rides and who it is for.')
+      : opt('Kids', 'users', 'Kids event', 'Appointment, party, game. With rides and caretakers.') + opt('Work', 'building', 'Work event', 'Shows on your page and in Right now.') + opt('Family', 'house', 'Family or social event', 'Plans for the family or just the two of you.'))); };
+A.convertAs = (k, el) => { const r = CAL.find(x => x.id === el.dataset.id); if (!r) return; A.close(null, el);
+  const who = S.People.filter(p => new RegExp('(^|[^A-Za-z])' + p.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '(?![A-Za-z])', 'i').test(r.title)).map(p => p.name).join(', ');
+  if (k === 'activity') {
+    if (!r.series) { toast('Paste in the new Code.gs (3.8) first, then try again.'); return; }
+    return editForm('Activities', null, { name: r.title, kids: who, days: DAYS[dowIdx(r.start.slice(0, 10))], start: r.allDay ? '' : r.start.slice(11), end: r.allDay ? '' : r.end.slice(11), location: r.location, _adopt: r.series });
+  }
+  editForm('Events', null, { title: r.title, category: k, people: who, date: r.start.slice(0, 10), allDay: r.allDay ? '1' : '', endDate: r.allDay && addDays(r.end, -1) > r.start ? addDays(r.end, -1) : '', start: r.allDay ? '' : r.start.slice(11), end: r.allDay ? '' : r.end.slice(11), location: r.location, gcalId: r.id, gcal: '1' }); };
 A.adopt = (v, el) => { const r = CAL.find(x => x.id === ctx(el).id); if (!r) return;
   editForm('Events', null, { title: r.title, date: r.start.slice(0, 10), allDay: r.allDay ? '1' : '', endDate: r.allDay && addDays(r.end, -1) > r.start ? addDays(r.end, -1) : '', start: r.allDay ? '' : r.start.slice(11), end: r.allDay ? '' : r.end.slice(11), location: r.location, gcalId: r.id, gcal: '1' }); A.close(null, el); };
 A.gcalDel = async (v, el) => { const c = ctx(el), r = CAL.find(x => x.id === c.id); if (!confirm('This will delete it from the calendar. Are you sure?')) return;
