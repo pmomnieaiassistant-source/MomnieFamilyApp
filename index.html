@@ -203,6 +203,8 @@
   .aimk { display:inline-flex; vertical-align:middle; margin-left:5px; color:var(--asst); opacity:.45; } .aimk.c { float:right; margin:8px 10px 0 0; }
   .aiopen { float:right; margin:0 8px 0 0; height:32px; padding:0 10px; } .aibox { margin-top:4px; padding:12px; border-radius:16px; background:var(--soft); } .aibox textarea { width:100%; background:var(--card); }
   .ailine { margin-top:6px; font-size:15px; line-height:1.4; color:var(--muted); }
+  .flines { display:flex; flex-direction:column; gap:6px; margin-top:12px; } .fline { display:flex; align-items:center; gap:8px; padding:8px 12px; border-radius:12px; background:var(--soft); font-size:14px; font-weight:600; }
+  .fline .ic { color:var(--accent); flex:none; } .fline.off { background:var(--amberbg); color:var(--amber); } .fline.off .ic { color:var(--amber); }
   .sflags { display:flex; gap:5px; margin-top:6px; } .sflag { display:inline-flex; align-items:center; justify-content:center; width:24px; height:24px; border-radius:50%; border:0; background:var(--soft); color:var(--muted); padding:0; }
   .sflag.on { background:var(--soft); color:var(--accent); } .sflag.off { background:var(--amberbg); color:var(--amber); }
   .aihead { margin-top:10px; font-size:17px; line-height:1.4; font-weight:600; letter-spacing:-.2px; }
@@ -351,7 +353,7 @@
 // Momnie Family app v6.0
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'], DAYN = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'], ADULTS = ['Paul', 'Shana'];
 // Shown at the bottom of Home. Bump it together with VERSION in sw.js on every release.
-const APP_VERSION = '14.0 · Nov 18, 2026';
+const APP_VERSION = '14.1 · Nov 18, 2026';
 const TABLES = ['People', 'Schools', 'SchoolCal', 'Activities', 'Overrides', 'Events', 'Caretakers', 'Childcare', 'Birthdays', 'Todos', 'TodoTypes', 'Recipes', 'DinnerRules', 'Weeks', 'Menus',
   'Groceries', 'GroceryList', 'HouseCards', 'Houses', 'WeatherRules', 'Quotes', 'Memories', 'Updates', 'Messages', 'Activity', 'Comments', 'Reactions', 'Links', 'Settings', 'Photos', 'gifts', 'ai_rules', 'ai_requests', 'notes', 'daily_items', 'daily_completions'];
 const CAT = { School: '#3f6fb5', Kids: '#4f7cc2', Work: '#64748b', Family: '#5b6fa8', Dinner: '#b08a4f', Caretaker: '#3e9aa6', Shared: '#94a3b8', Birthday: '#c9806a' }, SCHOOL_C = ['#5a72b8', '#7a8597', '#4a6fb0'];
@@ -808,17 +810,20 @@ function statusOf(p) {
 // dinner, making dinner. Tap one to see what it is about.
 function personFlags(p) {
   if (p.kind === 'kid') return [];
-  const d = TODAY, runs = schoolRuns(d).filter(r => r.who === p.name), items = itemsFor(d).filter(i => i.start && i.t !== 'GCal');
-  const drops = runs.filter(r => r.kind === 'd').map(r => `${kidNames(r.kids)} at ${r.name} ${fmtT(r.time)}`).concat(items.filter(i => i.dropoff === p.name).map(i => `${kidNames(i.people) || 'kids'} at ${i.title} ${fmtT(i.start)}`));
-  const picks = runs.filter(r => r.kind !== 'd').map(r => `${kidNames(r.kids)} from ${r.name} ${fmtT(r.time)}`).concat(items.filter(i => i.pickup === p.name).map(i => `${kidNames(i.people) || 'kids'} from ${i.title} ${fmtT(i.end || i.start)}`));
+  // Only what is still ahead today: a drop-off or pickup drops away once its time has passed.
+  const d = TODAY, now = nowHM(), runs = schoolRuns(d).filter(r => r.who === p.name && r.time >= now), items = itemsFor(d).filter(i => i.start && i.t !== 'GCal');
+  const drops = runs.filter(r => r.kind === 'd').map(r => `${kidNames(r.kids)} at ${r.name} ${fmtT(r.time)}`).concat(items.filter(i => i.dropoff === p.name && i.start >= now).map(i => `${kidNames(i.people) || 'kids'} at ${i.title} ${fmtT(i.start)}`));
+  const picks = runs.filter(r => r.kind !== 'd').map(r => `${kidNames(r.kids)} from ${r.name} ${fmtT(r.time)}`).concat(items.filter(i => i.pickup === p.name && (i.end || i.start) >= now).map(i => `${kidNames(i.people) || 'kids'} from ${i.title} ${fmtT(i.end || i.start)}`));
   const out = [], m = S.Menus.find(x => x.date === d), dish = m ? (byId('Recipes', m.recipeId) || {}).name || m.note || '' : '';
-  if (drops.length) out.push({ icon: 'up', cls: 'on', label: 'Drop-off', info: `${p.name} drops off ${drops.join('; ')}` });
-  if (picks.length) out.push({ icon: 'down', cls: 'on', label: 'Pickup', info: `${p.name} picks up ${picks.join('; ')}` });
-  if (list(p.workDays).includes(DAYS[dowIdx(d)]) && p.workStart) { const home = workWhere(p, d) === 'home';
-    out.push({ icon: home ? 'house' : 'building', cls: 'on', label: home ? 'Working from home' : 'At work', info: `${p.name} ${home ? 'is working from home' : 'is at work'} ${fmtT(p.workStart)}${p.workEnd ? '–' + fmtT(p.workEnd) : ''}` }); }
-  if (m && list(m.away).includes(p.name)) out.push({ icon: 'meals', cls: 'off', label: 'Not home for dinner', info: `${p.name} won't be home for dinner tonight` });
-  else if (m && m.cook === p.name) out.push({ icon: 'meals', cls: 'on', label: 'Making dinner', info: `${p.name} is making dinner tonight${dish ? ': ' + dish : ''}` });
+  if (drops.length) out.push({ icon: 'up', cls: 'on', label: 'Drop-off', info: `${p.name} drops off ${drops.join('; ')}`, line: `Drops off ${drops.join('; ')}` });
+  if (picks.length) out.push({ icon: 'down', cls: 'on', label: 'Pickup', info: `${p.name} picks up ${picks.join('; ')}`, line: `Picks up ${picks.join('; ')}` });
+  if (list(p.workDays).includes(DAYS[dowIdx(d)]) && p.workStart && !(p.workEnd && now > p.workEnd)) { const home = workWhere(p, d) === 'home', hrs = `${fmtT(p.workStart)}${p.workEnd ? '–' + fmtT(p.workEnd) : ''}`;
+    out.push({ icon: home ? 'house' : 'building', cls: 'on', label: home ? 'Working from home' : 'At work', info: `${p.name} ${home ? 'is working from home' : 'is at work'} ${hrs}`, line: `${home ? 'Working from home' : 'At work'} today · ${hrs}` }); }
+  if (now < '21:00') { if (m && list(m.away).includes(p.name)) out.push({ icon: 'meals', cls: 'off', label: 'Not home for dinner', info: `${p.name} won't be home for dinner tonight`, line: 'Not home for dinner tonight' });
+    else if (m && m.cook === p.name) out.push({ icon: 'meals', cls: 'on', label: 'Making dinner', info: `${p.name} is making dinner tonight${dish ? ': ' + dish : ''}`, line: `Making dinner tonight${dish ? ': ' + dish : ''}` }); }
   return out; }
+// On a person's page the same tags show as full lines under their name.
+const flagLines = p => { const f = personFlags(p); return f.length ? `<div class="flines">${f.map(x => `<div class="fline ${x.cls}">${ic(x.icon, 15)}<span>${esc(x.line)}</span></div>`).join('')}</div>` : ''; };
 const flagsHTML = p => { const f = personFlags(p); return f.length ? `<div class="sflags">${f.map(x => `<button class="sflag ${x.cls}" data-a="flagInfo" data-v="${esc(x.info)}" aria-label="${esc(x.label)}" title="${esc(x.label)}">${ic(x.icon, 13)}</button>`).join('')}</div>` : ''; };
 /** Grocery needs that come from planned dinners. */
 function recipeNeeds(from, to, col) {
@@ -1454,7 +1459,7 @@ function personPage(p) {
   const head = `<div class="pad"><button class="lnk back" data-a="personBack">${ic('left', 18)}Back</button></div>
     <div class="box pbox phero"><div class="phead">${avatar(p.name)}<div class="grow"><div class="pname">${esc(p.name)}</div><div class="small muted">${kid ? 'Kid' : 'Parent'}${age !== null ? ' · ' + age + ' years old' : ''}${!me && seenTxt(p.name) ? ' · ' + seenTxt(p.name) : ''}</div></div>
       <button class="icon-btn" data-a="personEdit" data-v="${p.id}" aria-label="Edit ${esc(p.name)}">${ic('pen', 19)}</button></div>
-      <div class="pnow"><div class="lbl">Right now</div><div style="font-size:16px;font-weight:600">${esc(st.now)}</div>${st.next ? `<div class="small muted">${ic('clock', 13)} Next: ${esc(st.next)}</div>` : ''}</div></div>
+      ${flagLines(p)}<div class="pnow"><div class="lbl">Right now</div><div style="font-size:16px;font-weight:600">${esc(st.now)}</div>${st.next ? `<div class="small muted">${ic('clock', 13)} Next: ${esc(st.next)}</div>` : ''}</div></div>
     <div class="ptabs" role="tablist">${PTABS.map(([k, l]) => `<button role="tab" aria-selected="${PTAB === k}" class="${PTAB === k ? 'on' : ''}" data-a="ptab" data-v="${k}">${l}${k === 'todos' && open.length ? `<i class="${late.length ? 'bad' : ''}">${open.length}</i>` : k === 'mentions' && ment.length ? `<i>${ment.length}</i>` : ''}</button>`).join('')}</div>`;
   const tile = (k, n, l, sub, bad) => `<button class="ptile" data-a="ptab" data-v="${k}"><b class="${bad ? 'red' : ''}">${n}</b><span>${l}</span>${sub ? `<em class="${bad ? 'red' : ''}">${sub}</em>` : ''}</button>`;
   const mentRow = x => `<div class="li plain" data-a="open" data-t="${x.open[0]}" data-id="${esc(x.open[1])}">${avatar(x.who)}<div class="grow"><div class="small muted">${esc(x.who)} · ${x.kind} · ${ago(x.time)}</div><div>${withMentions(x.text)}</div></div></div>`;
@@ -1829,7 +1834,7 @@ function vFeed() {
     <div class="wxrow">${WXI(code, 30)}<b>${night || WX.now === null ? wd.high : WX.now}°</b><span class="small muted">${WXW[wxKind(code)]}${WX.place ? ' · ' + esc(WX.place) : ''}</span></div>
     <div class="tiles3"><div><span>HIGH / LOW</span><b>${wd.high}° / ${wd.low}°</b></div><div><span>RAIN</span><b>${wd.rain}%</b></div><div><span>UV</span><b>${wd.uv} ${uvWord(wd.uv)}</b></div></div>
     ${wx.length ? `<div class="stack">${wx.map(w => `<div class="alert amber">${ic(w.icon, 16)}<span>${esc(w.text)}</span></div>`).join('')}</div>` : ''}` : '';
-  const ai = aiCard(sd, night), pl0 = planRows(sd, !night && h >= 12 ? now : ''), pl = ai.brief ? foldRuns(pl0, sd) : pl0;
+  const ai = aiCard(sd, night), pl0 = planRows(sd, !night ? now : ''), pl = ai.brief ? foldRuns(pl0, sd) : pl0;
   const prow = r => `<div class="prow ${!night && h < 12 && r.s && (r.e || r.s) < now ? 'past' : ''}" ${r.tap || ''}><span>${r.s ? fmtT(r.s) : r.dinner ? 'Dinner' : 'All day'}</span><span><b>${esc(r.title)}</b>${r.mk || ''}${r.who ? ' ' + r.who : ''}${r.sub ? ' · ' + r.sub : ''}</span></div>`;
   let html = `<div class="hero">${ai.brief ? `<span class="aimk" style="float:right;margin:0" title="Touched up by the assistant" aria-label="Touched up by the assistant">${ic('spark', 15)}</span>` : ''}<div class="small muted b">${new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}</div>
       <div style="font-size:22px;font-weight:800;letter-spacing:-.5px">Good ${h < 12 ? 'morning' : h < 17 ? 'afternoon' : 'evening'}, ${esc(ME)}</div>
