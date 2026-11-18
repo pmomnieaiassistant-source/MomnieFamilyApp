@@ -93,6 +93,8 @@
   .rcard .under { position:absolute; inset:0; display:flex; justify-content:space-between; align-items:center; padding:0 20px; background:var(--soft); font-weight:700; font-size:14px; }
   .rcard .under .yes { color:var(--green); } .rcard .under .no { color:var(--muted); }
   .rcard .dchg { z-index:3; border-radius:20px; }
+  .imptext { width:100%; min-height:180px; margin-top:10px; font-family:ui-monospace, Menlo, monospace; font-size:13px; }
+  .llmtxt { white-space:pre-wrap; font-size:12px; line-height:1.45; background:var(--soft); border-radius:12px; padding:12px; max-height:50vh; overflow:auto; }
   .rcard.dim .ti, .rcard.dim .small { opacity:.5; }
   .rcard .ti { font-weight:700; font-size:16px; }
   .nights { display:flex; gap:8px; overflow-x:auto; padding:8px 16px 12px; scrollbar-width:none; } .nights::-webkit-scrollbar { display:none; }
@@ -311,7 +313,7 @@
 // Momnie Family app v6.0
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'], DAYN = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'], ADULTS = ['Paul', 'Shana'];
 // Shown at the bottom of Home. Bump it together with VERSION in sw.js on every release.
-const APP_VERSION = '10.3 · Nov 18, 2026';
+const APP_VERSION = '10.4 · Nov 18, 2026';
 const TABLES = ['People', 'Schools', 'SchoolCal', 'Activities', 'Overrides', 'Events', 'Caretakers', 'Childcare', 'Birthdays', 'Todos', 'TodoTypes', 'Recipes', 'DinnerRules', 'Weeks', 'Menus',
   'Groceries', 'GroceryList', 'HouseCards', 'Houses', 'WeatherRules', 'Quotes', 'Memories', 'Updates', 'Messages', 'Activity', 'Comments', 'Reactions', 'Links', 'Settings', 'Photos', 'gifts', 'daily_items', 'daily_completions'];
 const CAT = { School: '#3f6fb5', Kids: '#4f7cc2', Work: '#64748b', Family: '#5b6fa8', Dinner: '#b08a4f', Caretaker: '#3e9aa6', Shared: '#94a3b8', Birthday: '#c9806a' }, SCHOOL_C = ['#5a72b8', '#7a8597', '#4a6fb0'];
@@ -477,6 +479,7 @@ const ICONS = {
   shuffle: '<path d="M16 3h5v5M4 20 21 3M21 16v5h-5M15 15l6 6M4 4l5 5"/>',
   archive: '<rect x="3" y="4" width="18" height="5" rx="1"/><path d="M5 9v10a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V9M10 13h4"/>',
   receipt: '<path d="M6 2.5h12v19l-3-2-3 2-3-2-3 2zM9 8h6M9 12h6M9 16h3"/>',
+  copy: '<rect x="8.5" y="8.5" width="12" height="12" rx="2"/><path d="M15.5 8.5V5a1.5 1.5 0 0 0-1.5-1.5H5A1.5 1.5 0 0 0 3.5 5v9A1.5 1.5 0 0 0 5 15.5h3.5"/>',
   building: '<path d="M4 21V5a1 1 0 0 1 1-1h9a1 1 0 0 1 1 1v16M15 9h4a1 1 0 0 1 1 1v11M3 21h18M8 8h3M8 12h3M8 16h3"/>',
   bag: '<path d="M5 8h14l-1 13H6zM9 8V6a3 3 0 0 1 6 0v2"/>',
   wallet: '<rect x="3" y="6" width="18" height="14" rx="2.5"/><path d="M3 10h18M16 15h2M6 6l9-3 1.5 3"/>',
@@ -853,6 +856,126 @@ function driveCheck(names) {
 const sys = (t, ref, text) => ({ t: 'Comments', row: { id: nid(), table: t, ref, text, system: '1' } });
 
 const UNITS = ['lb', 'oz', 'g', 'kg', 'cup', 'tbsp', 'tsp', 'whole', 'clove', 'can', 'jar', 'bag', 'box', 'pkg', 'bunch', 'slice', 'pinch', 'ml', 'l'];
+/** Sheet rows for one recipe, plus grocery cards for ingredients the app hasn't seen (seen is shared across an import). */
+function recipeOps(v, seen) {
+  ['unique', 'pantry'].forEach(k => { if (v['_' + k]) v[k] = v['_' + k].map(ingStr).filter(Boolean).join(', '); });
+  const row = {}; Object.keys(v).forEach(k => { if (k[0] !== '_') row[k] = v[k]; }); row.id = v.id || nid();
+  const ops = [{ t: 'Recipes', row, log: v.id ? null : L('recipe_add', 'added a recipe: ' + v.name, 'dinner') }];
+  ['unique', 'pantry'].forEach(k => list(row[k]).map(x => ingParse(x).name).forEach(n => { if (n && !groc(n) && !seen.has(norm(n))) { seen.add(norm(n)); ops.push({ t: 'Groceries', row: { id: nid(), name: n, category: k === 'pantry' ? 'Pantry' : '' } }); } }));
+  return ops;
+}
+// ----- Recipe import: a plain-text format an AI can write from a link, a photo or a cookbook page -----
+const RECIPE_FORMAT = `=== RECIPE ===
+Name: Sheet-pan chicken fajitas
+Description: One pan, about 30 minutes. Kids build their own.
+Tags: mexican, quick, sheet pan
+Link: https://example.com/fajitas
+Buy:
+- chicken thighs | 1.5 | lb
+- bell peppers | 3 |
+- flour tortillas | 8 |
+- sour cream | 1 | cup
+Pantry:
+- olive oil | 2 | tbsp
+- chili powder | 1 | tbsp
+- salt |  |
+Steps:
+1. Heat the oven to 425°F.
+2. Slice the chicken and peppers, toss with oil and spices.
+3. Roast 20 to 25 minutes, then warm the tortillas.
+=== END ===`;
+const LLM_INSTRUCTIONS = `You are helping me add recipes to my family's meal-planning app. I will give you a recipe (a link, pasted text, or a photo of a cookbook page). Rewrite each recipe in EXACTLY the format below so the app can import it. Reply with only the formatted recipe(s), inside one code block, with no other text.
+
+FORMAT (one block per recipe; several blocks can follow each other):
+
+${RECIPE_FORMAT}
+
+RULES
+- Start every recipe with "=== RECIPE ===" and end it with "=== END ===".
+- Name: short and plain, the way a family would say it ("Chicken tacos", not "The Best Ever Easy Chicken Tacos!").
+- Description: one sentence. Mention total time if known. Optional.
+- Tags: 1 to 5 lowercase keywords, comma separated, no # signs. Prefer: quick, slow cooker, sheet pan, grill, pasta, soup, salad, vegetarian, fish, chicken, beef, pork, mexican, italian, asian, kid favorite, make ahead, freezer.
+- Link: the source URL if there is one. Otherwise leave the line out.
+- Buy: things to pick up at the store for this recipe (fresh produce, meat, dairy, bread, anything not usually in the cupboard).
+- Pantry: staples most kitchens keep (oil, butter, flour, sugar, salt, pepper, dried spices, vinegar, soy sauce, stock, canned tomatoes, rice, dried pasta). These are checked, not bought every time.
+- Each ingredient is one line: "- name | amount | unit".
+  - name: the plain grocery name, singular where natural, no prep words ("yellow onion", not "1 onion, finely diced").
+  - amount: a number, fraction or range (1, 1.5, 1/2, 2-3). Leave empty if there is none ("to taste").
+  - unit: lb, oz, g, kg, cup, tbsp, tsp, ml, l, clove, can, jar, package, bunch, slice. Leave empty for whole items ("3" bell peppers).
+  - Never put commas or parentheses in a name, amount or unit.
+- Steps: numbered, short, in order. Put prep notes (diced, minced) here, not in ingredient names.
+- Keep the recipe's quantities. Don't invent ingredients or steps that aren't in the source.
+- If I send several recipes, return one block for each.`;
+const ING_UNITS = 'lb|lbs|pound|pounds|oz|ounce|ounces|g|gram|grams|kg|cup|cups|c|tbsp|tablespoon|tablespoons|tsp|teaspoon|teaspoons|ml|l|liter|liters|clove|cloves|can|cans|jar|jars|package|packages|pkg|bunch|bunches|slice|slices|pinch|dash|stick|sticks|head|heads|sprig|sprigs';
+const FRAC = { '½': '1/2', '⅓': '1/3', '⅔': '2/3', '¼': '1/4', '¾': '3/4', '⅛': '1/8' };
+/** One ingredient line: "name | amount | unit", or loosely "1 1/2 lb chicken thighs". */
+function ingLine(t) {
+  t = t.replace(/^\s*(?:[-*•]|\d+[.)])\s*/, '').replace(/[½⅓⅔¼¾⅛]/g, m => ' ' + FRAC[m]).replace(/\*\*/g, '').trim(); if (!t) return null;
+  if (t.includes('|')) { const [n, a, u] = t.split('|').map(x => x.trim()); return n ? { name: n.replace(/[,()]/g, ' ').replace(/\s+/g, ' ').trim(), amount: a || '', unit: u || '' } : null; }
+  const m = t.match(new RegExp('^((?:\\d+\\s+)?\\d+\\/\\d+|\\d*\\.?\\d+(?:\\s*-\\s*\\d*\\.?\\d+)?)\\s*(' + ING_UNITS + ')?\\.?\\s+(.+)$', 'i'));
+  const clean = n => n.replace(/\(.*?\)/g, '').split(',')[0].replace(/\s+/g, ' ').trim();
+  return m ? { name: clean(m[3]), amount: m[1].replace(/\s*-\s*/, '-').replace(/\s+/g, ' ').trim(), unit: (m[2] || '').toLowerCase() } : { name: clean(t), amount: '', unit: '' };
+}
+/** Reads one or more "=== RECIPE ===" blocks. Returns { recipes, problems }. */
+function recipeParse(txt) {
+  const lines = String(txt || '').replace(/\r/g, '').split('\n').filter(l => !/^\s*```/.test(l)), out = [], problems = [];
+  let cur = null, sec = '';
+  const start = () => { cur = { name: '', description: '', tags: '', link: '', _unique: [], _pantry: [], steps: [] }; out.push(cur); sec = ''; };
+  const KEY = /^\s*\**\s*(name|title|description|summary|tags|keywords|link|url|source|buy|ingredients|shopping|pantry|staples|steps|instructions|method|directions|notes)\s*\**\s*:\s*(.*)$/i;
+  lines.forEach(l => { l = l.replace(/\*\*|__/g, '');   // AI answers often bold the labels
+    if (/^\s*=+\s*recipe\s*=+\s*$/i.test(l)) return start();
+    if (/^\s*=+\s*end\s*=+\s*$/i.test(l)) { cur = null; return; }
+    const k = l.match(KEY);
+    if (k) { if (!cur) start(); const key = k[1].toLowerCase(), val = k[2].trim();
+      if (/^(name|title)$/.test(key)) { cur.name = val; sec = ''; }
+      else if (/^(description|summary)$/.test(key)) { cur.description = val; sec = 'description'; }
+      else if (/^(tags|keywords)$/.test(key)) { cur.tags = list(val.replace(/#/g, '')).map(x => x.toLowerCase()).join(', '); sec = ''; }
+      else if (/^(link|url|source)$/.test(key)) { cur.link = val; sec = ''; }
+      else if (/^(buy|ingredients|shopping)$/.test(key)) { sec = 'buy'; if (val) { const i = ingLine(val); if (i) cur._unique.push(i); } }
+      else if (/^(pantry|staples)$/.test(key)) { sec = 'pantry'; if (val) { const i = ingLine(val); if (i) cur._pantry.push(i); } }
+      else if (/^(steps|instructions|method|directions)$/.test(key)) { sec = 'steps'; if (val) cur.steps.push(val); }
+      else if (key === 'notes') { sec = 'notes'; if (val) cur.steps.push('Notes: ' + val); }
+      return; }
+    if (!cur || !l.trim()) return;
+    if (sec === 'buy' || sec === 'pantry') { const i = ingLine(l); if (i) cur[sec === 'buy' ? '_unique' : '_pantry'].push(i); }
+    else if (sec === 'steps' || sec === 'notes') cur.steps.push(l.trim());
+    else if (sec === 'description') cur.description = (cur.description + ' ' + l.trim()).trim();
+  });
+  const recipes = out.filter(r => { if (!r.name) { problems.push('A recipe block has no Name: line, so it was skipped.'); return false; } return true; })
+    .map(r => Object.assign(r, { steps: r.steps.map((x, i) => /^\d+[.)]\s/.test(x) || /^notes:/i.test(x) ? x : (i + 1) + '. ' + x.replace(/^[-*•]\s*/, '')).join('\n') }));
+  if (!out.length) problems.push('No recipe found. Each recipe starts with "=== RECIPE ===" and has a "Name:" line.');
+  return { recipes, problems };
+}
+// ＋ on the Recipes tab: type one in, or import text from an AI.
+A.recNew = () => sheet(() => `<h2>New recipe</h2>` + hrow('recNewForm', '', 'pen', 'Add new', 'Type it in: ingredients, steps, keywords') +
+  hrow('recImport', '', 'copy', 'Import', 'Paste recipe text made with the LLM instructions (Home, Meals)'));
+A.recNewForm = (v, el) => { A.close(null, el); editForm('Recipes', null); };
+let IMP = { text: '', res: null };
+A.recImport = (v, el) => { A.close(null, el); IMP = { text: '', res: null }; const d = sheet(() => recImportHTML()); d.classList.add('imp'); };
+function recImportHTML() {
+  const r = IMP.res, have = n => S.Recipes.some(x => norm(x.name) === norm(n));
+  return `<h2>Import recipes</h2><div class="small muted">Paste the recipe text here. To make it, copy the LLM instructions from <b>Home, Meals</b>, give them to ChatGPT or Claude with a recipe link, text or photo, and copy its answer.</div>
+    <textarea class="imptext" data-c="impText" placeholder="=== RECIPE ===&#10;Name: …">${esc(IMP.text)}</textarea>
+    <div class="actions"><button class="btn gray sm" data-a="impPaste">${ic('copy', 16)}Paste</button><button class="btn sm" data-a="impPreview">Preview</button></div>` +
+    (r ? (r.problems.map(p => `<div class="alert amber" style="margin-top:8px">${esc(p)}</div>`).join('') +
+      r.recipes.map(x => `<div class="li plain"><div class="grow"><div class="ti">${esc(x.name)}${have(x.name) ? ' <span class="chip">Already saved</span>' : ''}</div>
+        <div class="small muted">${x._unique.length} to buy · ${x._pantry.length} pantry · ${x.steps ? x.steps.split('\n').length + (x.steps.split('\n').length === 1 ? ' step' : ' steps') : 'no steps'}${x.tags ? ' · ' + list(x.tags).map(t => '#' + esc(t)).join(' ') : ''}</div></div></div>`).join('') +
+      (r.recipes.length === 1 ? `<div class="actions"><button class="btn" data-a="impOne">Review and save</button></div>`
+        : r.recipes.length ? `<div class="actions"><button class="btn" data-a="impAll">Add ${r.recipes.filter(x => !have(x.name)).length} recipe${r.recipes.filter(x => !have(x.name)).length === 1 ? '' : 's'}</button></div>${r.recipes.some(x => have(x.name)) ? '<div class="small muted">Recipes already saved are skipped.</div>' : ''}` : '')) : '');
+}
+A.impText = v => { IMP.text = v; };
+A.impPaste = async () => { try { const t = await navigator.clipboard.readText(); if (t) { IMP.text = t; IMP.res = recipeParse(t); refresh(); } } catch (e) { toast('Tap in the box and paste instead.'); } };
+A.impPreview = () => { const ta = document.querySelector('dialog[open] .imptext'); IMP.text = ta ? ta.value : IMP.text; IMP.res = recipeParse(IMP.text); refresh(); };
+A.impOne = (v, el) => { const x = IMP.res && IMP.res.recipes[0]; if (!x) return; A.close(null, el); editForm('Recipes', null, x); };
+A.impAll = async (v, el) => { const seen = new Set(), add = (IMP.res ? IMP.res.recipes : []).filter(x => !S.Recipes.some(r => norm(r.name) === norm(x.name)));
+  if (!add.length) return toast('Those are all saved already.');
+  A.close(null, el); await write(add.flatMap(x => recipeOps(Object.assign({}, x), seen))); toast(`Added ${add.length} recipe${add.length === 1 ? '' : 's'}`); };
+// Home, Meals: the dinner rules and the instructions to give an AI.
+A.mealsHome = () => sheet(() => `<h2>Meals</h2>` + hrow('rules', '', 'gear', 'Dinner rules', 'Each night, who cooks, who is out, draft day, pause length') +
+  hrow('llmCopy', '', 'copy', 'Copy LLM instructions', 'Paste into ChatGPT or Claude with a recipe, then import the answer under Meals, Recipes, ＋') +
+  `<details style="margin-top:14px"><summary class="small muted">See the instructions</summary><pre class="llmtxt">${esc(LLM_INSTRUCTIONS)}</pre></details>`);
+A.llmCopy = async () => { try { await navigator.clipboard.writeText(LLM_INSTRUCTIONS); toast('Copied. Paste into ChatGPT or Claude with a recipe.'); }
+  catch (e) { const t = document.createElement('textarea'); t.value = LLM_INSTRUCTIONS; (document.querySelector('dialog[open]') || document.body).appendChild(t); t.select(); try { document.execCommand('copy'); toast('Copied.'); } catch (x) { toast("Couldn't copy. Open 'See the instructions' and copy from there."); } t.remove(); } };
 const ING_COLS = [{ c: 'name', ph: 'Ingredient', cls: 'n', list: 'dlGroc' }, { c: 'amount', ph: 'Amt', cls: 'a', im: 'decimal' }, { c: 'unit', ph: 'Unit', cls: 'u', list: 'dlUnit' }];
 const ingLists = () => `<datalist id="dlGroc">${S.Groceries.map(g => `<option value="${esc(g.name)}">`).join('')}</datalist><datalist id="dlUnit">${UNITS.map(u => `<option value="${u}">`).join('')}</datalist>`;
 // ---------- form definitions ----------
@@ -998,11 +1121,7 @@ const SAVE = {
   },
   async Recipes(v) {
     need(v.name && v.name.trim(), 'Name the recipe.');
-    ['unique', 'pantry'].forEach(k => { if (v['_' + k]) v[k] = v['_' + k].map(ingStr).filter(Boolean).join(', '); });
-    const row = {}; Object.keys(v).forEach(k => { if (k[0] !== '_') row[k] = v[k]; }); row.id = v.id || nid();
-    const ops = [{ t: 'Recipes', row, log: v.id ? null : L('recipe_add', 'added a recipe: ' + v.name, 'dinner') }], seen = new Set();
-    ['unique', 'pantry'].forEach(k => list(row[k]).map(x => ingParse(x).name).forEach(n => { if (n && !groc(n) && !seen.has(norm(n))) { seen.add(norm(n)); ops.push({ t: 'Groceries', row: { id: nid(), name: n, category: k === 'pantry' ? 'Pantry' : '' } }); } }));
-    return write(ops);
+    return write(recipeOps(v, new Set()));
   },
   async Messages(v, mode) {
     need(v.text && v.text.trim(), 'Write a message.');
@@ -1738,7 +1857,7 @@ function vRecFeed() {
   const applied = [RS !== 'stale' ? SORTS.find(x => x[0] === RS)[1] : ''].concat(RT.map(t => '#' + t)).filter(Boolean);
   const pm = PFOR && byId('Menus', PFOR);
   return (pm ? `<div class="pickbar"><div class="grow"><b>Pick dinner for ${pm.date === TODAY ? 'tonight' : esc(fmtDay(pm.date))}</b><div class="small">Tap a recipe to put it on that night.</div></div><button class="btn gray sm" data-a="pickCancel">Cancel</button></div>` : '') +
-    `<div class="rbar"><div class="rsearch"><input placeholder="${RARCH && !PFOR ? 'Search archived recipes' : 'Search recipes'}" value="${esc(RFQ)}" onchange="RFQ=this.value;refresh()">${PFOR ? '' : `<button class="rmbtn" data-a="add" data-v="Recipes" aria-label="New recipe">${ic('plus', 22)}</button>`}<button class="rmbtn ${on ? 'on' : ''}" data-a="recMenu" aria-label="Sort and tags" aria-expanded="${RMENU}">${ic('menu', 22)}${on ? `<i>${on}</i>` : ''}</button></div>
+    `<div class="rbar"><div class="rsearch"><input placeholder="${RARCH && !PFOR ? 'Search archived recipes' : 'Search recipes'}" value="${esc(RFQ)}" onchange="RFQ=this.value;refresh()">${PFOR ? '' : `<button class="rmbtn" data-a="recNew" aria-label="New recipe">${ic('plus', 22)}</button>`}<button class="rmbtn ${on ? 'on' : ''}" data-a="recMenu" aria-label="Sort and tags" aria-expanded="${RMENU}">${ic('menu', 22)}${on ? `<i>${on}</i>` : ''}</button></div>
     ${RMENU ? `<div class="rshade" data-a="recMenu"></div><div class="rmenu" role="dialog" aria-label="Sort and tags"><div class="lbl" style="margin-top:0">Sort by</div>
       ${SORTS.map(([k, l]) => `<button class="rmopt ${RS === k ? 'on' : ''}" data-a="recSort" data-v="${k}">${RS === k ? ic('check', 16) : '<span style="width:16px"></span>'}${l}</button>`).join('')}
       ${tags.length ? `<div class="lbl">Tags</div><div class="rmtags">${tags.map(t => `<button class="chip ${RT.includes(t) ? 'on' : ''}" data-a="recTag" data-v="${esc(t)}">#${esc(t)}</button>`).join('')}</div>` : ''}
@@ -1904,7 +2023,6 @@ A.dlEdit = id => { const it = byId('daily_items', id); if (it) dailyForm(it); };
 
 // ----- Home -----
 const SETTINGS = [['Caretakers', 'care', 'Caretakers', 'Boston and Cape rosters, rates, driving'], ['birthdays', 'cake', 'Birthdays', 'Friends and family'], ['WeatherRules', 'weather', 'Weather rules', 'If-then reminders based on the forecast'],
-  ['rules', 'book', 'Dinner and recipes', 'Rules for each night, who cooks, draft day, how long a paused recipe sits out'],
   ['Groceries', 'cart', 'Grocery library', 'Saved items with brands and notes'], ['TodoTypes', 'tag', 'To-do types', 'Types and who they go to by default'], ['memories', 'quote', 'Quotes and memories', 'The morning splash screen'],
   ['settings', 'bell', 'Notifications and Feed', 'Push alerts, bundling, quiet hours, what shows in your Feed'], ['device', 'phone', 'This phone', 'Your personal link and sign-in']];
 // Muted section colors for the Home icons.
@@ -1924,6 +2042,7 @@ function vHome() {
     hrow('homeOpen', 'Activities', 'activity', 'Activities', grp.length ? `${grp.length} repeating, for kids and parents` : 'Repeating activities like hockey or piano') +
     hrow('homeOpen', 'houses', 'house', 'House', 'Info and upkeep · ' + houses) +
     hrow('homeOpen', 'gifts', 'gift', 'Gift ideas', 'Ideas for everyone, any time of year') +
+    hrow('mealsHome', '', 'book', 'Meals', 'Dinner rules and the LLM instructions for importing recipes') +
     hrow('openSettings', '', 'gear', 'Settings', 'Caretakers, birthdays, weather, notifications and more') +
     `<div class="hfoot"><div class="ver">Version ${APP_VERSION}</div>Made with love by your husband Paul.<br><a data-a="feedback">Click here to provide constructive feedback</a></div>`;
 }
@@ -1962,7 +2081,7 @@ const PAGES = {
 ` +
       (API_URL ? '' : `<h3>Connection</h3><label>Backend URL</label><input id="sUrl" value="${esc(store.get('url'))}"><div class="actions"><button class="btn gray" data-a="connect">Save and reconnect</button></div>`); }
 };
-A.homeOpen = k => { if (!ME && k !== 'settings') return; if (k === 'rules') return A.rules(); sheet(() => PAGES[k]()); };
+A.homeOpen = k => { if (!ME && k !== 'settings') return; sheet(() => PAGES[k]()); };
 A.settings = () => sheet(ME ? () => PAGES.settings() : `<h2>Connect</h2><label>Backend URL (Apps Script web app)</label><input id="sUrl" value="${esc(store.get('url'))}" placeholder="https://script.google.com/macros/s/.../exec"><div class="actions"><button class="btn" data-a="connect">Connect</button></div>`);
 A.editH = id => editForm('Houses', byId('Houses', id));
 A.setFlag = (v, el) => setSt(el.dataset.k, v === '1' ? '1' : '0'); A.setVal = (v, el) => setSt(el.dataset.k, v);
