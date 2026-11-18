@@ -199,6 +199,9 @@
   .li.note { padding:12px 16px; } .giftwrap { margin-top:18px; } .giftrow { padding:10px 16px; gap:10px; opacity:.85; }
   .aimk { display:inline-flex; vertical-align:middle; margin-left:5px; color:var(--asst); opacity:.45; } .aimk.c { float:right; margin:8px 10px 0 0; }
   .aiopen { float:right; margin:0 8px 0 0; height:32px; padding:0 10px; } .aibox { margin-top:4px; padding:12px; border-radius:16px; background:var(--soft); } .aibox textarea { width:100%; background:var(--card); }
+  .ailine { margin-top:6px; font-size:15px; line-height:1.4; color:var(--muted); }
+  .flags { display:flex; gap:5px; margin-top:6px; } .flag { display:inline-flex; align-items:center; justify-content:center; width:24px; height:24px; border-radius:50%; border:0; background:var(--soft); color:var(--muted); padding:0; }
+  .flag.on { background:var(--soft); color:var(--accent); } .flag.off { background:var(--amberbg); color:var(--amber); }
   .aihead { margin-top:10px; font-size:17px; line-height:1.4; font-weight:600; letter-spacing:-.2px; }
   .wxline { display:flex; align-items:center; gap:8px; margin-top:12px; font-size:14px; } .wxline b { font-size:17px; }
   .wxsay { margin-top:4px; font-size:14px; color:var(--muted); }
@@ -338,7 +341,7 @@
 // Momnie Family app v6.0
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'], DAYN = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'], ADULTS = ['Paul', 'Shana'];
 // Shown at the bottom of Home. Bump it together with VERSION in sw.js on every release.
-const APP_VERSION = '13.4 · Nov 18, 2026';
+const APP_VERSION = '13.5 · Nov 18, 2026';
 const TABLES = ['People', 'Schools', 'SchoolCal', 'Activities', 'Overrides', 'Events', 'Caretakers', 'Childcare', 'Birthdays', 'Todos', 'TodoTypes', 'Recipes', 'DinnerRules', 'Weeks', 'Menus',
   'Groceries', 'GroceryList', 'HouseCards', 'Houses', 'WeatherRules', 'Quotes', 'Memories', 'Updates', 'Messages', 'Activity', 'Comments', 'Reactions', 'Links', 'Settings', 'Photos', 'gifts', 'ai_rules', 'ai_requests', 'notes', 'daily_items', 'daily_completions'];
 const CAT = { School: '#3f6fb5', Kids: '#4f7cc2', Work: '#64748b', Family: '#5b6fa8', Dinner: '#b08a4f', Caretaker: '#3e9aa6', Shared: '#94a3b8', Birthday: '#c9806a' }, SCHOOL_C = ['#5a72b8', '#7a8597', '#4a6fb0'];
@@ -786,6 +789,22 @@ function statusOf(p) {
   const rides = timed.filter(b => b.task && b.s > now).length;
   return { now: st, next, open: cur || nxt || off, warn: timed.some(b => b.ride && b.s > now && (!b.drop || !b.pick)), rides, busy: !!cur };
 }
+// Small icons on Home that light up for a parent's day: drop-off, pickup, working from home or at work, not home for
+// dinner, making dinner. Tap one to see what it is about.
+function personFlags(p) {
+  if (p.kind === 'kid') return [];
+  const d = TODAY, runs = schoolRuns(d).filter(r => r.who === p.name), items = itemsFor(d).filter(i => i.start && i.t !== 'GCal');
+  const drops = runs.filter(r => r.kind === 'd').map(r => `${kidNames(r.kids)} at ${r.name} ${fmtT(r.time)}`).concat(items.filter(i => i.dropoff === p.name).map(i => `${kidNames(i.people) || 'kids'} at ${i.title} ${fmtT(i.start)}`));
+  const picks = runs.filter(r => r.kind !== 'd').map(r => `${kidNames(r.kids)} from ${r.name} ${fmtT(r.time)}`).concat(items.filter(i => i.pickup === p.name).map(i => `${kidNames(i.people) || 'kids'} from ${i.title} ${fmtT(i.end || i.start)}`));
+  const out = [], m = S.Menus.find(x => x.date === d), dish = m ? (byId('Recipes', m.recipeId) || {}).name || m.note || '' : '';
+  if (drops.length) out.push({ icon: 'up', cls: 'on', label: 'Drop-off', info: `${p.name} drops off ${drops.join('; ')}` });
+  if (picks.length) out.push({ icon: 'down', cls: 'on', label: 'Pickup', info: `${p.name} picks up ${picks.join('; ')}` });
+  if (list(p.workDays).includes(DAYS[dowIdx(d)]) && p.workStart) { const home = workWhere(p, d) === 'home';
+    out.push({ icon: home ? 'house' : 'building', cls: 'on', label: home ? 'Working from home' : 'At work', info: `${p.name} ${home ? 'is working from home' : 'is at work'} ${fmtT(p.workStart)}${p.workEnd ? '–' + fmtT(p.workEnd) : ''}` }); }
+  if (m && list(m.away).includes(p.name)) out.push({ icon: 'meals', cls: 'off', label: 'Not home for dinner', info: `${p.name} won't be home for dinner tonight` });
+  else if (m && m.cook === p.name) out.push({ icon: 'meals', cls: 'on', label: 'Making dinner', info: `${p.name} is making dinner tonight${dish ? ': ' + dish : ''}` });
+  return out; }
+const flagsHTML = p => { const f = personFlags(p); return f.length ? `<div class="flags">${f.map(x => `<button class="flag ${x.cls}" data-a="flagInfo" data-v="${esc(x.info)}" aria-label="${esc(x.label)}" title="${esc(x.label)}">${ic(x.icon, 13)}</button>`).join('')}</div>` : ''; };
 /** Grocery needs that come from planned dinners. */
 function recipeNeeds(from, to, col) {
   const out = [];
@@ -1318,7 +1337,7 @@ const CARD = {
       kv('Calendar', r.gcalId ? 'Copied to the shared calendar; change it here, not in Google Calendar' : '') + (r.category === 'Kids' && !all ? rideBox('Rides', r.dropoff, r.pickup) : '') + std({ care: 1 }); },
   GCal(r) { return `<h2>${esc(r.title)}</h2>` + kv('When', r.allDay ? fmtDay(r.start) + (addDays(r.end, -1) > r.start ? ' – ' + fmtDay(addDays(r.end, -1)) : '') + ' · all day' : `${fmtDay(r.start)} · ${fmtT(r.start.slice(11))}–${fmtT(r.end.slice(11))}`) + kv('Where', r.location) + kv('From', 'Shared calendar') +
       `<div class="kv muted small">${r.recurring ? 'A repeating entry from the shared calendar. Import it as an app activity to manage it here, with rides and the kids it is for.' : 'From the shared calendar. Import it to add who it is for, rides and caretakers, and edit it here.'}</div>` +
-      `<div class="actions"><button class="btn sm" data-a="convert">${ic('plus', 16)}Import</button><button class="btn gray sm" data-a="link">${ic('link')}Link</button><button class="btn gray sm" data-a="careFor">${ic('care')}Add caretaker</button>${r.recurring ? '' : '<button class="btn danger sm" data-a="gcalDel">' + ic('trash') + 'Delete</button>'}</div>`; },
+      `<div class="actions"><button class="btn sm" data-a="convert">${ic('plus', 16)}Import</button><button class="btn gray sm" data-a="link">${ic('link')}Link</button><button class="btn gray sm" data-a="careFor">${ic('care')}Add caretaker</button><button class="btn gray sm" data-a="gcalHide">${ic('x', 16)}${r.recurring ? 'Hide the series' : 'Hide from planner'}</button>${r.recurring ? '' : '<button class="btn danger sm" data-a="gcalDel">' + ic('trash') + 'Delete</button>'}</div>`; },
   Activities(r, d) { const o = d ? ovr(r.id, d) : {};
     return `<h2>${esc(r.name)}</h2>` + kvh('Who', list(r.kids).map(n => `<span class="pdot" style="background:${pcol(n)}"></span>${esc(n)}`).join('&nbsp;&nbsp; ')) + kv('When', schedTxt(actGroup(r))) + kv('Season', r.from || r.until ? `${r.from ? fmtDate(r.from) : 'now'} to ${r.until ? fmtDate(r.until) : 'ongoing'}` : '') + kv('Where', r.location) + kv('Teacher or contact', r.teacher) +
       (list(r.kids).some(n => kidN().includes(n)) ? kv('Usual rides', `Drop-off: ${r.dropoff || 'not set'} · Pickup: ${r.pickup || 'not set'}`) : '') + kv('House', r.house) + kv('Notes', r.notes) + kv('Calendar', actGroup(r).some(x => x.gcalId) ? 'Copied to the shared calendar; change it here, not in Google Calendar' : '') + (d && list(r.kids).some(n => kidN().includes(n)) ? rideBox('Rides for ' + fmtDay(d), o.dropoff || r.dropoff, o.pickup || r.pickup, true) : '') + std({ care: 1 }); },
@@ -1590,6 +1609,14 @@ A.adopt = (v, el) => { const r = CAL.find(x => x.id === ctx(el).id); if (!r) ret
   editForm('Events', null, { title: r.title, date: r.start.slice(0, 10), allDay: r.allDay ? '1' : '', endDate: r.allDay && addDays(r.end, -1) > r.start ? addDays(r.end, -1) : '', start: r.allDay ? '' : r.start.slice(11), end: r.allDay ? '' : r.end.slice(11), location: r.location, gcalId: r.id, gcal: '1' }); A.close(null, el); };
 A.gcalDel = async (v, el) => { const c = ctx(el), r = CAL.find(x => x.id === c.id); if (!confirm('This will delete it from the calendar. Are you sure?')) return;
   await call('gcal_delete', { gcalId: c.id, log: L('delete', 'removed a calendar event: ' + r.title, 'planner') }); };
+// Hide a calendar entry (or a whole repeating series) from the planner and Feed. Nothing is made in the app; the
+// calendar entry gets the app's hidden key, and Settings, Hidden calendar entries can bring it back.
+A.gcalHide = async (v, el) => { const c = ctx(el), r = CAL.find(x => x.id === c.id); if (!r) return;
+  if (!confirm(r.recurring ? `Hide every “${r.title}” in this series from the planner? It stays in Google Calendar.` : `Hide “${r.title}” from the planner? It stays in Google Calendar.`)) return;
+  A.close(null, el); CAL = CAL.filter(x => r.recurring && r.series ? x.series !== r.series : x.id !== r.id); render();
+  try { await api('gcal_hide', { gcalId: r.id, series: r.recurring ? '1' : '', title: r.title }); toast('Hidden from the planner'); } catch (e) { toast(e.message); load(); } };
+A.flagInfo = v => toast(v);
+A.gcalUnhide = async id => { try { await api('gcal_unhide', { id }); toast('Back in the planner'); await load(); } catch (e) { toast(e.message); } };
 A.resolve = (v, el) => { const m = byId('Messages', ctx(el).id), res = m.resolved !== '1'; write([{ t: 'Messages', row: { id: m.id, resolved: res ? '1' : '', resolvedBy: res ? ME : '' } }, sys('Messages', m.id, res ? 'resolved this message' : 'reopened this message')]); };
 A.msgTodo = (v, el) => { const m = byId('Messages', ctx(el).id); editForm('Todos', null, { title: m.text.slice(0, 120), _link: ['Messages', m.id] }); };
 A.msgEvent = (v, el) => { const m = byId('Messages', ctx(el).id); editForm('Events', null, { title: m.text.slice(0, 80), _link: ['Messages', m.id] }); };
@@ -1663,7 +1690,7 @@ function planRows(d, after) {
     (drop[b.s + '|' + base] = drop[b.s + '|' + base] || { s: b.s, n: base, k: [] }).k.push(k.name);
     if (b.ext) (ext[b.e + '|' + base] = ext[b.e + '|' + base] || { s: b.e, n: base, k: [] }).k.push(k.name);
     else (pick[b.e + '|' + base] = pick[b.e + '|' + base] || { s: b.e, n: base, k: [] }).k.push(k.name); }));
-  schoolRuns(d).forEach(r => rows.push({ s: r.time, title: r.name + ' ' + RIDE_WORD[r.kind], who: rideTag(r) + rideAI(r.sid, d, r.kind), sub: esc(kidNames(r.kids)), tap: `data-a="schoolRide" data-v="${r.sid}|${d}|${r.kind}"` }));
+  schoolRuns(d).forEach(r => rows.push({ run: r, s: r.time, title: r.name + ' ' + RIDE_WORD[r.kind], who: rideTag(r) + rideAI(r.sid, d, r.kind), sub: esc(kidNames(r.kids)), tap: `data-a="schoolRide" data-v="${r.sid}|${d}|${r.kind}"` }));
   itemsFor(d).filter(i => i.t !== 'GCal' && i.src !== 'gcal' && i.src !== 'birthday' && !i.ext).forEach(i => {
     const ride = i.ride ? (!i.dropoff || !i.pickup ? `<span class="red">${!i.dropoff && !i.pickup ? 'rides' : !i.dropoff ? 'drop-off' : 'pickup'} not set</span>` : rideHTML(i)) : '';
     const sub = i.src === 'dinner' ? [i.cook && esc(i.cook) + ' cooking', i.away && `<span class="amb">${esc(i.away)} not home</span>`].filter(Boolean).join(' · ') : [i.sub && (i.warn ? `<span class="red">${esc(i.sub)}</span>` : esc(i.sub)), ride].filter(Boolean).join(' · ');
@@ -1680,29 +1707,13 @@ function aiCard(sd, night) {
   let b = null; try { b = JSON.parse(st('ai.brief', '') || 'null'); } catch (e) {}
   return { on, brief: b && b.for === sd && b.mode === (night ? 'night' : 'day') && b.headline ? b : null };
 }
-const REF_ICON = { Todos: 'todo', Events: 'planner', Activities: 'activity', Childcare: 'care', Menus: 'meals', HouseCards: 'house', People: 'building', run: 'car' };
-function aiHero(b, o) {
-  const items = (b.items || []).filter(i => { const [t, id] = i.ref.split(':'); if (t !== 'Todos') return true; const x = byId('Todos', id); return x && x.status !== 'Done'; });
-  // Rule-based alerts (rides not set, caretaker not confirmed, conflicts, posts tagging you) always show. When the
-  // assistant wrote about the same thing, its wording is kept and takes the alert's color.
-  const akey = a => a.sride ? 'run:' + a.sride : a.open ? a.open[0] + ':' + a.open[1] : '', refs = new Set(items.map(i => i.ref).filter(Boolean));
-  const lvlOf = new Map(o.al.filter(a => refs.has(akey(a)) && a.lvl).map(a => [akey(a), a.lvl])), reds = o.al.filter(a => !refs.has(akey(a)));
-  const item = i => { const [t, ...rest] = i.ref.split(':'), id = rest.join(':'), lvl = lvlOf.get(i.ref) || (i.level === 'heads-up' ? 'amber' : 'plain');
-    const tap = !i.ref ? '' : t === 'run' ? `data-a="schoolRide" data-v="${esc(id)}"` : byId(t, id) || t === 'Menus' ? `data-a="open" data-t="${t}" data-id="${esc(id)}" data-d="${o.sd}"` : '';
-    return `<div class="alert ${lvl}" ${tap}>${ic(REF_ICON[t] || 'spark', 16)}<span class="grow">${esc(i.text)}</span>${tap ? ic('chev', 16) : ''}</div>`; };
-  const wxl = o.wd ? `<div class="wxline">${WXI(o.code, 22)}<b>${o.night || WX.now === null ? o.wd.high : WX.now}°</b><span class="muted">H ${o.wd.high}° · L ${o.wd.low}° · rain ${o.wd.rain}%${WX.place ? ' · ' + esc(WX.place) : ''}</span></div>` : '';
-  const wsay = b.weather ? `<div class="wxsay">${esc(b.weather)}</div>` : o.wx.length ? `<div class="stack">${o.wx.map(w => `<div class="alert amber">${ic(w.icon, 16)}<span>${esc(w.text)}</span></div>`).join('')}</div>` : '';
-  const t = b.time ? fmtT(b.time.slice(11, 16)) : '';
-  return `<div class="hero"><span class="aimk" style="float:right;margin:0" title="Written by the assistant" aria-label="Written by the assistant">${ic('spark', 15)}</span><div class="small muted b">${new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}</div>
-      <div style="font-size:22px;font-weight:800;letter-spacing:-.5px">Good ${o.h < 12 ? 'morning' : o.h < 17 ? 'afternoon' : 'evening'}, ${esc(ME)}</div>
-      <div class="aihead">${esc(b.headline)}</div>${wxl}${wsay}
-      ${reds.length ? `<div class="stack" style="margin-top:12px">${reds.map(a => o.remHTML({ lvl: a.lvl || 'plain', icon: a.icon, text: a.text, open: a.open, sride: a.sride, nav: a.nav })).join('')}</div>` : ''}
-      ${items.length ? `<div class="lbl">${o.night ? 'For tomorrow' : 'What matters'}</div><div class="stack">${items.map(item).join('')}</div>` : ''}
-      <details class="plan"><summary class="ph"><span>${o.night ? "Tomorrow's plan" : 'Full plan'} · ${o.pl.length}</span><span class="chev">${ic('chev', 16)}</span></summary>
-        ${o.pl.length ? o.pl.map(o.prow).join('') : `<div class="small muted" style="padding-top:6px">Nothing planned.</div>`}
-        <div class="actions" style="margin-top:6px"><button class="btn gray sm" data-a="planDay" data-v="${o.sd}">${ic('planner', 16)}Open in Planner</button></div></details>
-      <div class="aifoot">${ic('spark', 13)}<span class="grow">${BRIEFING ? 'Rewriting…' : `Written by your assistant${t ? ' at ' + t : ''}`}</span>${BRIEFING ? '' : `<button data-a="aiBrief" aria-label="Rewrite my card">${ic('refresh', 14)}Refresh</button>`}</div></div>`;
-}
+// On the AI card, school runs that are all the usual people fold into one line; anything changed or unset stays on its own.
+function foldRuns(rows, d) {
+  const usual = rows.filter(r => r.run && r.run.who && !r.run.changed); if (usual.length < 2) return rows;
+  const by = {}; usual.forEach(r => { (by[r.run.who] = by[r.run.who] || new Set()).add(r.run.kind === 'd' ? 'drops off' : 'picks up'); });
+  const text = Object.keys(by).map(w => `${w} ${[...by[w]].join(' and ')}`).join(' · '), first = rows.indexOf(usual[0]);
+  const out = rows.filter(r => !usual.includes(r)); out.splice(first, 0, { s: usual[0].s, title: 'Usual school runs', sub: esc(text), tap: `data-a="planDay" data-v="${d}"` });
+  return out; }
 A.aiBrief = async () => { if (BRIEFING) return; const night = new Date().getHours() >= 19, sd = night ? addDays(TODAY, 1) : TODAY; BRIEFING = true; render();
   try { const r = await api('ai_brief', { date: sd, mode: night ? 'night' : 'day' });
     if (r.brief && r.brief.error) toast(r.brief.error);
@@ -1729,17 +1740,17 @@ function vFeed() {
     <div class="wxrow">${WXI(code, 30)}<b>${night || WX.now === null ? wd.high : WX.now}°</b><span class="small muted">${WXW[wxKind(code)]}${WX.place ? ' · ' + esc(WX.place) : ''}</span></div>
     <div class="tiles3"><div><span>HIGH / LOW</span><b>${wd.high}° / ${wd.low}°</b></div><div><span>RAIN</span><b>${wd.rain}%</b></div><div><span>UV</span><b>${wd.uv} ${uvWord(wd.uv)}</b></div></div>
     ${wx.length ? `<div class="stack">${wx.map(w => `<div class="alert amber">${ic(w.icon, 16)}<span>${esc(w.text)}</span></div>`).join('')}</div>` : ''}` : '';
-  const pl = planRows(sd, !night && h >= 12 ? now : '');
+  const ai = aiCard(sd, night), pl0 = planRows(sd, !night && h >= 12 ? now : ''), pl = ai.brief ? foldRuns(pl0, sd) : pl0;
   const prow = r => `<div class="prow ${!night && h < 12 && r.s && (r.e || r.s) < now ? 'past' : ''}" ${r.tap || ''}><span>${r.s ? fmtT(r.s) : r.dinner ? 'Dinner' : 'All day'}</span><span><b>${esc(r.title)}</b>${r.mk || ''}${r.who ? ' ' + r.who : ''}${r.sub ? ' · ' + r.sub : ''}</span></div>`;
-  let html = `<div class="hero"><div class="small muted b">${new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}</div>
+  let html = `<div class="hero">${ai.brief ? `<span class="aimk" style="float:right;margin:0" title="Touched up by the assistant" aria-label="Touched up by the assistant">${ic('spark', 15)}</span>` : ''}<div class="small muted b">${new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}</div>
       <div style="font-size:22px;font-weight:800;letter-spacing:-.5px">Good ${h < 12 ? 'morning' : h < 17 ? 'afternoon' : 'evening'}, ${esc(ME)}</div>
+    ${ai.brief ? `<div class="ailine">${esc(ai.brief.headline)}</div>` : ''}
     ${weather}
     ${rem.length ? `<div class="lbl">Reminders</div><div class="stack">${rem.map(remHTML).join('')}</div>` : ''}
     <div class="plan" data-a="planDay" data-v="${sd}"><div class="ph"><span>${night ? "Tomorrow's plan" : h >= 12 ? 'Rest of today' : "Today's plan"}</span><a>Planner${ic('chev', 16)}</a></div>
       ${pl.length ? pl.slice(0, 10).map(prow).join('') + (pl.length > 10 ? `<div class="small muted" style="padding-top:4px">+${pl.length - 10} more</div>` : '') : `<div class="small muted" style="padding-top:6px">Nothing planned${night ? ' for tomorrow' : ''}.</div>`}</div></div>`;
-  const ai = aiCard(sd, night);
-  if (ai.brief) html = aiHero(ai.brief, { sd, night, h, al, wd, code, wx, pl, prow, remHTML });
-  else if (ai.on) html = html.replace(/<\/div>$/, `<div class="aifoot">${ic('spark', 13)}<span class="grow">${BRIEFING ? 'Writing your card…' : 'Your assistant card is written each morning and at 7 PM.'}</span>${BRIEFING ? '' : '<button data-a="aiBrief">Write it now</button>'}</div></div>`);
+  if (ai.on) { const t = ai.brief && ai.brief.time ? fmtT(ai.brief.time.slice(11, 16)) : '';
+    html = html.replace(/<\/div>$/, `<div class="aifoot">${ic('spark', 13)}<span class="grow">${BRIEFING ? 'Touching up your card…' : ai.brief ? `Touched up by your assistant${t ? ' at ' + t : ''}` : 'Your assistant touches up this card each morning and at 7 PM.'}</span>${BRIEFING ? '' : `<button data-a="aiBrief">${ai.brief ? ic('refresh', 14) + 'Refresh' : 'Do it now'}</button>`}</div></div>`); }
   const hide = c => c && st('f.' + c, '1') === '0';
   const gone = feedHidden();
   const kindHidden = a => a.type === 'answer' ? true : a.table === 'Photos' ? !fOn('photos') : a.type === 'daily' ? !fOn('daily') : hide(a.cat);
@@ -2414,7 +2425,7 @@ A.dlEdit = id => { const it = byId('daily_items', id); if (it) dailyForm(it); };
 // ----- Home -----
 const SETTINGS = [['Caretakers', 'care', 'Caretakers', 'Boston and Cape rosters, rates, driving'], ['birthdays', 'cake', 'Birthdays', 'Friends and family'], ['WeatherRules', 'weather', 'Weather rules', 'If-then reminders based on the forecast'],
   ['Groceries', 'cart', 'Grocery library', 'Saved items with brands and notes'], ['TodoTypes', 'tag', 'To-do types', 'Types and who they go to by default'], ['memories', 'quote', 'Quotes and memories', 'The morning splash screen'],
-  ['settings', 'bell', 'Notifications and Feed', 'Push alerts, bundling, quiet hours, what shows in your Feed'], ['device', 'phone', 'This phone', 'Your personal link and sign-in']];
+  ['hiddencal', 'x', 'Hidden calendar entries', 'Calendar items you hid from the planner'], ['settings', 'bell', 'Notifications and Feed', 'Push alerts, bundling, quiet hours, what shows in your Feed'], ['device', 'phone', 'This phone', 'Your personal link and sign-in']];
 // Muted section colors for the Home icons.
 const HC = { gift: '#b0567a', users: '#5b6fa8', school: '#4a7fb5', activity: '#3d9a62', house: '#b07a3c', book: '#a65f5f', gear: '#6b7280', care: '#3e9aa6', cake: '#c8578f', weather: '#4f8fbf', cart: '#8a7a3d', tag: '#7a6aa8', quote: '#9a6b8a', bell: '#b08a4f', phone: '#64748b' };
 const hrow = (a, v, icon, l, sub) => `<div class="li" data-a="${a}" data-v="${v}"><div class="hicon" style="--hc:${HC[icon] || 'var(--accent)'}">${ic(icon)}</div><div class="grow"><div class="ti">${l}</div>${sub ? `<div class="small muted">${sub}</div>` : ''}</div><span class="chev">›</span></div>`;
@@ -2424,8 +2435,8 @@ function vHome() {
   const grp = actGroups(), houses = ['Boston', 'Cape'].map(h => `${h === 'Cape' ? 'Cape' : 'Boston'} ${S.HouseCards.filter(c => c.house === h).length}`).join(' · ');
   return `<div class="pad small muted b" style="padding-top:12px">${fmtLong(TODAY).toUpperCase()} · ${fmtT(nowHM())}</div>` +
     `<div class="box"><div class="boxh row" style="justify-content:space-between;align-items:center"><span>Family</span></div>` + order.map(p => { const x = statusOf(p);
-      return `<div class="li" style="align-items:flex-start" data-a="open" data-t="People" data-id="${p.id}">${avatar(p.name)}<div class="grow"><div class="row"><span class="ti">${esc(p.name)}${ADULTS.includes(p.name) && p.name !== ME ? `<span class="small muted" style="font-weight:500" data-seen-txt="${esc(p.name)}">${seenTxt(p.name) ? ' · ' + seenTxt(p.name) : ''}</span>` : ''}</span>${x.warn ? '<span class="chip bad">Ride not set</span>' : x.rides ? `<span class="chip">${x.rides} ride${x.rides === 1 ? '' : 's'} today</span>` : ''}</div>
-        <div style="font-size:15px;margin-top:2px">${x.busy ? ic('pin', 15) + ' ' : ''}${esc(x.now)}</div>${x.next ? `<div class="small muted" style="margin-top:2px">${ic('clock', 13)} Next: ${esc(x.next)}</div>` : ''}</div></div>`; }).join('') + `</div>` +
+      return `<div class="li" style="align-items:flex-start" data-a="open" data-t="People" data-id="${p.id}">${avatar(p.name)}<div class="grow"><div class="row"><span class="ti">${esc(p.name)}${ADULTS.includes(p.name) && p.name !== ME ? `<span class="small muted" style="font-weight:500" data-seen-txt="${esc(p.name)}">${seenTxt(p.name) ? ' · ' + seenTxt(p.name) : ''}</span>` : ''}</span>${x.warn ? '<span class="chip bad">Ride not set</span>' : ''}</div>
+        <div style="font-size:15px;margin-top:2px">${x.busy ? ic('pin', 15) + ' ' : ''}${esc(x.now)}</div>${x.next ? `<div class="small muted" style="margin-top:2px">${ic('clock', 13)} Next: ${esc(x.next)}</div>` : ''}${flagsHTML(p)}</div></div>`; }).join('') + `</div>` +
     (care.length ? `<div class="sect">Caretakers today</div>` + care.map(c => `<div class="li" data-a="open" data-t="Childcare" data-id="${c.id}"><div class="hicon" style="--hc:${HC.care}">${ic('care')}</div><div class="grow"><div class="ti">${esc(c.confirmedId ? careName(c.confirmedId) : 'Not confirmed yet')}</div><div class="small ${c.confirmedId ? 'muted' : 'red'}">${fmtT(c.start)}–${fmtT(c.end)} · ${esc(careTitle(c))}</div></div><span class="chev">›</span></div>`).join('') : '') +
     `<div class="sect">Household</div>` +
     hrow('homeOpen', 'Schools', 'school', 'Schools', S.Schools.map(x => x.short || x.name).join(', ') || 'Hours, contacts and school calendars') +
@@ -2461,6 +2472,9 @@ const PAGES = {
     return `<div class="li" style="padding:12px 0" data-a="giftList" data-v="${esc(p.name)}"><div class="hicon" style="--hc:${pcol(p.name)}">${ic('gift')}</div><div class="grow"><div class="ti">${own ? 'Your wish list' : esc(p.name)}</div>
       <div class="small muted">${gs.length ? gs.length + (own ? ' you added' : ' idea' + (gs.length === 1 ? '' : 's') + ' · ' + gs.filter(g => g.assigned_to).length + ' being bought') : own ? 'Add things you would like' : 'No ideas yet'}</div></div><span class="chev">›</span></div>`; }).join('') + '</div>',
   recipes: () => '<h2>Recipes</h2>' + vRecipes(),
+  hiddencal: () => { let h = []; try { h = JSON.parse((byId('Settings', 'app|gcal.hidden') || {}).value || '[]'); } catch (e) {}
+    return '<h2>Hidden calendar entries</h2><div class="small muted">These stay in Google Calendar but don\'t show in the planner or Feed. Hide one from its card in the planner.</div>' +
+      (h.length ? h.map(x => `<div class="li" style="padding:12px 0"><div class="grow"><div class="ti">${esc(x.title || 'Calendar entry')}</div><div class="small muted">${x.series ? 'Whole series' : 'One entry'} · hidden by ${esc(x.by || '')}</div></div><button class="btn gray sm" data-a="gcalUnhide" data-v="${esc(x.id)}">Show again</button></div>`).join('') : '<div class="empty">Nothing hidden.</div>'); },
   device: () => `<h2>This phone</h2><div class="kv"><span>Signed in as</span>${esc(ME)}</div><div class="kv small muted" style="white-space:normal">You opened the app from your personal link, so there's no code to type. Anyone with your link can open the app as you, so don't share it. To use a new phone, open your link there and add it to the Home Screen.</div><div class="kv small muted" style="white-space:normal">To turn off a link (for example, a lost phone), Paul changes that person's passcode in Apps Script; the old link stops working.</div><div class="actions"><button class="btn danger" data-a="signOut">Sign out of this phone</button></div>`,
   family: () => '<h2>Family</h2>' + S.People.map(p => rowLi('People', p.id, p.name, p.kind === 'kid' ? ((byId('Schools', p.schoolId) || {}).name || 'No school set') : p.workDays ? `Works ${p.workDays}` : 'No work schedule set')).join('') + addBtn('People', 'Add a family member'),
   Schools: () => '<h2>Schools</h2>' + S.Schools.map(s => `${rowLi('Schools', s.id, s.name, `${schoolHoursTxt(s) ? schoolHoursTxt(s) + ' · ' : ''}${kids().filter(k => k.schoolId === s.id).map(k => k.name).join(', ')}`)}
