@@ -203,8 +203,8 @@
   .aimk { display:inline-flex; vertical-align:middle; margin-left:5px; color:var(--asst); opacity:.45; } .aimk.c { float:right; margin:8px 10px 0 0; }
   .aiopen { float:right; margin:0 8px 0 0; height:32px; padding:0 10px; } .aibox { margin-top:4px; padding:12px; border-radius:16px; background:var(--soft); } .aibox textarea { width:100%; background:var(--card); }
   .ailine { margin-top:6px; font-size:15px; line-height:1.4; color:var(--muted); }
-  .flags { display:flex; gap:5px; margin-top:6px; } .flag { display:inline-flex; align-items:center; justify-content:center; width:24px; height:24px; border-radius:50%; border:0; background:var(--soft); color:var(--muted); padding:0; }
-  .flag.on { background:var(--soft); color:var(--accent); } .flag.off { background:var(--amberbg); color:var(--amber); }
+  .sflags { display:flex; gap:5px; margin-top:6px; } .sflag { display:inline-flex; align-items:center; justify-content:center; width:24px; height:24px; border-radius:50%; border:0; background:var(--soft); color:var(--muted); padding:0; }
+  .sflag.on { background:var(--soft); color:var(--accent); } .sflag.off { background:var(--amberbg); color:var(--amber); }
   .aihead { margin-top:10px; font-size:17px; line-height:1.4; font-weight:600; letter-spacing:-.2px; }
   .wxline { display:flex; align-items:center; gap:8px; margin-top:12px; font-size:14px; } .wxline b { font-size:17px; }
   .wxsay { margin-top:4px; font-size:14px; color:var(--muted); }
@@ -351,7 +351,7 @@
 // Momnie Family app v6.0
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'], DAYN = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'], ADULTS = ['Paul', 'Shana'];
 // Shown at the bottom of Home. Bump it together with VERSION in sw.js on every release.
-const APP_VERSION = '13.6 · Nov 18, 2026';
+const APP_VERSION = '13.7 · Nov 18, 2026';
 const TABLES = ['People', 'Schools', 'SchoolCal', 'Activities', 'Overrides', 'Events', 'Caretakers', 'Childcare', 'Birthdays', 'Todos', 'TodoTypes', 'Recipes', 'DinnerRules', 'Weeks', 'Menus',
   'Groceries', 'GroceryList', 'HouseCards', 'Houses', 'WeatherRules', 'Quotes', 'Memories', 'Updates', 'Messages', 'Activity', 'Comments', 'Reactions', 'Links', 'Settings', 'Photos', 'gifts', 'ai_rules', 'ai_requests', 'notes', 'daily_items', 'daily_completions'];
 const CAT = { School: '#3f6fb5', Kids: '#4f7cc2', Work: '#64748b', Family: '#5b6fa8', Dinner: '#b08a4f', Caretaker: '#3e9aa6', Shared: '#94a3b8', Birthday: '#c9806a' }, SCHOOL_C = ['#5a72b8', '#7a8597', '#4a6fb0'];
@@ -819,7 +819,7 @@ function personFlags(p) {
   if (m && list(m.away).includes(p.name)) out.push({ icon: 'meals', cls: 'off', label: 'Not home for dinner', info: `${p.name} won't be home for dinner tonight` });
   else if (m && m.cook === p.name) out.push({ icon: 'meals', cls: 'on', label: 'Making dinner', info: `${p.name} is making dinner tonight${dish ? ': ' + dish : ''}` });
   return out; }
-const flagsHTML = p => { const f = personFlags(p); return f.length ? `<div class="flags">${f.map(x => `<button class="flag ${x.cls}" data-a="flagInfo" data-v="${esc(x.info)}" aria-label="${esc(x.label)}" title="${esc(x.label)}">${ic(x.icon, 13)}</button>`).join('')}</div>` : ''; };
+const flagsHTML = p => { const f = personFlags(p); return f.length ? `<div class="sflags">${f.map(x => `<button class="sflag ${x.cls}" data-a="flagInfo" data-v="${esc(x.info)}" aria-label="${esc(x.label)}" title="${esc(x.label)}">${ic(x.icon, 13)}</button>`).join('')}</div>` : ''; };
 /** Grocery needs that come from planned dinners. */
 function recipeNeeds(from, to, col) {
   const out = [];
