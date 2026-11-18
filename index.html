@@ -323,7 +323,7 @@
 // Momnie Family app v6.0
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'], DAYN = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'], ADULTS = ['Paul', 'Shana'];
 // Shown at the bottom of Home. Bump it together with VERSION in sw.js on every release.
-const APP_VERSION = '11.5 · Nov 18, 2026';
+const APP_VERSION = '11.6 · Nov 18, 2026';
 const TABLES = ['People', 'Schools', 'SchoolCal', 'Activities', 'Overrides', 'Events', 'Caretakers', 'Childcare', 'Birthdays', 'Todos', 'TodoTypes', 'Recipes', 'DinnerRules', 'Weeks', 'Menus',
   'Groceries', 'GroceryList', 'HouseCards', 'Houses', 'WeatherRules', 'Quotes', 'Memories', 'Updates', 'Messages', 'Activity', 'Comments', 'Reactions', 'Links', 'Settings', 'Photos', 'gifts', 'daily_items', 'daily_completions'];
 const CAT = { School: '#3f6fb5', Kids: '#4f7cc2', Work: '#64748b', Family: '#5b6fa8', Dinner: '#b08a4f', Caretaker: '#3e9aa6', Shared: '#94a3b8', Birthday: '#c9806a' }, SCHOOL_C = ['#5a72b8', '#7a8597', '#4a6fb0'];
@@ -1754,11 +1754,18 @@ A.autofill = () => { const wk = MW || mondayOf(TODAY), days = autofillDays();
   if (!days.length) return toast('No nights are set to autofill. Choose them in Home, Meals, Dinner rules.');
   if (!S.Recipes.some(r => r.name && r.status !== 'archived')) return toast('Add a few recipes first.');
   ensureWeek(wk);
-  const ms = S.Menus.filter(m => m.week === wk), used = ms.map(m => m.recipeId).filter(Boolean), ops = [];
-  ms.filter(m => m.date >= TODAY && days.includes(m.day) && !m.recipeId && !m.note && m.skipped !== '1').sort((a, b) => a.date.localeCompare(b.date)).forEach(m => {
-    const rid = autoPick(m.date, used); if (!rid) return; used.push(rid); ops.push({ t: 'Menus', row: { id: m.id, recipeId: rid, note: '', kept: '', skipped: '' } }); });
-  if (!ops.length) return toast('Nothing to fill. Those nights already have dinner.');
-  ops[0].log = L('menu_set', `filled ${ops.length} night${ops.length === 1 ? '' : 's'} for ${weekLow(wk, mondayOf(TODAY))}`, 'dinner');
+  const ms = S.Menus.filter(m => m.week === wk), mine = m => m.date >= TODAY && days.includes(m.day) && m.skipped !== '1', ops = [];
+  let todo = ms.filter(m => mine(m) && !m.recipeId && !m.note), again = false;
+  // Nothing empty: offer to re-pick the nights picked automatically (by Autofill, Random or an old draft). Dinners chosen by hand stay.
+  if (!todo.length) { const re = ms.filter(m => mine(m) && m.recipeId && m.kept !== '1');
+    if (!re.length) return toast('Those nights all have dinners you picked, so Autofill leaves them.');
+    if (!confirm(`Every autofill night already has dinner. Pick new dinners for ${re.length} night${re.length === 1 ? '' : 's'}? Dinners you chose yourself stay.`)) return;
+    todo = re; again = true; }
+  const used = ms.filter(m => !todo.includes(m)).map(m => m.recipeId).filter(Boolean);
+  todo.sort((a, b) => a.date.localeCompare(b.date)).forEach(m => {
+    const rid = autoPick(m.date, again ? used.concat(m.recipeId) : used); if (!rid) return; used.push(rid); ops.push({ t: 'Menus', row: { id: m.id, recipeId: rid, note: '', kept: '', skipped: '' } }); });
+  if (!ops.length) return toast('No recipes to pick from yet.');
+  ops[0].log = L('menu_set', `${again ? 're-picked' : 'filled'} ${ops.length} night${ops.length === 1 ? '' : 's'} for ${weekLow(wk, mondayOf(TODAY))}`, 'dinner');
   write(ops); ops.forEach(o => { const el = document.querySelector(`.dcard[data-menu="${o.row.id}"]`); if (el) { el.classList.add('flash'); setTimeout(() => el.classList.remove('flash'), 1600); } }); };
 const ruleOf = d => byId('DinnerRules', d) || {};
 const weekNights = wk => DAYS.map((d, i) => ({ id: wk + '-' + d, week: wk, day: d, date: addDays(wk, i), recipeId: '', note: '', kept: '', skipped: '', away: ruleOf(d).away || '', cook: ruleOf(d).cook || '', _virtual: 1 }));
