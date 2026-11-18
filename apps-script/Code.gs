@@ -1,6 +1,8 @@
 /**
  * Momnie Family app backend
- * Version 3.21 (2026-11-18)
+ * Version 3.22 (2026-11-18)
+ *   3.22: One "Run the assistant now" button (ai_all, Paul only) runs the notes, the AI Today cards and the conversation
+ *         check together. The Today card's own refresh button is gone.
  *   3.21: Hide a calendar entry or series from the planner (gcal_hide / gcal_unhide): it gets the app's hidden key,
  *         nothing is created in the app, and Settings lists what is hidden (app|gcal.hidden).
  *   3.20: Shared Notes (notes tab). Sheet menu: Run the assistant now / Write Today cards now. The assistant leaves
@@ -316,22 +318,10 @@ function route_(b, me) {
     case 'gcal_hide': gcalHide_(String(b.gcalId || ''), b.series === '1', String(b.title || ''), me); calDrop_(); return { cal: calCached_(addDays_(today_(), -7), 56) };
     case 'gcal_unhide': gcalUnhide_(String(b.id || '')); calDrop_(); return {};
     case 'gcal_delete': gcalDelete_(b.gcalId); calDrop_(); if (b.log) log_(me, b.log); return { cal: calCached_(addDays_(today_(), -7), 56) };
-    case 'ai_run':   // "Post now" from the AI assistant settings page (Paul only)
-      if (me !== 'Paul') return { ok: false, error: 'Only Paul can run the AI assistant.' };
-      return { ai: aiPosts_(today_(), true) };
-    case 'ai_brief':   // the refresh button on someone's AI Today card (their own card only)
-      if (setting_('app|ai.on', '') !== '1') return { ok: false, error: 'The AI assistant is off.' };
-      if (aiCardFor_().indexOf(me) < 0) return { ok: false, error: 'The AI Today card is not turned on for you.' };
-      return { brief: aiBrief_(me, isDate_(b.date) ? b.date : today_(), b.mode === 'night' ? 'night' : 'day') };
-    case 'ai_event':   // "Describe it" on a new event: fills in the form, saves nothing
-      if (setting_('app|ai.on', '') !== '1') return { ok: false, error: 'The assistant is off.' };
-      if (aiUseFor_().indexOf(me) < 0) return { ok: false, error: 'The assistant is not turned on for you.' };
-      return aiEvent_(String(b.text || '').slice(0, 1000), isDate_(b.today) ? b.today : today_(), String(b.now || ''), me);
-    case 'ai_do':      // the Assistant button: works out what to create (the app saves it)
-    case 'ai_answer':  // an answer to the Assistant's question: works out what to change
-      if (setting_('app|ai.on', '') !== '1') return { ok: false, error: 'The assistant is off.' };
-      if (aiUseFor_().indexOf(me) < 0) return { ok: false, error: 'The assistant is not turned on for you.' };
-      return { plan: aiDo_(b, me) };
+    case 'ai_all':   // "Run the assistant now" in Settings, Assistant (Paul only): notes, Today cards and conversations
+      if (me !== 'Paul') return { ok: false, error: 'Only Paul can run the assistant.' };
+      if (setting_('app|ai.on', '') !== '1') return { ok: false, error: 'Turn the assistant on first.' };
+      return aiAll_(isDate_(b.today) ? b.today : today_());
     case 'ai_convo':   // after someone answers a question post: turn a settled plan into app items
       if (setting_('app|ai.on', '') !== '1' || setting_('app|ai.convo', '1') !== '1') return { convo: null };
       return { convo: aiConvoSafe_(today_(), false) };
@@ -759,7 +749,7 @@ function menuAiNotes() { var r = aiPosts_(today_(), true); SpreadsheetApp.getUi(
 /** Sheet menu: write the AI Today cards now (today's, or tomorrow's after 7 PM) for the people who get them. */
 function menuAiCards() { var t = today_(), night = Number(now_().slice(11, 13)) >= 19, who = aiCardFor_();
   if (!who.length) { SpreadsheetApp.getUi().alert('No one gets the AI Today card yet. Choose who in the app: Settings, Assistant, Change.'); return; }
-  briefAll_(night ? addDays_(t, 1) : t, night ? 'night' : 'day'); SpreadsheetApp.getUi().alert('Done: wrote the Today card for ' + who.join(' and ') + '.'); }
+  var r = briefAll_(night ? addDays_(t, 1) : t, night ? 'night' : 'day'); SpreadsheetApp.getUi().alert(r.error ? 'The Today card could not be written: ' + r.error : 'Done: wrote the Today card for ' + r.done.join(' and ') + '.'); }
 /** Hourly trigger (installed by setup). */
 function tick() {
   var lock = LockService.getScriptLock();
@@ -976,14 +966,19 @@ function aiPosts_(t, manual) {
     log_('Assistant', { type: 'ai', text: String(n.text).slice(0, 400), cat: 'ai', ref: rule ? 'rule:' + rule.id : n.topic, audience: aud.join(', ') });
     aud.forEach(function (p) { if (pref_(p, 'ai')) notify_(p, 'Assistant', String(n.text).slice(0, 400)); });
   });
-  put_('Settings', { id: 'app|ai.last', value: now_() + ' · ' + notes.length + ' note' + (notes.length === 1 ? '' : 's') + (manual ? ' (Post now)' : '') });
+  put_('Settings', { id: 'app|ai.last', value: now_() + ' · ' + notes.length + ' note' + (notes.length === 1 ? '' : 's') + (manual ? ' (run by hand)' : '') });
   return { notes: notes };
 }
 
 // ---------- AI Today card ----------
 /** Who gets the AI Today card: Paul's choice in the app (app|ai.card), Paul only until he adds others. */
 function aiCardFor_() { var v = setting_('app|ai.card', 'Paul'); return v === 'none' ? [] : list_(v); }
-function briefAll_(d, mode) { aiCardFor_().forEach(function (p) { try { aiBrief_(p, d, mode); } catch (e) { console.error(e); } }); }
+function briefAll_(d, mode) { var done = [], err = ''; aiCardFor_().forEach(function (p) { try { var b = aiBrief_(p, d, mode); if (b && b.error) err = b.error; else done.push(p); } catch (e) { console.error(e); err = String(e && e.message || e); } }); return { done: done, error: err }; }
+/** Everything the assistant does, now: notes for the Feed, the AI Today cards, and plans from conversations. */
+function aiAll_(t) {
+  var night = Number(now_().slice(11, 13)) >= 19, notes = aiPosts_(t, true), cards = briefAll_(night ? addDays_(t, 1) : t, night ? 'night' : 'day'), convo = setting_('app|ai.convo', '1') === '1' ? aiConvoSafe_(t, true) : {};
+  return { notes: notes, cards: cards.done, cardError: cards.error, convo: convo.actions || [] };
+}
 /** Everything on person p's plate for date d, each with a ref the app can open. Gift ideas are never included. */
 function briefCands_(p, d, mode) {
   var t = today_(), day = DAYS[dow_(d)], c = [], add = function (ref, text) { c.push({ ref: ref, what: text }); };

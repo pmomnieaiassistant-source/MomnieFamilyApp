@@ -60,8 +60,10 @@ Only Paul sees these settings.
 
 ## Step 5. Test it
 
-1. In the app, go to **Home → Settings → Assistant** and tap **Post now**. After a few seconds, the page shows
-   the result in **Last run** (for example "2 notes (Post now)"), and any notes appear in the Feed.
+1. In the app, go to **Home → Settings → Assistant** and tap **Run the assistant now**. This runs everything at
+   once: the Feed notes, the AI Today cards, and the conversation check. After a few seconds a message says what it
+   did, the page shows the result in **Last run** (for example "2 notes (run by hand)"), and any notes appear in the
+   Feed. You can also run it from the Sheet: **Family app → Run the assistant now**.
 2. Tap the sparkle at the top of any tab and type something like "Dentist for Clara next Tuesday at 3:30". An
    Assistant card should appear in the Feed.
 
