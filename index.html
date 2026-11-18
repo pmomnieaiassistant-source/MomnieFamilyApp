@@ -115,7 +115,7 @@
   label { display:block; font-size:13px; color:var(--muted); margin:12px 0 5px; font-weight:600; }
   input, select, textarea { width:100%; padding:12px 13px; font:inherit; font-size:16px; border:0; border-radius:12px; background:var(--soft); color:var(--text); -webkit-appearance:none; appearance:none; }
   textarea { min-height:84px; resize:vertical; } input:focus, select:focus, textarea:focus { outline:2px solid var(--accent); }
-  input[type=checkbox] { width:22px; height:22px; -webkit-appearance:auto; appearance:auto; flex:0 0 auto; }
+  input[type=checkbox], input[type=radio] { width:22px; height:22px; -webkit-appearance:auto; appearance:auto; flex:0 0 auto; padding:0; margin:0; border:0; background:none; }
   .check-row { display:flex; align-items:center; gap:10px; margin-top:14px; font-weight:600; color:var(--text); font-size:15px; }
   .two { display:flex; gap:10px; } .two > div { flex:1; min-width:0; }
   .kv { font-size:15px; margin-top:6px; line-height:1.4; word-break:break-word; white-space:pre-wrap; } .kv span { color:var(--muted); font-size:13px; font-weight:600; display:block; }
@@ -304,7 +304,7 @@
   .rapplied { padding:6px 4px 0; } .rapplied a { cursor:pointer; }
   .alert.flag { background:var(--accsoft); color:var(--text); font-weight:600; } .alert.flag .ic { color:var(--accent); }
   .ftag { flex:0 0 auto; font-size:10px; font-weight:800; letter-spacing:.6px; padding:3px 7px; border-radius:6px; background:var(--accent); color:var(--onacc); }
-  input[type=checkbox] { accent-color:var(--accent); }
+  input[type=checkbox], input[type=radio] { accent-color:var(--accent); }
   .ride { display:inline-flex; align-items:center; gap:1px; white-space:nowrap; }
   .wxrow { display:flex; align-items:center; gap:8px; margin-top:8px; } .wxrow b { font-size:30px; font-weight:800; letter-spacing:-.5px; }
   .stack { display:flex; flex-direction:column; gap:6px; margin-top:8px; } .amb { color:var(--amber); font-weight:700; }
@@ -353,7 +353,7 @@
 // Momnie Family app v6.0
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'], DAYN = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'], ADULTS = ['Paul', 'Shana'];
 // Shown at the bottom of Home. Bump it together with VERSION in sw.js on every release.
-const APP_VERSION = '14.9 · Nov 18, 2026';
+const APP_VERSION = '15.0 · Nov 18, 2026';
 const TABLES = ['People', 'Schools', 'SchoolCal', 'Activities', 'Overrides', 'Events', 'Caretakers', 'Childcare', 'Birthdays', 'Todos', 'TodoTypes', 'Recipes', 'DinnerRules', 'Weeks', 'Menus',
   'Groceries', 'GroceryList', 'HouseCards', 'Houses', 'WeatherRules', 'Quotes', 'Memories', 'Updates', 'Messages', 'Activity', 'Comments', 'Reactions', 'Links', 'Settings', 'Photos', 'gifts', 'ai_rules', 'ai_requests', 'notes', 'daily_items', 'daily_completions'];
 const CAT = { School: '#3f6fb5', Kids: '#4f7cc2', Work: '#64748b', Family: '#5b6fa8', Dinner: '#b08a4f', Caretaker: '#3e9aa6', Shared: '#94a3b8', Birthday: '#c9806a' }, SCHOOL_C = ['#5a72b8', '#7a8597', '#4a6fb0'];
@@ -834,9 +834,10 @@ function personFlags(p) {
 const flagLines = p => { const f = personFlags(p); return f.length ? `<div class="flines">${f.map(x => `<div class="fline ${x.cls}">${ic(x.icon, 15)}<span>${esc(x.line)}</span></div>`).join('')}</div>` : ''; };
 const flagsHTML = p => { const f = personFlags(p); return f.length ? `<div class="sflags">${f.map(x => `<button class="sflag ${x.cls}" data-a="flagInfo" data-v="${esc(x.info)}" aria-label="${esc(x.label)}" title="${esc(x.label)}">${ic(x.icon, 13)}</button>`).join('')}</div>` : ''; };
 /** Grocery needs that come from planned dinners. */
-function recipeNeeds(from, to, col) {
+function recipeNeeds(from, to, col) { return menuNeeds(S.Menus.filter(m => m.date >= from && m.date <= to), col); }
+function menuNeeds(menus, col) {
   const out = [];
-  S.Menus.filter(m => m.recipeId && m.skipped !== '1' && m.date >= from && m.date <= to).sort((a, b) => a.date.localeCompare(b.date)).forEach(m => {
+  menus.filter(m => m.recipeId && m.skipped !== '1').sort((a, b) => a.date.localeCompare(b.date)).forEach(m => {
     const r = byId('Recipes', m.recipeId); if (!r) return;
     list(String(r[col] || '').replace(/\n/g, ',')).forEach(n => { const mark = S.GroceryList.find(g => g.source === 'recipe' && g.menuId === m.id && norm(g.name) === norm(n));
       out.push({ key: m.id + '|' + norm(n), name: n, menu: m, recipe: r, card: groc(n), mark: mark ? mark.status : '' }); });
@@ -2162,7 +2163,7 @@ A.addOn = (t, el) => { A.close(null, el); editForm(t, null, t === 'Todos' ? { du
 
 // ----- Dinner -----
 let PFOR = '', PFLASH = '', RACT = '', RARCH = false;   // RACT: recipe showing Pause / Archive; RARCH: showing archived recipes   // picking a recipe for this Menus night (from Select), and the night to highlight after
-let DT = 'menu', MW = '', GH = '', GF = false, RQ = '', RFQ = '', RS = 'stale', RT = [], RPICK = '', RMENU = false;
+let DT = 'menu', MW = '', GH = store.get('ghouse') || '', GMENU = false, RQ = '', RFQ = '', RS = 'stale', RT = [], RPICK = '', RMENU = false;
 const RHIDE = new Set();
 const gchk = () => { try { return new Set(JSON.parse(store.get('gchk') || '[]')); } catch (e) { return new Set(); } };
 function vDinner() {
@@ -2234,7 +2235,7 @@ A.weekAdd = async w => { if (await call('week_add', { week: w })) { MW = w; rend
 A.weekDel = w => { if (confirm("Delete this week's plan?")) write(S.Menus.filter(m => m.week === w).map(m => ({ t: 'Menus', del: m.id })).concat({ t: 'Weeks', del: w })); };
 // Weeks are always editable (no more "lock in"). A change to a night in the next 7 days posts to the Feed so the other person knows.
 const menuLog = (m, type, text) => m.date >= TODAY && m.date < addDays(TODAY, 7) ? L(type, text, 'dinner') : null;
-A.swap = id => { const m = byId('Menus', id); return call('dinner_swap', { id, log: menuLog(m, 'menu_swap', `swapped dinner for ${fmtDay(m.date)}`) }); };
+A.swap = id => { const m = byId('Menus', id); return call('dinner_swap', { id, log: menuLog(m, 'menu_swap', `swapped dinner for ${fmtDay(m.date)}`) }).then(r => { refresh(); return r; }); };
 // Swiping a night right shows two choices over it: Random (a new suggestion) or Select (pick from the list).
 let MCHG = '';
 A.mRandom = id => { MCHG = ''; ensureWeek(id.slice(0, 10)); render(); A.swap(id); };
@@ -2326,20 +2327,40 @@ A.ingredients = () => sheet(() => { const weeks = S.Weeks.filter(w => addDays(w.
     return `<h3>Week of ${fmtDate(w.id)}</h3>` + ms.map(m => { const n = recipeNeeds(m.date, m.date, 'unique').filter(x => x.menu.id === m.id), p = list((byId('Recipes', m.recipeId) || {}).pantry);
       return `<div class="kv"><span>${fmtDay(m.date)} · ${esc(dish(m))}</span>${n.map(x => { const q = ingParse(x.name); return `${x.mark === 'bought' ? '✓' : x.mark === 'removed' ? '–' : '○'} ${esc(q.name)}${qtyTxt(q) ? ` <em class="qty">${esc(qtyTxt(q))}</em>` : ''}`; }).join('<br>') || 'No ingredients listed'}${p.length ? `<br><span style="display:inline">Pantry: ${esc(p.map(x => ingParse(x).name).join(', '))}</span>` : ''}</div>`; }).join(''); }).join('') || '<div class="empty">No meals planned yet.</div>'); });
 // groceries
+// Which planned meals the grocery list covers: all upcoming (default), this week, next week, or nights you pick.
+const GSCOPES = [['all', 'All upcoming meals'], ['week', 'This week'], ['next', 'Next week'], ['nights', 'Only the nights I pick']];
+const gScope = () => store.get('gscope') || 'all';
+const gNights = () => { try { return new Set(JSON.parse(store.get('gnights') || '[]')); } catch (e) { return new Set(); } };
+const upcomingMeals = () => { const tonightDone = nowHM() >= '20:00'; return S.Menus.filter(m => m.recipeId && m.skipped !== '1' && (m.date > TODAY || (m.date === TODAY && !tonightDone))).sort((a, b) => a.date.localeCompare(b.date)); };
+function grocMeals() { const sc = gScope(), mon = mondayOf(TODAY), ms = upcomingMeals();
+  if (sc === 'week') return ms.filter(m => m.date <= addDays(mon, 6));
+  if (sc === 'next') return ms.filter(m => m.date >= addDays(mon, 7) && m.date <= addDays(mon, 13));
+  if (sc === 'nights') { const pick = gNights(); return ms.filter(m => pick.has(m.id)); }
+  return ms; }
 function grocItems() {
-  const to = addDays(mondayOf(TODAY), 13), hOK = g => !GH || !g.house || g.house === GH, out = [], map = new Map();
+  const hOK = g => !GH || !g.house || g.house === GH, out = [], map = new Map();
   S.GroceryList.filter(g => g.status === 'open' && hOK(g)).forEach(g => out.push({ key: 'L:' + g.id, name: g.name, card: byId('Groceries', g.groceryId) || groc(g.name), row: g, sub: g.source === 'recurring' ? 'Recurring' : '' }));
-  let needs = recipeNeeds(TODAY, to, 'unique');
-  if (GF) needs = needs.concat(S.Weeks.filter(w => w.id > addDays(mondayOf(TODAY), 7)).flatMap(w => recipeNeeds(w.id, addDays(w.id, 6), 'unique')));
+  const needs = menuNeeds(grocMeals(), 'unique');
   needs.filter(n => !n.mark).forEach(n => { const k = norm(n.name); if (!map.has(k)) { const it = { key: 'R:' + k, name: ingParse(n.name).name, card: n.card, parts: [] }; map.set(k, it); out.push(it); } map.get(k).parts.push(n); });
   out.forEach(i => { if (i.parts) i.qty = sumQty(i.parts.map(p => ingParse(p.name))); });
   out.forEach(i => { if (i.parts) i.sub = 'For ' + i.parts.map(p => `${p.recipe.name} (${fmtDay(p.menu.date).split(',')[0]}${p.menu.date > addDays(mondayOf(TODAY), 6) ? ' ' + fmtDate(p.menu.date) : ''})`).join(', '); });
   return out;
 }
 function vGroc() {
-  const items = grocItems(), ch = gchk(), nchk = items.filter(i => ch.has(i.key)).length, to = addDays(mondayOf(TODAY), 13);
-  const up = S.GroceryList.filter(g => g.status === 'upcoming').sort((a, b) => a.addOn.localeCompare(b.addOn)), pantry = [...new Map(recipeNeeds(TODAY, to, 'pantry').map(n => [norm(n.name), ingParse(n.name).name])).values()];
-  return `<div class="chips">${[['', 'Both houses'], ['Boston', 'Boston'], ['Cape', 'Cape']].map(([k, l]) => `<button class="chip ${GH === k ? 'on' : ''}" data-a="ghouse" data-v="${k}">${l}</button>`).join('')}<button class="chip ${GF ? 'on' : ''}" data-a="gfuture">Future weeks</button><button class="chip" data-a="recurring">${ic('repeat', 14)} Recurring</button></div>
+  const items = grocItems(), ch0 = gchk(), keys = new Set(items.map(i => i.key)), ch = new Set([...ch0].filter(k => keys.has(k))), nchk = items.filter(i => ch.has(i.key)).length;
+  if (ch.size !== ch0.size) store.set('gchk', JSON.stringify([...ch]));   // a meal was changed or cleared: forget checks on items that left the list
+  const meals = grocMeals(), sc = gScope(), all = upcomingMeals(), pick = gNights(), narrowed = sc !== 'all' || !!GH;
+  const up = S.GroceryList.filter(g => g.status === 'upcoming').sort((a, b) => a.addOn.localeCompare(b.addOn)), pantry = [...new Map(menuNeeds(meals, 'pantry').map(n => [norm(n.name), ingParse(n.name).name])).values()];
+  const nightLbl = m => `${fmtDay(m.date).split(',')[0]}${m.date > addDays(mondayOf(TODAY), 6) ? ' ' + fmtDate(m.date) : ''} · ${dish(m)}`;
+  const head = `<div class="rbar" style="padding:10px 8px 4px 16px"><div class="row"><div class="grow"><div class="b">${meals.length ? `For ${meals.length} meal${meals.length === 1 ? '' : 's'}` : 'No planned meals'}</div>
+      <div class="small muted">${esc((GSCOPES.find(x => x[0] === sc) || GSCOPES[0])[1])}${GH ? ' · ' + esc(GH) : ''}${meals.length ? ' · ' + esc(fmtDate(meals[0].date) + (meals[meals.length - 1].date !== meals[0].date ? ' – ' + fmtDate(meals[meals.length - 1].date) : '')) : ''}</div></div>
+      <button class="rmbtn ${narrowed ? 'on' : ''}" data-a="gMenu" aria-label="Choose which meals and house" aria-expanded="${GMENU}">${ic('menu', 22)}${narrowed ? '<i>1</i>' : ''}</button></div>
+    ${GMENU ? `<div class="rshade" data-a="gMenu"></div><div class="rmenu" role="dialog" aria-label="Grocery list filter" style="top:58px;right:8px"><div class="lbl" style="margin-top:0">Groceries for</div>
+      ${GSCOPES.map(([k, l]) => `<label class="check-row" style="margin-top:8px"><input type="radio" name="gscope" data-c="gScopeSet" data-k="${k}" ${sc === k ? 'checked' : ''}>${esc(l)}</label>`).join('')}
+      ${sc === 'nights' ? `<div class="chips" style="flex-wrap:wrap;padding:8px 0 0">${all.map(m => `<button class="chip ${pick.has(m.id) ? 'on' : ''}" data-a="gNight" data-v="${m.id}">${esc(nightLbl(m))}</button>`).join('') || '<span class="small muted">No upcoming meals planned.</span>'}</div>` : ''}
+      <div class="lbl">House</div><div class="chips" style="padding:4px 0 0">${[['', 'Both'], ['Boston', 'Boston'], ['Cape', 'Cape']].map(([k, l]) => `<button class="chip ${GH === k ? 'on' : ''}" data-a="ghouse" data-v="${k}">${l}</button>`).join('')}</div>
+      <div class="actions"><button class="btn gray sm" data-a="recurring">${ic('repeat', 14)}Recurring items</button><button class="btn sm" data-a="gMenu">Done</button></div></div>` : ''}</div>`;
+  return head + `
     <div class="pad" style="margin-top:8px"><div class="row"><input id="gq" placeholder="Add an item, e.g. yogurt" autocomplete="off" oninput="gSuggest(this.value)" onkeydown="if(event.key==='Enter')A.gadd(this.value)"><button class="btn sm" onclick="A.gadd($('gq').value)">Add</button></div><div id="gsugg" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px"></div></div>
     ${items.length ? items.map(i => `<div class="li ${ch.has(i.key) ? 'done' : ''}"><button class="check sq ${ch.has(i.key) ? 'on' : ''}" data-a="gcheck" data-v="${esc(i.key)}">${ch.has(i.key) ? '✓' : ''}</button><div class="grow" data-a="gitem" data-v="${esc(i.key)}"><div class="ti">${esc(i.name)}${i.qty ? ` <em class="qty">· ${esc(i.qty)}</em>` : i.parts && i.parts.length > 1 ? ' ×' + i.parts.length : ''}</div>
       <div class="small muted">${esc([i.card && i.card.details, i.sub].filter(Boolean).join(' · '))}</div></div><span class="chev">›</span></div>`).join('') : '<div class="empty">The list is empty.</div>'}
@@ -2348,7 +2369,10 @@ function vGroc() {
     ${up.length ? `<div class="sect">Upcoming</div>` + up.map(g => `<div class="li"><div class="grow"><div class="ti">${esc(g.name)}</div><div class="small muted">Back on the list ${fmtDay(g.addOn)}</div></div><button class="btn gray sm" data-a="gnow" data-v="${g.id}">Add now</button></div>`).join('') : ''}`;
 }
 window.gSuggest = q => { q = q.trim().toLowerCase(); $('gsugg').innerHTML = q ? S.Groceries.filter(g => (g.name + ' ' + g.category + ' ' + g.details + ' ' + g.altNames).toLowerCase().includes(q)).slice(0, 6).map(g => `<button class="chip ok" data-a="gadd" data-v="${esc(g.name)}">＋ ${esc(g.name)}${g.details ? ' · ' + esc(g.details.slice(0, 30)) : ''}</button>`).join('') : ''; };
-A.ghouse = v => { GH = v; render(); }; A.gfuture = () => { GF = !GF; render(); };
+A.ghouse = v => { GH = v; store.set('ghouse', v); render(); };
+A.gMenu = () => { GMENU = !GMENU; render(); };
+A.gScopeSet = (on, el) => { if (on) { store.set('gscope', el.dataset.k); if (el.dataset.k === 'nights' && !gNights().size) store.set('gnights', JSON.stringify(upcomingMeals().filter(m => m.date <= addDays(mondayOf(TODAY), 6)).map(m => m.id))); } render(); };
+A.gNight = id => { const s2 = gNights(); s2.has(id) ? s2.delete(id) : s2.add(id); store.set('gnights', JSON.stringify([...s2])); render(); };
 A.gcheck = k => { const s = gchk(); s.has(k) ? s.delete(k) : s.add(k); store.set('gchk', JSON.stringify([...s])); render(); };
 A.gadd = name => { name = (name || '').trim(); if (!name) return; const card = groc(name), ops = [], gid = card ? card.id : nid(); if (!card) ops.push({ t: 'Groceries', row: { id: gid, name, house: GH } });
   if (S.GroceryList.some(g => g.status === 'open' && norm(g.name) === norm(name))) return toast('Already on the list');
