@@ -1,6 +1,8 @@
 /**
  * Momnie Family app backend
- * Version 3.8 (2026-11-18)
+ * Version 3.9 (2026-11-18)
+ *   3.9: new weeks start with no dinner planned (the weekly draft no longer picks random recipes). Who usually cooks
+ *        and who is usually out still fill in. Random on a single night still follows the dinner rules.
  *   3.8: "Make it an app item" on a shared-calendar entry: the app takes over the existing calendar event (or repeating
  *        series) by tagging it, instead of making a second copy. Calendar reads now say which series an event belongs to.
  *   3.7: faster. The app's copy of each tab and of the shared calendar is kept in the script cache, so opening the
@@ -614,9 +616,9 @@ function weekAdd_(week) {
   week = monday_(week);
   if (get_('Weeks', week)) return;
   put_('Weeks', { id: week, status: 'draft', lockedBy: '' });
-  DAYS.forEach(function (d, i) {
-    var p = pick_(week, d, []);
-    put_('Menus', { id: week + '-' + d, week: week, day: d, date: addDays_(week, i), recipeId: p.recipeId, note: p.note, away: ruleFor_(d).away || '', skipped: '', kept: '', cook: ruleFor_(d).cook || '' });
+  DAYS.forEach(function (d, i) {   // every night starts with no dinner planned
+    if (get_('Menus', week + '-' + d)) return;
+    put_('Menus', { id: week + '-' + d, week: week, day: d, date: addDays_(week, i), recipeId: '', note: '', away: ruleFor_(d).away || '', skipped: '', kept: '', cook: ruleFor_(d).cook || '' });
   });
 }
 function swap_(id) {
