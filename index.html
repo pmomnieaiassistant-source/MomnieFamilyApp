@@ -216,6 +216,7 @@
   .pwk { display:flex; align-items:center; justify-content:space-between; margin:12px 12px 4px; text-align:center; }
   .pdaybox.today { border-color:var(--accent); } .pdaybox.past { opacity:.6; }
   .pgifts .rbar { margin-right:0 !important; }
+  .rchg { color:var(--accent); font-weight:700; } .irow.ihead span { font-size:12px; font-weight:700; color:var(--muted); text-transform:uppercase; letter-spacing:.4px; padding:0 4px; } .prow[data-a] { cursor:pointer; }
   .wseg { display:inline-flex; margin-top:5px; padding:3px; gap:3px; border-radius:10px; background:var(--soft); }
   .wseg button { border:0; background:none; font:inherit; font-size:13px; font-weight:700; color:var(--muted); padding:5px 12px; border-radius:8px; display:inline-flex; align-items:center; gap:4px; }
   .wseg button.on { background:var(--card); color:var(--accent); box-shadow:0 1px 3px rgba(0,0,0,.12); } .small.wfh { color:var(--accent); font-weight:600; }
@@ -323,7 +324,7 @@
 // Momnie Family app v6.0
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'], DAYN = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'], ADULTS = ['Paul', 'Shana'];
 // Shown at the bottom of Home. Bump it together with VERSION in sw.js on every release.
-const APP_VERSION = '11.6 · Nov 18, 2026';
+const APP_VERSION = '11.7 · Nov 18, 2026';
 const TABLES = ['People', 'Schools', 'SchoolCal', 'Activities', 'Overrides', 'Events', 'Caretakers', 'Childcare', 'Birthdays', 'Todos', 'TodoTypes', 'Recipes', 'DinnerRules', 'Weeks', 'Menus',
   'Groceries', 'GroceryList', 'HouseCards', 'Houses', 'WeatherRules', 'Quotes', 'Memories', 'Updates', 'Messages', 'Activity', 'Comments', 'Reactions', 'Links', 'Settings', 'Photos', 'gifts', 'daily_items', 'daily_completions'];
 const CAT = { School: '#3f6fb5', Kids: '#4f7cc2', Work: '#64748b', Family: '#5b6fa8', Dinner: '#b08a4f', Caretaker: '#3e9aa6', Shared: '#94a3b8', Birthday: '#c9806a' }, SCHOOL_C = ['#5a72b8', '#7a8597', '#4a6fb0'];
@@ -692,6 +693,22 @@ function kidWeekRows(kid, sch) {
   return sc.map(w => { const k = sched ? (sched[w.day] || {}) : {}, legacy = !sched && kid && list(kid.extDays).includes(w.day) && w.start ? w.ext : '';
     return { day: w.day, s: w.start, e: k.e || w.end, x: k.x || legacy || '' }; });
 }
+// ----- School drop-off and pickup -----
+// Usual rides per school and weekday live in Settings as school|<id>|rides: {"Mon":{"d":"Paul","p":"Lina","x":"Shana"}}
+// (d = drop-off, p = pickup, x = extended-day pickup). A change for one day is an Overrides row: ref school:<id>|<kind>, date.
+const RIDE_WORD = { d: 'drop-off', p: 'pickup', x: 'extended day pickup' }, RIDE_VERB = { d: 'drop off', p: 'pick up', x: 'pick up' };
+const schoolRidesDef = sid => { const r = byId('Settings', 'school|' + sid + '|rides'); try { const o = JSON.parse((r && r.value) || '{}'); return o && typeof o === 'object' ? o : {}; } catch (e) { return {}; } };
+const rideOv = (sid, date, k) => S.Overrides.find(o => o.ref === 'school:' + sid + '|' + k && o.date === date);
+/** Who does a school ride on a date: { who, usual, changed }. */
+function schoolRide(sid, date, k) { const usual = ((schoolRidesDef(sid)[DAYS[dowIdx(date)]] || {})[k]) || '', o = rideOv(sid, date, k);
+  return o ? { who: o.pickup || '', usual, changed: true } : { who: usual, usual, changed: false }; }
+/** The school runs on a date: drop-off, pickup and extended-day pickup, with the kids in each. */
+function schoolRuns(date) { const out = {};
+  kids().forEach(k => { const sch = byId('Schools', k.schoolId); if (!sch || dowIdx(date) > 4) return; const b = blocksFor(k, date).find(x => x.school && !x.off); if (!b) return;
+    const add = (kind, time) => { const key = sch.id + '|' + kind + '|' + time; (out[key] = out[key] || { sid: sch.id, name: sch.short || sch.name, kind, time, kids: [] }).kids.push(k.name); };
+    add('d', b.s); add(b.ext ? 'x' : 'p', b.e); });
+  return Object.values(out).map(r => Object.assign(r, schoolRide(r.sid, date, r.kind))); }
+const rideTag = r => r.who ? `<span class="${r.changed ? 'rchg' : 'muted'}">(${esc(r.who)}${r.changed ? ' · changed' : ''})</span>` : '<span class="red">(who?)</span>';
 function schoolDay(sch, d, kid) {
   const day = DAYS[dowIdx(d)], r = kidWeekRows(kid, sch).find(x => x.day === day) || { s: '', e: '', x: '' }, ext = !!(r.s && r.x);
   return { s: r.s, e: ext ? r.x : r.e, ext, base: r.e };
@@ -727,7 +744,8 @@ function blocksFor(p, d) {
     if (sch && dow < 5 && schoolDay(sch, d, p).s) { const c = items.find(i => i.t === 'SchoolCal' && i.src === 'school:' + sch.id && (i.kind === 'off' || i.kind === 'half')), sd = schoolDay(sch, d, p);
       if (!c || c.kind === 'half') out.push({ n: (sch.short || sch.name) + (sd.ext && !c ? ' extended day' : ''), s: sd.s, e: c && c.end ? c.end : c ? '12:00' : sd.e, school: 1, ext: !!(sd.ext && !c), t: 'Schools', id: sch.id });
       else out.push({ off: c.title || 'No school', t: 'SchoolCal', id: c.id }); } }
-  else if (list(p.workDays).includes(DAYS[dow]) && p.workStart) { const home = workWhere(p, d) === 'home'; out.push({ n: home ? 'Work from home' : 'Work', s: p.workStart, e: p.workEnd || p.workStart, work: 1, home }); }
+  else { schoolRuns(d).filter(r => r.who === p.name).forEach(r => out.push({ n: `${r.kind === 'd' ? 'Drop off' : 'Pick up'} ${kidNames(r.kids)} ${r.kind === 'd' ? 'at' : 'from'} ${r.name}`, s: r.time, e: r.time, task: 1, t: 'Schools', id: r.sid })); }
+  if (p.kind !== 'kid' && list(p.workDays).includes(DAYS[dow]) && p.workStart) { const home = workWhere(p, d) === 'home'; out.push({ n: home ? 'Work from home' : 'Work', s: p.workStart, e: p.workEnd || p.workStart, work: 1, home }); }
   items.forEach(i => { if (!i.start || i.src === 'dinner' || i.ext) return;   // extended day is already the school block above
     if (i.people.includes(p.name) && i.t !== 'Childcare') out.push({ n: i.title, s: i.start, e: i.end || i.start, where: i.sub, drop: i.dropoff, pick: i.pickup, ride: i.ride, t: i.t, id: i.id });
     if (p.kind !== 'kid') { if (i.dropoff === p.name) out.push({ n: 'Drop off ' + (kidNames(i.people) || 'kids') + ' at ' + i.title, s: i.start, e: i.start, t: i.t, id: i.id, task: 1 });
@@ -800,7 +818,7 @@ const F = (k, l, t, o, x) => Object.assign({ k, l, t: t || 'text', o }, x || {})
 function fieldHTML(f, v) {
   const val = v[f.k] || '', o = (typeof f.o === 'function' ? f.o(v) : f.o) || [];
   if (f.t === 'rows') { const rows = v[f.k] = v[f.k] || (f.init ? f.init(v) : [{}]);
-    return `<label>${esc(f.l)}</label>` + rows.map((r, i) => `<div class="irow">${f.cols.map(c => { const at = `class="${c.cls || ''}" data-rk="${f.k}" data-ri="${i}" data-rc="${c.c}"`;
+    return `<label>${esc(f.l)}</label>` + (f.head ? `<div class="irow ihead">${f.cols.map((c, j) => `<span class="${c.cls || ''}">${esc(f.head[j] || '')}</span>`).join('')}</div>` : '') + rows.map((r, i) => `<div class="irow">${f.cols.map(c => { const at = `class="${c.cls || ''}" data-rk="${f.k}" data-ri="${i}" data-rc="${c.c}"`;
       if (c.t === 'sel') { if (!r[c.c]) r[c.c] = c.o[0]; return `<select ${at}>${c.o.map(o => `<option ${o === r[c.c] ? 'selected' : ''}>${esc(o)}</option>`).join('')}</select>`; }
       if (c.t === 'label') return `<span class="${c.cls || ''} irl">${esc(r[c.c] || '')}</span>`;
       if (c.t === 'time') return timeSelect(at, r[c.c] || '', typeof c.ph === 'function' ? c.ph(r) : (c.ph || (c.c === 'end' ? 'Ends' : 'Starts')), f.step);
@@ -1209,7 +1227,9 @@ const CARD = {
       kv('For', own ? 'You (your wish list)' : g.recipient) + kv('', g.description) + kvh('Website', g.url && linkOr(g.url)) + (own ? '' : kv('Who is buying it', g.assigned_to || 'No one yet')) +
       kv('Added', `${g.added_by === ME ? 'You' : g.added_by || ''}${g.created_at ? ' · ' + fmtDay(g.created_at) : ''}`) +
       `<div class="actions">${!own && !g.assigned_to ? `<button class="btn sm" data-a="giftMine" data-v="${g.id}">${ic('check', 16)}I'll get it</button>` : ''}<button class="btn gray sm" data-a="edit">${ic('pen')}Edit</button><button class="btn danger sm" data-a="del">${ic('trash')}Delete</button></div>`; },
-  Schools(r, d, t) { return genericCard(r, d, t) + kv('Schedule', schoolHoursTxt(r)) + kv('Kids', kids().filter(k => k.schoolId === r.id).map(k => k.name + (kidExtTxt(k, r) ? ' (extended ' + kidExtTxt(k, r) + ')' : '')).join(', ')) + std(); },
+  Schools(r, d, t) { const def = schoolRidesDef(r.id), rt = DAYS.slice(0, 5).filter(x => def[x]).map(x => `${x}: ${[def[x].d && 'drop ' + def[x].d, def[x].p && 'pick ' + def[x].p, def[x].x && 'late ' + def[x].x].filter(Boolean).join(', ')}`).join(' · ');
+    return genericCard(r, d, t) + kv('Schedule', schoolHoursTxt(r)) + kv('Usual rides', rt || 'Not set yet') +
+      `<div class="actions"><button class="btn sm" data-a="schoolRidesWeek" data-v="${r.id}">${ic('car', 16)}Rides for the next 2 weeks</button><button class="btn gray sm" data-a="schoolRidesEdit" data-v="${r.id}">${ic('pen', 16)}Usual rides</button></div>` + kv('Kids', kids().filter(k => k.schoolId === r.id).map(k => k.name + (kidExtTxt(k, r) ? ' (extended ' + kidExtTxt(k, r) + ')' : '')).join(', ')) + std(); },
   Todos(r) { const ty = typeOf(r), done = r.status === 'Done', src = (r.source || '').split(':');
     return `<h2>${esc(r.title)}</h2>${r.amount ? `<div class="b" style="font-size:22px">${money(r.amount)}</div>` : ''}` + kv('Type', ty.name) + kvh('Due', `<span class="${!done && r.due < TODAY ? 'red' : ''}">${fmtDay(r.due)}${!done && r.due < TODAY ? ' (overdue)' : ''}</span>`) + kv('For', r.assignee || 'Either of us') +
       kvh('Where to pay', r.where && linkOr(r.where)) + kv('Kid', r.kid) + kv('House', r.house) + kv('Repeats', repTxt(r.repeat)) + kvh('Link', r.link && linkOr(r.link)) + kv('Notes', r.notes) + kv('Added', `${r.addedBy} · ${fmtDay(r.created)}`) + (done ? kv(ty.id === 'bill' || ty.id === 'paycare' ? 'Paid' : 'Done', `${r.doneBy} · ${fmtDay(r.doneOn)}`) : '') +
@@ -1566,9 +1586,7 @@ function planRows(d, after) {
     (drop[b.s + '|' + base] = drop[b.s + '|' + base] || { s: b.s, n: base, k: [] }).k.push(k.name);
     if (b.ext) (ext[b.e + '|' + base] = ext[b.e + '|' + base] || { s: b.e, n: base, k: [] }).k.push(k.name);
     else (pick[b.e + '|' + base] = pick[b.e + '|' + base] || { s: b.e, n: base, k: [] }).k.push(k.name); }));
-  Object.values(drop).forEach(x => rows.push({ s: x.s, title: x.n + ' drop-off', sub: esc(kidNames(x.k)) }));
-  Object.values(pick).forEach(x => rows.push({ s: x.s, title: x.n + ' pickup', sub: esc(kidNames(x.k)) }));
-  Object.values(ext).forEach(x => rows.push({ s: x.s, title: x.n + ' extended day pickup', sub: esc(kidNames(x.k)) }));
+  schoolRuns(d).forEach(r => rows.push({ s: r.time, title: r.name + ' ' + RIDE_WORD[r.kind], who: rideTag(r), sub: esc(kidNames(r.kids)), tap: `data-a="schoolRide" data-v="${r.sid}|${d}|${r.kind}"` }));
   itemsFor(d).filter(i => i.t !== 'GCal' && i.src !== 'gcal' && i.src !== 'birthday' && !i.ext).forEach(i => {
     const ride = i.ride ? (!i.dropoff || !i.pickup ? `<span class="red">${!i.dropoff && !i.pickup ? 'rides' : !i.dropoff ? 'drop-off' : 'pickup'} not set</span>` : rideHTML(i)) : '';
     const sub = i.src === 'dinner' ? [i.cook && esc(i.cook) + ' cooking', i.away && `<span class="amb">${esc(i.away)} not home</span>`].filter(Boolean).join(' · ') : [i.sub && (i.warn ? `<span class="red">${esc(i.sub)}</span>` : esc(i.sub)), ride].filter(Boolean).join(' · ');
@@ -1597,7 +1615,7 @@ function vFeed() {
     <div class="tiles3"><div><span>HIGH / LOW</span><b>${wd.high}° / ${wd.low}°</b></div><div><span>RAIN</span><b>${wd.rain}%</b></div><div><span>UV</span><b>${wd.uv} ${uvWord(wd.uv)}</b></div></div>
     ${wx.length ? `<div class="stack">${wx.map(w => `<div class="alert amber">${ic(w.icon, 16)}<span>${esc(w.text)}</span></div>`).join('')}</div>` : ''}` : '';
   const pl = planRows(sd, !night && h >= 12 ? now : '');
-  const prow = r => `<div class="prow ${!night && h < 12 && r.s && (r.e || r.s) < now ? 'past' : ''}"><span>${r.s ? fmtT(r.s) : r.dinner ? 'Dinner' : 'All day'}</span><span><b>${esc(r.title)}</b>${r.sub ? ' · ' + r.sub : ''}</span></div>`;
+  const prow = r => `<div class="prow ${!night && h < 12 && r.s && (r.e || r.s) < now ? 'past' : ''}" ${r.tap || ''}><span>${r.s ? fmtT(r.s) : r.dinner ? 'Dinner' : 'All day'}</span><span><b>${esc(r.title)}</b>${r.who ? ' ' + r.who : ''}${r.sub ? ' · ' + r.sub : ''}</span></div>`;
   let html = `<div class="hero"><div class="small muted b">${new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}</div>
       <div style="font-size:22px;font-weight:800;letter-spacing:-.5px">Good ${h < 12 ? 'morning' : h < 17 ? 'afternoon' : 'evening'}, ${esc(ME)}</div>
     ${weather}
@@ -1704,6 +1722,32 @@ function vPlanner() {
 // From the Feed's plan: open the Planner on that day.
 A.planDay = d => { view = 'planner'; PW = mondayOf(d); render(); const el = $('day-' + d); window.scrollTo(0, el ? el.getBoundingClientRect().top + window.scrollY - 70 : 0); };
 A.pweek = async n => { PW = addDays(PW, +n); render(); if (PW < addDays(TODAY, -7) || addDays(PW, 6) > addDays(TODAY, 48)) { try { await api('cal', { start: PW, days: 7 }); render(); } catch (e) {} } };
+A.schoolRide = v => { const [sid, date, k] = v.split('|'); sheet(() => { const sch = byId('Schools', sid); if (!sch) return null; const r = schoolRuns(date).find(x => x.sid === sid && x.kind === k);
+  const now = schoolRide(sid, date, k), names = rideO().map(x => Array.isArray(x) ? x : [x, x]).filter(([a]) => a);
+  return `<h2>${esc((sch.short || sch.name) + ' ' + RIDE_WORD[k])}</h2><div class="small muted">${fmtLong(date)}${r ? ' · ' + fmtT(r.time) + ' · ' + esc(kidNames(r.kids)) : ''}</div>
+    <div class="lbl">Who's doing it${date === TODAY ? ' today' : ''}?</div><div class="chips" style="flex-wrap:wrap;padding:0">${names.map(([a, b]) => `<button class="chip ${now.who === a ? 'on' : ''}" data-a="schoolRideSet" data-v="${esc(sid + '|' + date + '|' + k + '|' + a)}">${esc(b)}</button>`).join('')}</div>
+    <div class="small muted" style="margin-top:10px">Usually ${now.usual ? esc(now.usual) : 'no one set'} on ${DAYN[dowIdx(date)]}s.${now.changed ? ' This day is changed.' : ''}</div>
+    <div class="actions">${now.changed ? `<button class="btn gray sm" data-a="schoolRideSet" data-v="${esc(sid + '|' + date + '|' + k + '|' + '~usual')}">Back to usual</button>` : ''}<button class="btn gray sm" data-a="schoolRidesEdit" data-v="${sid}">Change the usual</button></div>`; }); };
+A.schoolRideSet = (v, el) => { const [sid, date, k, who0] = v.split('|'), sch = byId('Schools', sid), back = who0 === '~usual', now = schoolRide(sid, date, k), who = back ? now.usual : who0;
+  if (!back && who === now.who && now.changed) return A.close(null, el);
+  const r = schoolRuns(date).find(x => x.sid === sid && x.kind === k), ks = r ? kidNames(r.kids) : 'the kids', ref = 'school:' + sid + '|' + k, o = rideOv(sid, date, k), ops = [];
+  if (who === now.usual) { if (o) ops.push({ t: 'Overrides', del: o.id }); } else ops.push({ t: 'Overrides', row: { id: o ? o.id : nid(), ref, date, pickup: who, dropoff: '', cancelled: '' } });
+  if (!ops.length) return A.close(null, el);
+  ops[0].log = L('ride', `${who ? `${who === ME ? 'will' : 'says ' + who + ' will'} ${RIDE_VERB[k]} ${ks} ${k === 'd' ? 'at' : 'from'} ${sch.short || sch.name} on ${fmtDay(date)}` : `cleared the ${RIDE_WORD[k]} at ${sch.short || sch.name} on ${fmtDay(date)}`}${now.usual && who !== now.usual ? ` (usually ${now.usual})` : ''}`, 'planner');
+  A.close(null, el); write(ops, { notify: 'on' }); };
+// The usual rides for a school, one row per school day, plus the next two weeks at a glance.
+A.schoolRidesEdit = (sid, el) => { const sch = byId('Schools', sid); if (!sch) return; if (el && el.closest && el.closest('dialog')) A.close(null, el);
+  const def = schoolRidesDef(sid), wk = schoolWeek(sch).filter(w => w.start), opt = ['Not set'].concat(rideO().map(x => Array.isArray(x) ? x[0] : x).filter(Boolean)), show = x => x === 'Not set' ? '' : x;
+  form('Usual rides · ' + (sch.short || sch.name), [F('_rides', 'Each school day', 'rows', null, { fixed: 1, noDur: 1, head: ['', 'Drop-off', 'Pickup', 'Late pickup'], hint: 'Drop-off, pickup, and the extended-day pickup for days a kid stays late. Change a single day by tapping it in the Feed or in Rides for the next 2 weeks.',
+      init: () => wk.map(w => ({ day: w.day, d: (def[w.day] || {}).d || 'Not set', p: (def[w.day] || {}).p || 'Not set', x: (def[w.day] || {}).x || 'Not set' })),
+      cols: [{ c: 'day', t: 'label', cls: 'u' }, { c: 'd', t: 'sel', o: opt, cls: 'n' }, { c: 'p', t: 'sel', o: opt, cls: 'n' }, { c: 'x', t: 'sel', o: opt, cls: 'n' }] })], {},
+    v => { const out = {}; (v._rides || []).forEach(r => { const o = { d: show(r.d), p: show(r.p), x: show(r.x) }; if (o.d || o.p || o.x) out[r.day] = o; });
+      return write({ t: 'Settings', row: { id: 'school|' + sid + '|rides', value: JSON.stringify(out) } }, { log: L('ride', `updated the usual rides for ${sch.short || sch.name}`, 'planner') }); }); };
+A.schoolRidesWeek = sid => sheet(() => { const sch = byId('Schools', sid); if (!sch) return null; let out = '';
+  for (let i = 0; i < 14; i++) { const d = addDays(TODAY, i), rs = schoolRuns(d).filter(r => r.sid === sid).sort((a, b) => a.time.localeCompare(b.time)); if (!rs.length) continue;
+    out += `<div class="pday">${d === TODAY ? 'Today' : d === addDays(TODAY, 1) ? 'Tomorrow' : fmtDay(d)}</div>` + rs.map(r => `<div class="li plain" data-a="schoolRide" data-v="${r.sid}|${d}|${r.kind}"><div class="grow"><div class="ti">${fmtT(r.time)} ${RIDE_WORD[r.kind]} ${rideTag(r)}</div><div class="small muted">${esc(kidNames(r.kids))}</div></div><span class="chev">›</span></div>`).join(''); }
+  return `<h2>Rides · ${esc(sch.short || sch.name)}</h2><div class="small muted">Next 2 weeks. Tap one to change who's doing it that day.</div>${out || '<div class="empty">No school days coming up.</div>'}
+    <div class="actions"><button class="btn gray sm" data-a="schoolRidesEdit" data-v="${sid}">${ic('pen', 16)}Change the usual</button></div>`; });
 A.dayAdd = d => { const s = sheet(`<h2>Add to ${fmtDay(d)}</h2><div class="actions" style="flex-direction:column"><button class="btn gray" data-a="addOn" data-v="Events" data-d="${d}">${ic('planner', 16)}Event</button><button class="btn gray" data-a="addOn" data-v="Childcare" data-d="${d}">${ic('care', 16)}Caretaker card</button><button class="btn gray" data-a="addOn" data-v="Todos" data-d="${d}">${ic('todo', 16)}To-do due that day</button><button class="btn gray" data-a="addOn" data-v="Activities" data-d="${d}">${ic('repeat', 16)}Repeating activity (kids or parents)</button><button class="btn gray" data-a="addOn" data-v="SchoolCal" data-d="${d}">${ic('school', 16)}School calendar item</button></div>`); };
 A.addOn = (t, el) => { A.close(null, el); editForm(t, null, t === 'Todos' ? { due: el.dataset.d } : t === 'Activities' ? { days: DAYS[dowIdx(el.dataset.d)], from: el.dataset.d } : { date: el.dataset.d }); };
 
