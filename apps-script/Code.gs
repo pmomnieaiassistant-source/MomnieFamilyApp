@@ -1,6 +1,8 @@
 /**
  * Momnie Family app backend
- * Version 3.20 (2026-11-18)
+ * Version 3.21 (2026-11-18)
+ *   3.21: Hide a calendar entry or series from the planner (gcal_hide / gcal_unhide): it gets the app's hidden key,
+ *         nothing is created in the app, and Settings lists what is hidden (app|gcal.hidden).
  *   3.20: Shared Notes (notes tab). Sheet menu: Run the assistant now / Write Today cards now. The assistant leaves
  *         past events and meals alone.
  *   3.19: The Assistant reads the family's conversations (posts, comments, answers to question posts) and, when one
@@ -311,6 +313,8 @@ function route_(b, me) {
       weekAdd_(b.week); if (b.log) log_(me, b.log, 'Weeks', b.week); return {};
     case 'photo_add': return photoAdd_(b, me);
     case 'dinner_swap': swap_(b.id); if (b.log) log_(me, b.log, 'Menus', b.id); return {};
+    case 'gcal_hide': gcalHide_(String(b.gcalId || ''), b.series === '1', String(b.title || ''), me); calDrop_(); return { cal: calCached_(addDays_(today_(), -7), 56) };
+    case 'gcal_unhide': gcalUnhide_(String(b.id || '')); calDrop_(); return {};
     case 'gcal_delete': gcalDelete_(b.gcalId); calDrop_(); if (b.log) log_(me, b.log); return { cal: calCached_(addDays_(today_(), -7), 56) };
     case 'ai_run':   // "Post now" from the AI assistant settings page (Paul only)
       if (me !== 'Paul') return { ok: false, error: 'Only Paul can run the AI assistant.' };
@@ -485,6 +489,21 @@ function cal_(start, days) {
     });
   });
   return out;
+}
+/** Hides a calendar entry, or its whole repeating series, from the app by giving it the app's key (the app skips tagged entries). */
+function gcalHide_(gcalId, series, title, me) {
+  var e = gcalEvent_(gcalId); if (!e) throw new Error('That calendar entry is gone.');
+  var key = gcalId, cid = gcalId.slice(0, gcalId.indexOf('|'));
+  if (series && e.isRecurringEvent()) { var sr = e.getEventSeries(); sr.setTag('momnie', 'hidden'); key = cid + '|' + sr.getId(); } else e.setTag('momnie', 'hidden');
+  var list = jsonList_(setting_('app|gcal.hidden', '[]')).filter(function (x) { return x.id !== key; });
+  list.push({ id: key, series: series ? '1' : '', title: title, by: me, time: now_() });
+  put_('Settings', { id: 'app|gcal.hidden', value: JSON.stringify(list) });
+}
+function gcalUnhide_(key) {
+  var list = jsonList_(setting_('app|gcal.hidden', '[]')), x = list.filter(function (y) { return y.id === key; })[0];
+  if (x) { var i = key.indexOf('|'), cal = calById_(key.slice(0, i));
+    try { var item = x.series === '1' ? cal.getEventSeriesById(key.slice(i + 1)) : cal.getEventById(key.slice(i + 1)); if (item && item.getTag('momnie') === 'hidden') item.deleteTag('momnie'); } catch (e) { console.error(e); } }
+  put_('Settings', { id: 'app|gcal.hidden', value: JSON.stringify(list.filter(function (y) { return y.id !== key; })) });
 }
 function gcalEvent_(gcalId) {
   var i = gcalId.indexOf('|'), cal = calById_(gcalId.slice(0, i));
