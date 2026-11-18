@@ -351,7 +351,7 @@
 // Momnie Family app v6.0
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'], DAYN = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'], ADULTS = ['Paul', 'Shana'];
 // Shown at the bottom of Home. Bump it together with VERSION in sw.js on every release.
-const APP_VERSION = '13.7 · Nov 18, 2026';
+const APP_VERSION = '13.8 · Nov 18, 2026';
 const TABLES = ['People', 'Schools', 'SchoolCal', 'Activities', 'Overrides', 'Events', 'Caretakers', 'Childcare', 'Birthdays', 'Todos', 'TodoTypes', 'Recipes', 'DinnerRules', 'Weeks', 'Menus',
   'Groceries', 'GroceryList', 'HouseCards', 'Houses', 'WeatherRules', 'Quotes', 'Memories', 'Updates', 'Messages', 'Activity', 'Comments', 'Reactions', 'Links', 'Settings', 'Photos', 'gifts', 'ai_rules', 'ai_requests', 'notes', 'daily_items', 'daily_completions'];
 const CAT = { School: '#3f6fb5', Kids: '#4f7cc2', Work: '#64748b', Family: '#5b6fa8', Dinner: '#b08a4f', Caretaker: '#3e9aa6', Shared: '#94a3b8', Birthday: '#c9806a' }, SCHOOL_C = ['#5a72b8', '#7a8597', '#4a6fb0'];
@@ -1738,7 +1738,6 @@ function planRows(d, after) {
 }
 // AI Today card: when the assistant is on and this person turned it on, the assistant writes their card
 // (headline, a weather sentence, the few things that matter most). Anything missing or stale shows the classic card.
-let BRIEFING = false;
 function aiCard(sd, night) {
   const on = (byId('Settings', 'app|ai.on') || {}).value === '1' && aiCardFor().includes(ME);
   if (!on) return { on: false };
@@ -1752,12 +1751,6 @@ function foldRuns(rows, d) {
   const text = Object.keys(by).map(w => `${w} ${[...by[w]].join(' and ')}`).join(' · '), first = rows.indexOf(usual[0]);
   const out = rows.filter(r => !usual.includes(r)); out.splice(first, 0, { s: usual[0].s, title: 'Usual school runs', sub: esc(text), tap: `data-a="planDay" data-v="${d}"` });
   return out; }
-A.aiBrief = async () => { if (BRIEFING) return; const night = new Date().getHours() >= 19, sd = night ? addDays(TODAY, 1) : TODAY; BRIEFING = true; render();
-  try { const r = await api('ai_brief', { date: sd, mode: night ? 'night' : 'day' });
-    if (r.brief && r.brief.error) toast(r.brief.error);
-    else if (r.brief) { const id = ME + '|ai.brief', row = byId('Settings', id), v = JSON.stringify(r.brief); if (row) row.value = v; else S.Settings.push({ id, value: v }); saveCache(); } }
-  catch (e) { toast(e.message); }
-  BRIEFING = false; render(); };
 function vFeed() {
   // The Today card changes with the time of day: the morning shows today, the afternoon shows the rest of today,
   // and from 7 PM it switches to tomorrow (weather for tomorrow's clothes, tomorrow's to-dos and plan).
@@ -1787,8 +1780,8 @@ function vFeed() {
     ${rem.length ? `<div class="lbl">Reminders</div><div class="stack">${rem.map(remHTML).join('')}</div>` : ''}
     <div class="plan" data-a="planDay" data-v="${sd}"><div class="ph"><span>${night ? "Tomorrow's plan" : h >= 12 ? 'Rest of today' : "Today's plan"}</span><a>Planner${ic('chev', 16)}</a></div>
       ${pl.length ? pl.slice(0, 10).map(prow).join('') + (pl.length > 10 ? `<div class="small muted" style="padding-top:4px">+${pl.length - 10} more</div>` : '') : `<div class="small muted" style="padding-top:6px">Nothing planned${night ? ' for tomorrow' : ''}.</div>`}</div></div>`;
-  if (ai.on) { const t = ai.brief && ai.brief.time ? fmtT(ai.brief.time.slice(11, 16)) : '';
-    html = html.replace(/<\/div>$/, `<div class="aifoot">${ic('spark', 13)}<span class="grow">${BRIEFING ? 'Touching up your card…' : ai.brief ? `Touched up by your assistant${t ? ' at ' + t : ''}` : 'Your assistant touches up this card each morning and at 7 PM.'}</span>${BRIEFING ? '' : `<button data-a="aiBrief">${ai.brief ? ic('refresh', 14) + 'Refresh' : 'Do it now'}</button>`}</div></div>`); }
+  if (ai.brief) { const t = ai.brief.time ? fmtT(ai.brief.time.slice(11, 16)) : '';
+    html = html.replace(/<\/div>$/, `<div class="aifoot">${ic('spark', 13)}<span class="grow">Touched up by your assistant${t ? ' at ' + t : ''}</span></div></div>`); }
   const hide = c => c && st('f.' + c, '1') === '0';
   const gone = feedHidden();
   const kindHidden = a => a.type === 'answer' ? true : a.table === 'Photos' ? !fOn('photos') : a.type === 'daily' ? !fOn('daily') : hide(a.cat);
@@ -2187,8 +2180,13 @@ A.aiEdit = (v, el) => { if (ME !== 'Paul') return; const g = k => (byId('Setting
     x => { need(list(x.who).length, 'Pick at least one person to see the posts.');
       const keys = AI_TOPICS.filter(t => list(x.topics).includes(t[1])).map(t => t[0]); need(keys.length, 'Pick at least one topic.');
       return write(['on', 'who', 'topics', 'hour', 'card', 'use', 'convo'].map(k => ({ t: 'Settings', row: { id: 'app|ai.' + k, value: k === 'on' ? (x.on === '1' ? '1' : '') : k === 'convo' ? (x.convo === '1' ? '1' : '0') : k === 'who' ? ADULTS.filter(a => list(x.who).includes(a)).join(', ') : k === 'topics' ? keys.join(', ') : k === 'card' || k === 'use' ? ADULTS.filter(a => list(x[k]).includes(a)).join(', ') || 'none' : x.hour } }))); }); };
-A.aiRun = async (v, el) => { el.disabled = true; el.textContent = 'Asking Claude…'; let r = null; try { r = await api('ai_run'); } catch (e) { toast(e.message); } el.disabled = false; refresh();
-  if (r && r.ai) toast(r.ai.error ? r.ai.error : r.ai.notes && r.ai.notes.length ? `Posted ${r.ai.notes.length} note${r.ai.notes.length === 1 ? '' : 's'} to the Feed` : 'Nothing worth posting right now.'); };
+// One button runs the whole assistant now: Feed notes, the AI Today cards, and the conversation check.
+A.aiRun = async (v, el) => { el.disabled = true; el.textContent = 'Running the assistant…'; let r = null; try { r = await api('ai_all', { today: TODAY }); } catch (e) { toast(e.message); }
+  el.disabled = false; if (!r) return refresh(); await load().catch(() => {});
+  const n = r.notes || {}, bits = [n.error ? 'Notes: ' + n.error : (n.notes || []).length ? `${n.notes.length} note${n.notes.length === 1 ? '' : 's'} posted` : 'no new notes'];
+  if ((r.cards || []).length) bits.push('Today card updated for ' + joinNames(r.cards)); if (r.cardError) bits.push('Today card: ' + r.cardError);
+  if ((r.convo || []).length) bits.push(r.convo.length + ' plan' + (r.convo.length === 1 ? '' : 's') + ' from conversations');
+  toast(bits.join(' · ')); };
 const pauseDays = () => +((byId('Settings', 'app|pauseDays') || {}).value || 30) || 30;
 A.rules = () => { const tags = [...new Set(S.Recipes.flatMap(r => list(r.tags.toLowerCase())))].sort(), recs = S.Recipes.slice().sort((a, b) => a.name.localeCompare(b.name));
   const rule = d => byId('DinnerRules', d) || (DAYS.indexOf(d) >= 4 ? { type: 'off', value: '' } : { type: 'any', value: '' }), val = r => r.type === 'any' ? 'any' : r.type + ':' + r.value;
@@ -2553,7 +2551,7 @@ const PAGES = {
       <div class="kv"><span>Assistant button</span>${esc(joinNames(aiUseFor()) || 'No one')}</div>
       <div class="kv"><span>AI Today card</span>${esc(joinNames(aiCardFor()) || 'No one')}</div>
       <div class="kv"><span>Assistant rules</span>${S.ai_rules.filter(r => r.active !== '0').length} on · <a data-a="homeOpen" data-v="airules">See and add rules</a></div>
-      <div class="actions"><button class="btn" data-a="aiEdit">${ic('pen', 16)}Change</button><button class="btn gray" data-a="aiRun">${ic('spark', 16)}Post now</button></div>
+      <div class="actions"><button class="btn" data-a="aiEdit">${ic('pen', 16)}Change</button><button class="btn gray" data-a="aiRun">${ic('refresh', 16)}Run the assistant now</button></div>
       <div class="small muted" style="margin-top:12px">Needs an Anthropic API key in Apps Script: Project Settings, Script properties, ANTHROPIC_API_KEY. Each person can mute its notifications under Notifications and Feed.</div>`; },
   settings: () => { const q = k => st(k, ''), chk = (c, k, def, l) => `<label class="check-row"><input type="checkbox" data-c="${c}" data-k="${k}" ${st(k, def) === '1' ? 'checked' : ''}> ${l}</label>`;
     return `<h2>Notifications and Feed</h2><h3>Push on this phone</h3>${pushHTML()}<h3>Notifications for ${esc(ME)}</h3>` + Object.keys(NCATS).map(c => chk('setFlag', 'n.' + c, c === 'dinner' ? '0' : '1', NCATS[c])).join('') +
