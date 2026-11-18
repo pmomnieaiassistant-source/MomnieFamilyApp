@@ -1,6 +1,7 @@
 /**
  * Momnie Family app backend
- * Version 3.27 (2026-11-18)
+ * Version 3.28 (2026-11-18)
+ *   3.28: Work location wording is "in office" and "working from home".
  *   3.27: Activity.subject, so the Feed shows only the newest post when something changes back and forth.
  *   3.26: A kid can have days they don't go to school (kid|<id>|schedule {"Mon":{"off":"1"}}): no runs or ride reminders those days.
  *   3.25: Work hours can differ by day (Settings person|<id>|hours); the morning summary uses them.
@@ -1064,7 +1065,7 @@ function briefCands_(p, d, mode) {
     if (x.kind === 'kid' || !ws || list_(x.workDays).indexOf(day) < 0) return;
     var w = jsonSafe_(setting_('person|' + x.id + '|wfh', '{}')), dates = w.dates && typeof w.dates === 'object' ? w.dates : {};
     var where = dates[d] || (list_(w.days).indexOf(day) >= 0 ? 'home' : 'office');
-    add('People:' + x.id, (x.name === p ? 'You work' : x.name + ' works') + ' ' + t12_(ws) + (we ? '–' + t12_(we) : '') + ', ' + (where === 'home' ? 'from home' : 'in the office'));
+    add('People:' + x.id, (x.name === p ? 'You work' : x.name + ' works') + ' ' + t12_(ws) + (we ? '–' + t12_(we) : '') + ', ' + (where === 'home' ? 'from home' : 'in office'));
   });
   schoolRuns_(d).forEach(function (r) { add('run:' + r.sid + '|' + d + '|' + r.kind, runLine_(r) + (r.who && !r.changed ? ' (the usual)' : '')); });
   kidOcc_(d).forEach(function (o) { add(o.t + ':' + o.id, t12_(o.start) + ' ' + o.title + ' (' + o.kids + '): drop-off ' + (o.dropoff || 'NOT SET') + ', pickup ' + (o.pickup || 'NOT SET')); });
