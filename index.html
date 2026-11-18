@@ -247,7 +247,9 @@
     --shadow:0 1px 2px rgba(15,23,42,.05), 0 6px 18px rgba(15,23,42,.07); --shadow-sm:0 1px 3px rgba(15,23,42,.12); }
   dialog.notepad .np-title, dialog.notepad .np-h, dialog.notepad .np-item, dialog.notepad .np-empty { font-family:'Caveat', 'Bradley Hand', 'Segoe Print', 'Comic Sans MS', cursive; }
   /* "add" written in the notepad's hand, with a pencil: no button box */
-  dialog.notepad .np-add { display:inline-flex; align-items:center; gap:6px; margin:16px 0 0 46px; padding:4px 2px; border:0; background:none; color:var(--np-ink2); font-family:'Caveat', 'Bradley Hand', 'Segoe Print', cursive; font-size:28px; line-height:1; }
+  dialog.notepad .np-add { display:inline-flex; align-items:center; gap:6px; margin:0; padding:6px 4px; border:0; background:none; color:var(--np-ink2); pointer-events:auto; font-family:'Caveat', 'Bradley Hand', 'Segoe Print', cursive; font-size:28px; line-height:1; }
+  /* bottom right of the pad, like the other add buttons; stays in view while the list scrolls */
+  dialog.notepad .np-addrow { position:sticky; bottom:0; display:flex; justify-content:flex-end; margin-top:14px; pointer-events:none; }
   dialog.notepad .np-add span { border-bottom:1.5px solid currentColor; padding-bottom:1px; } dialog.notepad .np-add svg { transform:rotate(-8deg); }
   dialog.notepad .np-title { font-size:34px; margin:0 0 0 30px; line-height:1.1; } .np-date { margin-left:30px; color:var(--np-ink); opacity:.65; }
   .np-sec { margin-top:14px; } .np-h { font-size:27px; font-weight:700; color:var(--np-ink2); padding-left:44px; line-height:1.2; } .np-h span { font-size:19px; font-weight:500; opacity:.7; }
@@ -319,7 +321,7 @@
 // Momnie Family app v6.0
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'], DAYN = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'], ADULTS = ['Paul', 'Shana'];
 // Shown at the bottom of Home. Bump it together with VERSION in sw.js on every release.
-const APP_VERSION = '10.6 · Nov 18, 2026';
+const APP_VERSION = '10.7 · Nov 18, 2026';
 const TABLES = ['People', 'Schools', 'SchoolCal', 'Activities', 'Overrides', 'Events', 'Caretakers', 'Childcare', 'Birthdays', 'Todos', 'TodoTypes', 'Recipes', 'DinnerRules', 'Weeks', 'Menus',
   'Groceries', 'GroceryList', 'HouseCards', 'Houses', 'WeatherRules', 'Quotes', 'Memories', 'Updates', 'Messages', 'Activity', 'Comments', 'Reactions', 'Links', 'Settings', 'Photos', 'gifts', 'daily_items', 'daily_completions'];
 const CAT = { School: '#3f6fb5', Kids: '#4f7cc2', Work: '#64748b', Family: '#5b6fa8', Dinner: '#b08a4f', Caretaker: '#3e9aa6', Shared: '#94a3b8', Birthday: '#c9806a' }, SCHOOL_C = ['#5a72b8', '#7a8597', '#4a6fb0'];
@@ -1998,7 +2000,7 @@ function dailyPanel() {
       <div style="height:1px;background:var(--line);margin:12px -4px 4px"></div><button class="rmopt" data-a="dlManageGo">${ic('list', 16)}Manage daily items</button></div>` : ''}</div>
     ${DPARTS.map(([p, range]) => { const its = items.filter(it => it.time_of_day === p);
       return `<div class="np-sec ${p === part ? 'now' : ''}"><div class="np-h">${p}</div>${its.map(row).join('') || '<div class="np-empty">Nothing today</div>'}</div>`; }).join('')}
-    <button class="np-add" data-a="dlAdd">${ic('pen', 20)}<span>add</span></button>`;
+    <div class="np-addrow"><button class="np-add" data-a="dlAdd">${ic('pen', 20)}<span>add</span></button></div>`;
 }
 A.dailyOpen = () => { DL.menu = false; sheet(() => dailyPanel(), 'notepad'); };
 A.dlMenu = () => { DL.menu = !DL.menu; refresh(); };
