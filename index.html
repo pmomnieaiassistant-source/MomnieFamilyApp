@@ -192,6 +192,7 @@
   .plan .ph a { display:inline-flex; align-items:center; font-size:13px; letter-spacing:0; text-transform:none; }
   .prow { display:grid; grid-template-columns:62px minmax(0,1fr); gap:10px; font-size:14px; line-height:1.35; padding:4px 0; } .prow > span:first-child { font-weight:800; color:var(--muted); }
   .prow.past { opacity:.5; }
+  .aiopen { float:right; margin:0 8px 0 0; height:32px; padding:0 10px; } .aibox { margin-top:4px; padding:12px; border-radius:16px; background:var(--soft); } .aibox textarea { width:100%; background:var(--card); }
   .aihead { margin-top:10px; font-size:17px; line-height:1.4; font-weight:600; letter-spacing:-.2px; }
   .wxline { display:flex; align-items:center; gap:8px; margin-top:12px; font-size:14px; } .wxline b { font-size:17px; }
   .wxsay { margin-top:4px; font-size:14px; color:var(--muted); }
@@ -331,7 +332,7 @@
 // Momnie Family app v6.0
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'], DAYN = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'], ADULTS = ['Paul', 'Shana'];
 // Shown at the bottom of Home. Bump it together with VERSION in sw.js on every release.
-const APP_VERSION = '12.6 · Nov 18, 2026';
+const APP_VERSION = '12.7 · Nov 18, 2026';
 const TABLES = ['People', 'Schools', 'SchoolCal', 'Activities', 'Overrides', 'Events', 'Caretakers', 'Childcare', 'Birthdays', 'Todos', 'TodoTypes', 'Recipes', 'DinnerRules', 'Weeks', 'Menus',
   'Groceries', 'GroceryList', 'HouseCards', 'Houses', 'WeatherRules', 'Quotes', 'Memories', 'Updates', 'Messages', 'Activity', 'Comments', 'Reactions', 'Links', 'Settings', 'Photos', 'gifts', 'ai_rules', 'daily_items', 'daily_completions'];
 const CAT = { School: '#3f6fb5', Kids: '#4f7cc2', Work: '#64748b', Family: '#5b6fa8', Dinner: '#b08a4f', Caretaker: '#3e9aa6', Shared: '#94a3b8', Birthday: '#c9806a' }, SCHOOL_C = ['#5a72b8', '#7a8597', '#4a6fb0'];
@@ -848,16 +849,19 @@ function fieldHTML(f, v) {
   return `<label>${esc(f.l)}</label><input data-k="${f.k}" type="${f.t === 'num' ? 'number' : f.t}" ${f.t === 'num' ? 'inputmode="decimal" step="any"' : ''} value="${esc(val)}" placeholder="${esc(f.ph || '')}" autocomplete="off">`;
 }
 /** Bottom-sheet form. fields: array or v => array. onSave(v, mode) may throw to show an error, or return false to stay open. */
-function form(title, fields, vals, onSave, buttons) {
+function form(title, fields, vals, onSave, buttons, opts) {
   const v = Object.assign({}, vals), d = sheet(''), fs = typeof fields === 'function' ? fields : () => fields;
   const draw = () => {
     const shown = fs(v).filter(f => !f.show || f.show(v));
     shown.forEach(f => { if (f.t === 'sel') { const o = (typeof f.o === 'function' ? f.o(v) : f.o).map(x => Array.isArray(x) ? x[0] : x); if (!o.includes(v[f.k] || '')) v[f.k] = o[0] || ''; } });
-    d.innerHTML = XBTN + `<h2>${esc(title)}</h2>` + shown.map(f => fieldHTML(f, v)).join('') + `<div class="err"></div><div class="actions">${(buttons || [['Save', '']]).map(([l, m], i) => `<button class="btn ${i ? 'dark' : ''}" data-save="${m}">${l}</button>`).join('')}</div>`;
+    const aiBox = !opts || !opts.ai ? '' : !v._ai ? `<button type="button" class="btn gray sm aiopen" data-aiopen aria-label="Describe it to the assistant" title="Describe it to the assistant">${ic('spark', 18)}</button>`
+      : `<div class="aibox"><textarea data-aitext rows="3" placeholder="${esc(opts.ph || 'Describe it in your own words')}">${esc(v._aiText || '')}</textarea>
+        <div class="row" style="gap:8px;margin-top:8px"><button type="button" class="btn sm" data-aifill>${ic('spark', 16)}Fill it in</button><span class="small muted grow">${v._aiMsg ? esc(v._aiMsg) : 'Check what it fills in, then save.'}</span></div></div>`;
+    d.innerHTML = XBTN + (v._ai ? '' : aiBox) + `<h2>${esc(title)}</h2>` + (v._ai ? aiBox : '') + shown.map(f => fieldHTML(f, v)).join('') + `<div class="err"></div><div class="actions">${(buttons || [['Save', '']]).map(([l, m], i) => `<button class="btn ${i ? 'dark' : ''}" data-save="${m}">${l}</button>`).join('')}</div>`;
   };
   draw();
   const rowSet = el => { if (!el.dataset.rk) return false; const r = (v[el.dataset.rk] || [])[+el.dataset.ri]; if (r) r[el.dataset.rc] = el.value; return true; };
-  d.addEventListener('input', ev => { const el = ev.target; if (rowSet(el)) return;
+  d.addEventListener('input', ev => { const el = ev.target; if (rowSet(el)) return; if (el.dataset.aitext !== undefined) { v._aiText = el.value; return; }
     if (el.dataset.k && el.type !== 'checkbox' && el.tagName !== 'SELECT') v[el.dataset.k] = el.value;
     if (el.dataset.ing) { const q = el.value.trim(), k = el.dataset.ing, box = d.querySelector(`.sugg[data-for="${k}"]`);
       const hits = q ? S.Groceries.filter(g => (g.name + ' ' + g.category + ' ' + g.altNames).toLowerCase().includes(q.toLowerCase())).slice(0, 6) : [];
@@ -869,6 +873,13 @@ function form(title, fields, vals, onSave, buttons) {
     if (f && (f.re || f.t === 'time')) draw(); });
   d.addEventListener('click', async ev => {
     const t = ev.target, m = t.closest('[data-mk]');
+    if (t.closest('[data-aiopen]')) { v._ai = 1; draw(); const ta = d.querySelector('[data-aitext]'); if (ta) ta.focus(); return; }
+    const af = t.closest('[data-aifill]');
+    if (af) { const txt = (v._aiText || '').trim(); if (txt.length < 4) { v._aiMsg = 'Say a bit more first.'; draw(); return; }
+      af.disabled = true; af.textContent = 'Thinking…';
+      try { const got = await opts.ai(txt, v); Object.keys(got || {}).forEach(k => { if (got[k] !== '' && got[k] != null) v[k] = got[k]; }); v._aiMsg = 'Filled in. Check it, then save.'; }
+      catch (e) { v._aiMsg = e.message; }
+      draw(); return; }
     if (m) { const a = list(v[m.dataset.mk]), x = m.dataset.mv; v[m.dataset.mk] = (a.includes(x) ? a.filter(y => y !== x) : a.concat(x)).join(', '); m.classList.toggle('on'); const mf = fs(v).find(y => y.k === m.dataset.mk); if (mf && mf.re) draw(); return; }
     const ra = t.closest('[data-radd]');
     if (ra) { const k = ra.dataset.radd, rows = v[k] = v[k] || [], last = rows[rows.length - 1] || {}; rows.push(k === '_slots' ? { start: last.start || '', end: last.end || '' } : {}); draw(); const ins = d.querySelectorAll(`[data-rk="${k}"][data-ri="${rows.length - 1}"]`); if (ins[0] && ins[0].tagName === 'INPUT') ins[0].focus(); return; }
@@ -882,6 +893,7 @@ function form(title, fields, vals, onSave, buttons) {
     if (ir) { v[ir.dataset.ingrm] = list(v[ir.dataset.ingrm]).filter(x => x !== ir.dataset.mv).join(', '); draw(); return; }
     const b = t.closest('[data-save]'); if (!b) return;
     b.disabled = true; d.querySelector('.err').textContent = '';
+    ['_ai', '_aiText', '_aiMsg'].forEach(k => delete v[k]);
     try { const r = await onSave(v, b.dataset.save); if (r !== false) d.close(); } catch (e) { const er = d.querySelector('.err'); if (er) er.textContent = e.message; }
     b.disabled = false;
   });
@@ -1208,8 +1220,12 @@ function editForm(t, row, extra) {
   const isNew = !row || !row.id, v = Object.assign(isNew && DEFAULTS[t] ? DEFAULTS[t]() : {}, row || {}, extra || {});
   if (t === 'Activities' && !isNew) { const g = actGroup(row); v._grp = g.map(x => x.id); v._slots = g.flatMap(x => list(x.days).map(dd => ({ day: dd, start: x.start, end: x.end }))).sort((a, b) => DAYS.indexOf(a.day) - DAYS.indexOf(b.day)); }
   if (t === 'Messages' && isNew) return form('New message', FORMS.Messages, v, SAVE.Messages, [['Post', 'off'], ['Post and notify', 'on'], ['Post as urgent', 'urgent']]);
-  return form((isNew ? 'New ' : 'Edit ') + (NAMES[t] || 'item'), FORMS[t], v, x => saveRow(t, x));
+  const ai = isNew && t === 'Events' && (byId('Settings', 'app|ai.on') || {}).value === '1' ? { ph: "e.g. Clara's dentist next Tuesday at 3:30 at Brookline Dental, I'll take her", ai: aiEvent } : null;
+  return form((isNew ? 'New ' : 'Edit ') + (NAMES[t] || 'item'), FORMS[t], v, x => saveRow(t, x), null, ai);
 }
+// The assistant turns a sentence into an event (title, type, date, times, who, where, rides). Nothing is saved until you tap Save.
+async function aiEvent(text) { const r = await api('ai_event', { text, today: TODAY, now: nowHM() }); if (!r.event) throw new Error('The assistant could not read that. Try again or fill it in yourself.');
+  const e = r.event; return Object.assign(e, e.allDay === '1' ? { start: '', end: '' } : { endDate: '', end: e.end || hm(toMin(e.start) + 60) }); }
 A.add = (t, el) => editForm(t, null, el && el.dataset.d ? { date: el.dataset.d, due: el.dataset.d } : null);
 A.edit = (v, el) => { const c = ctx(el); if (c.t === 'GCal') return A.convert(v, el); editForm(c.t, byId(c.t, c.id)); };
 A.del = async (v, el) => {
