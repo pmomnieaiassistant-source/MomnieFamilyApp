@@ -1,6 +1,8 @@
 /**
  * Momnie Family app backend
- * Version 3.19 (2026-11-18)
+ * Version 3.20 (2026-11-18)
+ *   3.20: Shared Notes (notes tab). Sheet menu: Run the assistant now / Write Today cards now. The assistant leaves
+ *         past events and meals alone.
  *   3.19: The Assistant reads the family's conversations (posts, comments, answers to question posts) and, when one
  *         settles a plan, adds it: an event ("Paul home 6:30 PM"), a to-do, or who is doing a school run (ai_convo;
  *         runs after an answer and on the hourly tick when there is something new; Paul can turn it off with
@@ -83,8 +85,9 @@ var T = {
   Settings: 'id,value',
   NeedsReview: 'id,recipe,ingredient,closest,action',
   gifts: 'id,recipient,added_by,name,description,url,photo,assigned_to,created_at',
-  ai_rules: 'id,text,audience,area,active,created_by,created_at',
-  ai_requests: 'id,time,who,text,source,status,summary,question,answer,refs',   // everything asked of the Assistant, and what it made   // plain-English rules the AI assistant follows
+  ai_rules: 'id,text,audience,area,active,created_by,created_at',   // plain-English rules the assistant follows
+  ai_requests: 'id,time,who,text,source,status,summary,question,answer,refs',   // everything asked of the Assistant, and what it made
+  notes: 'id,time,who,text',   // shared notes at the bottom of Home
   daily_items: 'id,title,days,time_of_day,for_person,visible_to,created_by,active',
   daily_completions: 'id,item_id,date,completed_by,completed_at',   // id = item_id|date, so each item is checked once per day
   ideas: 'id,time,who,text'   // feedback sent from the Home screen; read it in the Sheet
@@ -732,6 +735,12 @@ function jobs_(fromTrigger) {
   var a = rows_('Activity');
   if (a.length > 1500) { sh_('Activity').deleteRows(2, 500); delete _cache.Activity; }
 }
+/** Sheet menu: run the assistant's notes now, and say what happened. */
+function menuAiNotes() { var r = aiPosts_(today_(), true); SpreadsheetApp.getUi().alert(r.error ? 'The assistant could not run: ' + r.error : 'Done: ' + (r.notes || []).length + ' note(s) posted to the Feed.'); }
+/** Sheet menu: write the AI Today cards now (today's, or tomorrow's after 7 PM) for the people who get them. */
+function menuAiCards() { var t = today_(), night = Number(now_().slice(11, 13)) >= 19, who = aiCardFor_();
+  if (!who.length) { SpreadsheetApp.getUi().alert('No one gets the AI Today card yet. Choose who in the app: Settings, Assistant, Change.'); return; }
+  briefAll_(night ? addDays_(t, 1) : t, night ? 'night' : 'day'); SpreadsheetApp.getUi().alert('Done: wrote the Today card for ' + who.join(' and ') + '.'); }
 /** Hourly trigger (installed by setup). */
 function tick() {
   var lock = LockService.getScriptLock();
@@ -902,6 +911,7 @@ function aiContext_(t) {
   if (on('house')) c.house = rows_('HouseCards').filter(function (h) { return h.kind === 'upkeep' && h.nextDue && h.nextDue <= addDays_(t, 30); }).map(function (h) { return h.title + ' (' + (h.house || '') + ') due ' + h.nextDue; });
   c.openRequests = rows_('ai_requests').filter(function (q) { return (q.status === 'question' || q.status === 'error') && q.time >= addDays_(t, -7); })
     .map(function (q) { return q.who + ' asked on ' + String(q.time).slice(0, 10) + ': "' + q.text + '" | ' + (q.status === 'question' ? 'still waiting for their answer to: ' + q.question : 'could not be done: ' + q.summary); });
+  c.note = 'Everything listed is today or later, except overdue to-dos. Past events and meals are history: do not write about them.';
   c.recentNotes = rows_('Activity').filter(function (a) { return a.type === 'ai' && a.time >= addDays_(t, -10); }).map(function (a) { return a.time.slice(0, 10) + ': ' + a.text; }).slice(-15);
   return c;
 }
@@ -1232,6 +1242,9 @@ function onOpen() {
     .addItem('Set up / repair tabs', 'setup')
     .addItem('Copy everything to the calendar', 'copyAllToCalendar')
     .addItem('Refresh the app\'s copy', 'refreshAppCopy')
+    .addSeparator()
+    .addItem('Run the assistant now (Feed notes)', 'menuAiNotes')
+    .addItem('Write AI Today cards now', 'menuAiCards')
     .addToUi();
 }
 /**

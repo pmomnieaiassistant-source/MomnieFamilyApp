@@ -196,6 +196,7 @@
   .av.asav { background:var(--asst); color:var(--asstbg); display:inline-flex; align-items:center; justify-content:center; }
   .asst .ahead b { color:var(--asst); } .aq { margin-top:8px; padding:10px 12px; border-radius:12px; background:var(--card); border:1px solid var(--asst); font-size:14px; }
   .aq textarea { width:100%; margin-top:8px; } .areq { padding:12px 0; border-bottom:1px solid var(--line); } .areq .q { font-weight:600; }
+  .li.note { padding:12px 16px; } .giftwrap { margin-top:18px; } .giftrow { padding:10px 16px; gap:10px; opacity:.85; }
   .aimk { display:inline-flex; vertical-align:middle; margin-left:5px; color:var(--asst); opacity:.45; } .aimk.c { float:right; margin:8px 10px 0 0; }
   .aiopen { float:right; margin:0 8px 0 0; height:32px; padding:0 10px; } .aibox { margin-top:4px; padding:12px; border-radius:16px; background:var(--soft); } .aibox textarea { width:100%; background:var(--card); }
   .aihead { margin-top:10px; font-size:17px; line-height:1.4; font-weight:600; letter-spacing:-.2px; }
@@ -337,9 +338,9 @@
 // Momnie Family app v6.0
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'], DAYN = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'], ADULTS = ['Paul', 'Shana'];
 // Shown at the bottom of Home. Bump it together with VERSION in sw.js on every release.
-const APP_VERSION = '13.3 · Nov 18, 2026';
+const APP_VERSION = '13.4 · Nov 18, 2026';
 const TABLES = ['People', 'Schools', 'SchoolCal', 'Activities', 'Overrides', 'Events', 'Caretakers', 'Childcare', 'Birthdays', 'Todos', 'TodoTypes', 'Recipes', 'DinnerRules', 'Weeks', 'Menus',
-  'Groceries', 'GroceryList', 'HouseCards', 'Houses', 'WeatherRules', 'Quotes', 'Memories', 'Updates', 'Messages', 'Activity', 'Comments', 'Reactions', 'Links', 'Settings', 'Photos', 'gifts', 'ai_rules', 'ai_requests', 'daily_items', 'daily_completions'];
+  'Groceries', 'GroceryList', 'HouseCards', 'Houses', 'WeatherRules', 'Quotes', 'Memories', 'Updates', 'Messages', 'Activity', 'Comments', 'Reactions', 'Links', 'Settings', 'Photos', 'gifts', 'ai_rules', 'ai_requests', 'notes', 'daily_items', 'daily_completions'];
 const CAT = { School: '#3f6fb5', Kids: '#4f7cc2', Work: '#64748b', Family: '#5b6fa8', Dinner: '#b08a4f', Caretaker: '#3e9aa6', Shared: '#94a3b8', Birthday: '#c9806a' }, SCHOOL_C = ['#5a72b8', '#7a8597', '#4a6fb0'];
 // Muted person colors (Outlook-style): Clara pink, Conrad green, Charlie blue, Shana purple, Paul grey.
 const PCOL = { Clara: '#c8578f', Conrad: '#3d9a62', Charlie: '#3a7fd5', Shana: '#8b62c7', Paul: '#6b7280' }, PCOL_X = ['#b07a3c', '#3e9aa6', '#a65f5f'];
@@ -1243,14 +1244,27 @@ function editForm(t, row, extra) {
   const isNew = !row || !row.id, v = Object.assign(isNew && DEFAULTS[t] ? DEFAULTS[t]() : {}, row || {}, extra || {});
   if (t === 'Activities' && !isNew) { const g = actGroup(row); v._grp = g.map(x => x.id); v._slots = g.flatMap(x => list(x.days).map(dd => ({ day: dd, start: x.start, end: x.end }))).sort((a, b) => DAYS.indexOf(a.day) - DAYS.indexOf(b.day)); }
   if (t === 'Messages' && isNew) return form('New post', FORMS.Messages, v, SAVE.Messages, [['Post', 'off'], ['Post and notify', 'on'], ['Post as urgent', 'urgent']]);
-  const ai = isNew && t === 'Events' && aiCanUse() ? { ph: "e.g. Clara's dentist next Tuesday at 3:30 at Brookline Dental, I'll take her", ai: aiEvent } : null;
+  const ai = isNew && AI_FILL[t] && aiCanUse() ? { ph: AI_FILL[t], ai: t === 'Events' ? aiEvent : txt => aiFill(t, txt) } : null;
   const save = async x => { const rq = x._aiReq; delete x._aiReq; if (!rq) return saveRow(t, x);
     ASSIST = { t, made: null }; let r; try { r = await saveRow(t, x); } finally { const made = ASSIST && ASSIST.made; ASSIST = null;
-      if (made) write({ t: 'ai_requests', row: { id: rq, refs: JSON.stringify([[t, made]]), summary: 'Filled in a new event: ' + (x.title || '') } }); }
+      if (made) write({ t: 'ai_requests', row: { id: rq, refs: JSON.stringify([[t, made]]) } }); }
     return r; };
   return form((isNew ? 'New ' : 'Edit ') + (NAMES[t] || 'item'), FORMS[t], v, save, null, ai);
 }
 // The assistant turns a sentence into an event (title, type, date, times, who, where, rides). Nothing is saved until you tap Save.
+const AI_FILL = { Events: "e.g. Clara's dentist next Tuesday at 3:30 at Brookline Dental, I'll take her", Todos: 'e.g. Eversource bill, $212, due the 5th, every month',
+  Activities: 'e.g. Conrad has hockey Saturdays 11 to 12 and Sundays 12 to 1 until March, I drive', Childcare: 'e.g. Need a sitter Friday 6 to 11 for all three kids' };
+const FILL_SRC = { Todos: 'New to-do', Activities: 'New activity', Childcare: 'New caretaker request' };
+// The assistant reads a sentence and fills in a new to-do, activity or caretaker request. Nothing is saved until you tap Save.
+async function aiFill(t, text) {
+  const r = await api('ai_do', { text, source: FILL_SRC[t], today: TODAY, now: nowHM() }), plan = r.plan || {};
+  if (plan.error) throw new Error(plan.error);
+  const it = (plan.items || []).find(x => x.t === t); if (!it) throw new Error(plan.question || 'The assistant could not read that. Try again or fill it in yourself.');
+  const v = Object.assign({}, it.row), rq = nid();
+  if (t === 'Activities') { v._slots = (v.slots || []).map(x => Object.assign({}, x)); delete v.slots; }
+  if (t === 'Todos' && v.repeat && !REP_PRESETS.includes(v.repeat)) { const [n, u] = v.repeat.split(' '); v._rn = n; v._ru = u.replace(/s$/, ''); v.repeat = 'custom'; }
+  write({ t: 'ai_requests', row: { id: rq, time: stamp(), who: ME, text, source: FILL_SRC[t], status: 'filled', summary: 'Filled in a ' + FILL_SRC[t].toLowerCase() + ': ' + (v.title || v.name || careTitle(v)), question: '', answer: '', refs: '[]' } });
+  v._aiReq = rq; return v; }
 async function aiEvent(text) { const r = await api('ai_event', { text, today: TODAY, now: nowHM() }); if (!r.event) throw new Error('The assistant could not read that. Try again or fill it in yourself.');
   const e = r.event, rq = nid(); write({ t: 'ai_requests', row: { id: rq, time: stamp(), who: ME, text, source: 'New event', status: 'filled', summary: 'Filled in a new event: ' + e.title, question: '', answer: '', refs: '[]' } });
   e._aiReq = rq; return Object.assign(e, e.allDay === '1' ? { start: '', end: '' } : { endDate: '', end: e.end || hm(toMin(e.start) + 60) }); }
@@ -1761,12 +1775,13 @@ const feedHidden = () => new Set(list(st('feedHidden', '')));
 const swipeWrap = (ids, html) => `<div class="swipe" data-fid="${esc(ids.join(' '))}"><div class="under">${ME === 'Paul' ? 'Delete' : 'Remove'}</div>${html}</div>`;
 A.feedDel = fid => { const ids = fid.split(' ').filter(Boolean); if (!ids.length) return;
   const n = ids.length > 1 ? `these ${ids.length} updates` : 'this post', hideMine = () => setSt('feedHidden', [...feedHidden()].concat(ids).slice(-400).join(','));
-  if (ME !== 'Paul') { if (confirm(`Remove ${n} from your Feed?\n\nIt stays in Paul's Feed.`)) hideMine(); return; }
-  const d = sheet(`<h2>Delete ${n}?</h2><div class="actions" style="flex-direction:column"><button class="btn danger" style="flex:1" data-a="feedDelAll">Delete for everyone</button><button class="btn gray" style="flex:1" data-a="feedHideMe">Remove from my Feed only</button><button class="btn gray" style="flex:1" data-a="close">Cancel</button></div>`);
+  // Paul can delete anything; anyone can delete what they posted. Hide only takes it out of your own Feed.
+  const author = x => x[0] === 'M' ? (byId('Messages', x.slice(2)) || {}).from : x[0] === 'R' ? (byId('ai_requests', x.slice(2)) || {}).who : (byId('Activity', x.slice(2)) || {}).who, canDel = ME === 'Paul' || ids.every(x => author(x) === ME);
+  const d = sheet(`<h2>Hide or delete ${n}?</h2><div class="small muted">Hide takes it out of your Feed only. Delete removes it for everyone.</div><div class="actions" style="flex-direction:column"><button class="btn gray" style="flex:1" data-a="feedHideMe">Hide</button>${canDel ? '<button class="btn danger" style="flex:1" data-a="feedDelAll">Delete</button>' : ''}</div>`);
   d._ids = ids; d._hide = hideMine; };
 A.feedDelAll = (v, el) => { const d = el.closest('dialog'), ops = d._ids.map(x => x[0] === 'M' ? { t: 'Messages', del: x.slice(2) } : x[0] === 'R' ? { t: 'ai_requests', del: x.slice(2) } : { t: 'Activity', del: x.slice(2) });
   d._ids.filter(x => x[0] === 'M').forEach(x => S.Activity.filter(a => a.table === 'Messages' && a.ref === x.slice(2)).forEach(a => ops.push({ t: 'Activity', del: a.id })));
-  d.close(); write(ops).then(ok => ok && toast('Deleted for everyone')); };
+  d.close(); write(ops); };
 A.feedHideMe = (v, el) => { const d = el.closest('dialog'); d.close(); d._hide(); };
 // ---------- Question posts ----------
 // A post can be a question with a kind of answer: yes or no, a time, one of a few choices, or a typed answer.
@@ -1991,7 +2006,7 @@ function vMenu() {
   { const ms = w ? S.Menus.filter(m => m.week === w.id).sort((a, b) => a.date.localeCompare(b.date)) : weekNights(MW);
     html += `<div class="row pad" style="margin:4px 0"><span class="small muted">Swipe a night right to change it, or left to clear it.</span></div>` +
       ms.map(m => { const r = byId('Recipes', m.recipeId), name = dish(m), past = m.date < TODAY;
-        return `<div class="card dcard ${PFLASH === m.id ? 'flash' : ''}" data-menu="${m.id}" ${past ? '' : 'data-swipe="1"'} style="${past ? 'opacity:.55' : ''}"><div class="row"><span class="small b ${m.date === TODAY ? '' : 'muted'}" style="${m.date === TODAY ? 'color:var(--accent)' : ''}">${m.day.toUpperCase()} ${fmtDate(m.date)}${m.date === TODAY ? ' · TONIGHT' : ''}</span><span>${m.cook ? `<span class="chip">${ic('meals', 13)} ${esc(m.cook)}</span> ` : ''}${m.away ? `<span class="chip bad">${esc(m.away)} out</span>` : ''}${m.skipped === '1' ? '<span class="chip bad">Skipped</span>' : ''}</span></div>
+        return `<div class="card dcard ${PFLASH === m.id ? 'flash' : ''}" data-menu="${m.id}" data-swipe="1" style="${past ? 'opacity:.55' : ''}"><div class="row"><span class="small b ${m.date === TODAY ? '' : 'muted'}" style="${m.date === TODAY ? 'color:var(--accent)' : ''}">${m.day.toUpperCase()} ${fmtDate(m.date)}${m.date === TODAY ? ' · TONIGHT' : ''}</span><span>${m.cook ? `<span class="chip">${ic('meals', 13)} ${esc(m.cook)}</span> ` : ''}${m.away ? `<span class="chip bad">${esc(m.away)} out</span>` : ''}${m.skipped === '1' ? '<span class="chip bad">Skipped</span>' : ''}</span></div>
           <div class="row" style="margin-top:4px"><div class="grow" data-a="open" data-t="Menus" data-id="${m.id}"><div style="font-size:18px;font-weight:800" class="${name ? '' : 'muted'}">${esc(name || 'No dinner planned')}</div>${r && r.tags ? `<div class="small muted">${list(r.tags).map(t => '#' + esc(t)).join(' ')}</div>` : ''}</div>
           </div>
           ${MCHG === m.id ? `<div class="dchg" data-a="mChgClose"><button class="btn" data-a="mRandom" data-v="${m.id}">${ic('shuffle', 18)}Random</button><button class="btn" data-a="mSelect" data-v="${m.id}">${ic('list', 18)}Select</button></div>` : ''}</div>`; }).join('') +
@@ -2408,7 +2423,7 @@ function vHome() {
   const order = S.People.slice().sort((a, b) => (a.kind === 'kid') - (b.kind === 'kid'));
   const grp = actGroups(), houses = ['Boston', 'Cape'].map(h => `${h === 'Cape' ? 'Cape' : 'Boston'} ${S.HouseCards.filter(c => c.house === h).length}`).join(' · ');
   return `<div class="pad small muted b" style="padding-top:12px">${fmtLong(TODAY).toUpperCase()} · ${fmtT(nowHM())}</div>` +
-    `<div class="box"><div class="boxh row" style="justify-content:space-between;align-items:center"><span>Family</span><button class="lnk" style="text-transform:none;letter-spacing:0" data-a="add" data-v="People">${ic('plus', 15)}Add</button></div>` + order.map(p => { const x = statusOf(p);
+    `<div class="box"><div class="boxh row" style="justify-content:space-between;align-items:center"><span>Family</span></div>` + order.map(p => { const x = statusOf(p);
       return `<div class="li" style="align-items:flex-start" data-a="open" data-t="People" data-id="${p.id}">${avatar(p.name)}<div class="grow"><div class="row"><span class="ti">${esc(p.name)}${ADULTS.includes(p.name) && p.name !== ME ? `<span class="small muted" style="font-weight:500" data-seen-txt="${esc(p.name)}">${seenTxt(p.name) ? ' · ' + seenTxt(p.name) : ''}</span>` : ''}</span>${x.warn ? '<span class="chip bad">Ride not set</span>' : x.rides ? `<span class="chip">${x.rides} ride${x.rides === 1 ? '' : 's'} today</span>` : ''}</div>
         <div style="font-size:15px;margin-top:2px">${x.busy ? ic('pin', 15) + ' ' : ''}${esc(x.now)}</div>${x.next ? `<div class="small muted" style="margin-top:2px">${ic('clock', 13)} Next: ${esc(x.next)}</div>` : ''}</div></div>`; }).join('') + `</div>` +
     (care.length ? `<div class="sect">Caretakers today</div>` + care.map(c => `<div class="li" data-a="open" data-t="Childcare" data-id="${c.id}"><div class="hicon" style="--hc:${HC.care}">${ic('care')}</div><div class="grow"><div class="ti">${esc(c.confirmedId ? careName(c.confirmedId) : 'Not confirmed yet')}</div><div class="small ${c.confirmedId ? 'muted' : 'red'}">${fmtT(c.start)}–${fmtT(c.end)} · ${esc(careTitle(c))}</div></div><span class="chev">›</span></div>`).join('') : '') +
@@ -2416,16 +2431,29 @@ function vHome() {
     hrow('homeOpen', 'Schools', 'school', 'Schools', S.Schools.map(x => x.short || x.name).join(', ') || 'Hours, contacts and school calendars') +
     hrow('homeOpen', 'Activities', 'activity', 'Activities', grp.length ? `${grp.length} repeating, for kids and parents` : 'Repeating activities like hockey or piano') +
     hrow('homeOpen', 'houses', 'house', 'House', 'Info and upkeep · ' + houses) +
-    hrow('homeOpen', 'gifts', 'gift', 'Gift ideas', 'Ideas for everyone, any time of year') +
-    hrow('mealsHome', '', 'book', 'Meals', 'Dinner rules and the LLM instructions for importing recipes') +
-    hrow('homeOpen', 'airules', 'spark', 'Assistant rules', S.ai_rules.length ? `${S.ai_rules.filter(r => r.active !== '0').length} rules in plain English` : 'Tell the assistant what to watch for, in plain English') +
-    hrow('openSettings', '', 'gear', 'Settings', 'Caretakers, birthdays, weather, notifications and more') +
+    hrow('openSettings', '', 'gear', 'Settings', 'Meals, assistant rules, caretakers, birthdays, notifications and more') +
+    notesHTML() +
+    `<div class="giftwrap"><div class="li giftrow" data-a="homeOpen" data-v="gifts"><span class="muted">${ic('gift', 16)}</span><span class="grow small">Gift ideas</span><span class="small muted">${S.gifts.length || ''}</span><span class="chev">›</span></div></div>` +
     `<div class="hfoot"><div class="ver">Version ${APP_VERSION}</div>Made with love by your husband Paul.<br><a data-a="feedback">Click here to provide constructive feedback</a></div>`;
 }
 A.feedback = () => form('Constructive feedback', [F('idea', 'What would make the app better?', 'area', null, { ph: 'Ideas, annoyances, anything' })], {}, async v => {
   need(v.idea && v.idea.trim(), 'Write your idea first.');
   const ok = await write({ t: 'ideas', row: { id: nid(), text: v.idea.trim() } }); if (ok) toast('Thank you! Paul will see it.'); return ok; });
-A.openSettings = () => sheet(() => '<h2>Settings</h2><div style="clear:both"></div>' + (ME === 'Paul' ? [['ai', 'spark', 'Assistant', `Daily notes in the Feed · seen by ${joinNames(aiWho())}`]] : []).concat(SETTINGS).map(([k, icon, l, sub]) => hrow('homeOpen', k, icon, l, sub)).join(''));
+A.openSettings = () => sheet(() => '<h2>Settings</h2><div style="clear:both"></div>' + (ME === 'Paul' ? [['ai', 'spark', 'Assistant', `Daily notes in the Feed · seen by ${joinNames(aiWho())}`]] : [])
+  .concat([['mealsHome', 'book', 'Meals', 'Dinner rules and the instructions for importing recipes'],
+    ['airules', 'spark', 'Assistant rules', S.ai_rules.length ? `${S.ai_rules.filter(r => r.active !== '0').length} rules in plain English` : 'Tell the assistant what to watch for, in plain English']], SETTINGS)
+  .map(([k, icon, l, sub]) => k === 'mealsHome' ? hrow('mealsHome', '', icon, l, sub) : hrow('homeOpen', k, icon, l, sub)).join(''));
+// ---------- Notes: a shared scratch pad at the bottom of Home, visible to everyone ----------
+const notesHTML = () => { const ns = S.notes.filter(n => n.text).sort((a, b) => (b.time || '').localeCompare(a.time || ''));
+  return `<div class="sect row" style="justify-content:space-between;align-items:center;padding-right:16px"><span>Notes</span><button class="lnk" style="text-transform:none;letter-spacing:0" data-a="noteEdit" aria-label="Add a note">${ic('plus', 15)}Note</button></div>` +
+    (ns.length ? ns.map(n => `<div class="li note" data-a="noteEdit" data-v="${n.id}"><div class="grow"><div style="white-space:pre-wrap">${withMentions(n.text)}</div><div class="small muted" style="margin-top:2px">${esc(n.who || '')} · ${ago(n.time)}</div></div></div>`).join('')
+      : '<div class="pad small muted">Anything worth jotting down. Everyone sees these.</div>'); };
+A.noteEdit = id => { const n = id ? byId('notes', id) : null;
+  form(n ? 'Note' : 'New note', [F('text', 'Note', 'area', null, { ph: 'e.g. Wifi password for the Cape is on the fridge' })], { id: n ? n.id : '', text: n ? n.text : '' },
+    (x, mode) => { if (mode === 'del') { if (!confirm('Delete this note?')) return false; return write({ t: 'notes', del: x.id }); }
+      need(x.text && x.text.trim(), 'Write the note first.');
+      return write({ t: 'notes', row: Object.assign({ id: x.id || nid(), text: x.text.trim() }, x.id ? {} : { time: stamp(), who: ME }) }); },
+    n ? [['Save', ''], ['Delete', 'del']] : [['Save', '']]); };
 const rowLi = (t, id, title, sub) => `<div class="li" style="padding:12px 0" data-a="open" data-t="${t}" data-id="${esc(id)}"><div class="grow"><div class="ti">${esc(title)}</div>${sub ? `<div class="small muted">${esc(sub)}</div>` : ''}</div><span class="chev">›</span></div>`;
 const addBtn = (t, l) => `<div class="actions"><button class="btn" data-a="add" data-v="${t}">＋ ${l}</button></div>`;
 const PAGES = {

@@ -1,5 +1,5 @@
 // Momnie Family service worker: opens the app instantly from the phone's copy, and receives push notifications.
-const VERSION = 'mf-v13.3';
+const VERSION = 'mf-v13.4';
 const SHELL = ['./', 'index.html', 'manifest.json', 'config.js', 'fonts/caveat-latin.woff2', 'icons/icon-192.png', 'icons/apple-touch-icon.png', 'icons/chs-logo.png', 'icons/panda-cub-logo.png'];
 
 importScripts('config.js');
