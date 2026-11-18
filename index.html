@@ -310,7 +310,7 @@
 // Momnie Family app v6.0
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'], DAYN = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'], ADULTS = ['Paul', 'Shana'];
 // Shown at the bottom of Home. Bump it together with VERSION in sw.js on every release.
-const APP_VERSION = '10.1 · Nov 18, 2026';
+const APP_VERSION = '10.2 · Nov 18, 2026';
 const TABLES = ['People', 'Schools', 'SchoolCal', 'Activities', 'Overrides', 'Events', 'Caretakers', 'Childcare', 'Birthdays', 'Todos', 'TodoTypes', 'Recipes', 'DinnerRules', 'Weeks', 'Menus',
   'Groceries', 'GroceryList', 'HouseCards', 'Houses', 'WeatherRules', 'Quotes', 'Memories', 'Updates', 'Messages', 'Activity', 'Comments', 'Reactions', 'Links', 'Settings', 'Photos', 'gifts', 'daily_items', 'daily_completions'];
 const CAT = { School: '#3f6fb5', Kids: '#4f7cc2', Work: '#64748b', Family: '#5b6fa8', Dinner: '#b08a4f', Caretaker: '#3e9aa6', Shared: '#94a3b8', Birthday: '#c9806a' }, SCHOOL_C = ['#5a72b8', '#7a8597', '#4a6fb0'];
@@ -1617,7 +1617,7 @@ A.pickCancel = () => { const id = PFOR; PFOR = ''; DT = 'menu'; render(); menuSh
 A.pickFor = rid => { if (!PFOR) return; const m = byId('Menus', PFOR), r = byId('Recipes', rid); PFOR = ''; if (!m || !r) { DT = 'menu'; render(); return; }
   const was = m.skipped === '1' ? '' : dish(m);
   write({ t: 'Menus', row: { id: m.id, recipeId: rid, note: '', kept: '1', skipped: '' }, log: menuLog(m, 'menu_set', `${was ? 'changed' : 'planned'} dinner for ${fmtDay(m.date)}: ${was ? was + ' → ' : ''}${r.name}`) });
-  DT = 'menu'; MW = mondayOf(m.date); render(); menuShow(m.id, true); toast(`${r.name} → ${m.date === TODAY ? 'tonight' : fmtDay(m.date)}`); };
+  DT = 'menu'; MW = mondayOf(m.date); render(); menuShow(m.id, true); };
 function menuShow(id, flash) { const el = document.querySelector(`.dcard[data-menu="${id}"]`); if (!el) return window.scrollTo(0, 0);
   window.scrollTo(0, Math.max(0, el.getBoundingClientRect().top + window.scrollY - window.innerHeight / 3));
   if (flash) { PFLASH = id; el.classList.add('flash'); clearTimeout(menuShow.t); menuShow.t = setTimeout(() => { PFLASH = ''; document.querySelectorAll('.dcard.flash').forEach(x => x.classList.remove('flash')); }, 1800); } }
@@ -1755,10 +1755,9 @@ A.recPlace = async v => {
   if (!m && !byId('Weeks', mondayOf(d))) { toast('Setting up ' + weekLow(mondayOf(d), mondayOf(TODAY)) + '…'); if (!await call('week_add', { week: mondayOf(d) })) return; m = S.Menus.find(x => x.date === d); }
   if (!m) { toast("Couldn't find that night. Pull down to refresh and try again."); return; }
   if (m.recipeId === rid && m.skipped !== '1') { toast(`Already on ${fmtDay(d)}`); return; }
-  const prev = { id: m.id, recipeId: m.recipeId || '', note: m.note || '', kept: m.kept || '', skipped: m.skipped || '' }, was = m.skipped === '1' ? '' : dish(m);
+  const was = m.skipped === '1' ? '' : dish(m);
   RPICK = '';
-  if (await write({ t: 'Menus', row: { id: m.id, recipeId: rid, note: '', kept: '1', skipped: '' }, log: menuLog(m, 'menu_set', `${was ? 'changed' : 'planned'} dinner for ${fmtDay(d)}: ${was ? was + ' → ' : ''}${r.name}`) }))
-    undoToast(`${r.name} → ${d === TODAY ? 'tonight' : fmtDay(d)}`, () => write({ t: 'Menus', row: prev }));
+  write({ t: 'Menus', row: { id: m.id, recipeId: rid, note: '', kept: '1', skipped: '' }, log: menuLog(m, 'menu_set', `${was ? 'changed' : 'planned'} dinner for ${fmtDay(d)}: ${was ? was + ' → ' : ''}${r.name}`) });
 };
 // A toast with an Undo button.
 let UNDO = null;
@@ -2077,9 +2076,9 @@ document.addEventListener('visibilitychange', () => {
     if (Math.abs(dx) <= 70) return;
     const stop = ev => { ev.stopPropagation(); ev.preventDefault(); }; document.addEventListener('click', stop, { capture: true, once: true }); setTimeout(() => document.removeEventListener('click', stop, { capture: true }), 400);
     if (dx > 0) { MCHG = id; render(); } else A.dinClear(id); }); })();
-A.dinClear = id => { const m = byId('Menus', id); if (!m) return; if (!m.recipeId && !m.note) { toast('Nothing planned for ' + fmtDay(m.date) + ' yet'); return; }
+A.dinClear = id => { const m = byId('Menus', id); if (!m || (!m.recipeId && !m.note)) return;
   write({ t: 'Menus', row: { id, recipeId: '', note: '', kept: '1', skipped: '' }, log: menuLog(m, 'menu_set', `cleared dinner for ${fmtDay(m.date)}`) });
-  toast('Cleared dinner for ' + fmtDay(m.date)); };
+};
 // swipe on a recipe in Meals > Recipes: right = pick a night, left = skip for now
 (function () { let x0 = null, y0 = 0, el = null, inn = null, moved = false;
   document.addEventListener('touchstart', e => { el = e.target.closest('.rcard[data-rid]'); inn = el && el.querySelector('.rin'); moved = false; if (el) { x0 = e.touches[0].clientX; y0 = e.touches[0].clientY; } }, { passive: true });
