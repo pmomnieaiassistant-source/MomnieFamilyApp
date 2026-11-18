@@ -1,6 +1,10 @@
 /**
  * Momnie Family app backend
- * Version 3.18 (2026-11-18)
+ * Version 3.19 (2026-11-18)
+ *   3.19: The Assistant reads the family's conversations (posts, comments, answers to question posts) and, when one
+ *         settles a plan, adds it: an event ("Paul home 6:30 PM"), a to-do, or who is doing a school run (ai_convo;
+ *         runs after an answer and on the hourly tick when there is something new; Paul can turn it off with
+ *         app|ai.convo). Daily notes now follow up on requests still waiting. The Today card groups routine things.
  *   3.18: Question posts (Messages kind, answerType, options) and the built-in "App question" to-do type.
  *   3.17: The Assistant. Type anything ("Clara has piano every Monday at 8 AM") and it works out what to create:
  *         events, to-dos and bills, weekly activities, caretaker requests, school calendar days, house cards
@@ -321,6 +325,9 @@ function route_(b, me) {
       if (setting_('app|ai.on', '') !== '1') return { ok: false, error: 'The assistant is off.' };
       if (aiUseFor_().indexOf(me) < 0) return { ok: false, error: 'The assistant is not turned on for you.' };
       return { plan: aiDo_(b, me) };
+    case 'ai_convo':   // after someone answers a question post: turn a settled plan into app items
+      if (setting_('app|ai.on', '') !== '1' || setting_('app|ai.convo', '1') !== '1') return { convo: null };
+      return { convo: aiConvoSafe_(today_(), false) };
     case 'notify_test':
       var sent = send_(me, 'Test from the Momnie Family app', 'Notifications are working.');
       return sent ? { sent: sent } : { ok: false, error: 'No email or Pushover is set up for you yet (see README).' };
@@ -715,6 +722,7 @@ function jobs_(fromTrigger) {
   if (!fromTrigger) return;
   flushQueues_();
   if (setting_('app|ai.on', '') === '1' && hour >= Number(setting_('app|ai.hour', '7')) && once_('ai', t)) aiSafe_(t);
+  if (setting_('app|ai.on', '') === '1' && setting_('app|ai.convo', '1') === '1' && hour >= 6 && hour < 23) aiConvoSafe_(t, false);   // only calls Claude when there is new conversation
   if (setting_('app|ai.on', '') === '1' && hour >= 5 && hour < 19 && once_('brief_am', t)) briefAll_(t, 'day');
   if (setting_('app|ai.on', '') === '1' && hour >= 19 && once_('brief_pm', t)) briefAll_(addDays_(t, 1), 'night');   // hourly tick only: never slows down opening the app
   if (hour >= 7 && once_('digest', t)) digest_(t);
@@ -892,6 +900,8 @@ function aiContext_(t) {
       rows_('SchoolCal').forEach(function (s) { if (s.date && dd >= s.date && dd <= (s.endDate || s.date)) bits.push('School calendar: ' + s.title); });
       c.days.push(nice_(dd) + ': ' + (bits.join('; ') || 'nothing scheduled')); } }
   if (on('house')) c.house = rows_('HouseCards').filter(function (h) { return h.kind === 'upkeep' && h.nextDue && h.nextDue <= addDays_(t, 30); }).map(function (h) { return h.title + ' (' + (h.house || '') + ') due ' + h.nextDue; });
+  c.openRequests = rows_('ai_requests').filter(function (q) { return (q.status === 'question' || q.status === 'error') && q.time >= addDays_(t, -7); })
+    .map(function (q) { return q.who + ' asked on ' + String(q.time).slice(0, 10) + ': "' + q.text + '" | ' + (q.status === 'question' ? 'still waiting for their answer to: ' + q.question : 'could not be done: ' + q.summary); });
   c.recentNotes = rows_('Activity').filter(function (a) { return a.type === 'ai' && a.time >= addDays_(t, -10); }).map(function (a) { return a.time.slice(0, 10) + ': ' + a.text; }).slice(-15);
   return c;
 }
@@ -919,7 +929,8 @@ function aiPosts_(t, manual) {
     'Each note: one or two plain sentences, under 220 characters, warm and practical, first names only, no emoji, no greeting, no sign-off. Use dates like "Thu" or "Nov 20".\n' +
     'Do not repeat or rephrase anything in recentNotes. Never name or describe gift ideas; at most say how many are saved. Do not invent facts that are not in the summary.\n' +
     'The family may give you standing rules (in "rules"). Check every rule against the summary. When a rule applies, write one note for it, set rule_id to that rule\'s id, and word it for the people in tellOnly (use @Name to tag someone). A rule note does not count toward the 3-note limit, and a rule that does not apply gets no note. ' +
-    'Notes not tied to a rule must stay within the listed topics and set rule_id to "".';
+    'Notes not tied to a rule must stay within the listed topics and set rule_id to "".\n' +
+    'openRequests are things someone asked the Assistant for that are still waiting. If one has waited since before today, you may write one short nudge to that person (tag them with @Name) with topic "week"; never nudge about the same request twice (check recentNotes).';
   var schema = { type: 'object', additionalProperties: false, required: ['notes'],
     properties: { notes: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['text', 'topic', 'rule_id'],
       properties: { text: { type: 'string' }, topic: { type: 'string', enum: Object.keys(AI_TOPICS_).concat('rule') }, rule_id: { type: 'string' } } } } } };
@@ -954,7 +965,7 @@ function briefCands_(p, d, mode) {
     var where = dates[d] || (list_(w.days).indexOf(day) >= 0 ? 'home' : 'office');
     add('People:' + x.id, (x.name === p ? 'You work' : x.name + ' works') + ' ' + t12_(x.workStart) + (x.workEnd ? '–' + t12_(x.workEnd) : '') + ', ' + (where === 'home' ? 'from home' : 'in the office'));
   });
-  schoolRuns_(d).forEach(function (r) { add('run:' + r.sid + '|' + d + '|' + r.kind, runLine_(r)); });
+  schoolRuns_(d).forEach(function (r) { add('run:' + r.sid + '|' + d + '|' + r.kind, runLine_(r) + (r.who && !r.changed ? ' (the usual)' : '')); });
   kidOcc_(d).forEach(function (o) { add(o.t + ':' + o.id, t12_(o.start) + ' ' + o.title + ' (' + o.kids + '): drop-off ' + (o.dropoff || 'NOT SET') + ', pickup ' + (o.pickup || 'NOT SET')); });
   rows_('Events').forEach(function (e) { if (e.date === d && !(e.category === 'Kids' && e.allDay !== '1' && e.start)) add('Events:' + e.id, (e.allDay === '1' || !e.start ? 'All day ' : t12_(e.start) + ' ') + e.title + (e.people ? ' (' + e.people + ')' : '') + (e.category ? ' [' + e.category + ']' : '')); });
   rows_('Childcare').forEach(function (cc) { if (cc.date === d) { var ct = get_('Caretakers', cc.confirmedId); add('Childcare:' + cc.id, 'Caretaker ' + t12_(cc.start) + '–' + t12_(cc.end) + ': ' + (ct ? ct.name : 'NOT CONFIRMED')); } });
@@ -985,6 +996,7 @@ function aiBrief_(p, d, mode) {
     '- weather: one practical sentence about what to wear or bring, mentioning any familyRules, or "" if the weather is unremarkable or missing.\n' +
     '- items: the 2 to 5 things this person should focus on, most important first. Each under 110 characters, written to them, with ref copied exactly from the candidate it comes from ("" if none). ' +
     'level "heads-up" means it needs action or something is at risk (NOT SET, NOT CONFIRMED, OVERDUE, nothing planned for dinner on a busy day); otherwise "normal".\n' +
+    'Group routine things: when the school runs are all the usual people and nothing changed, fold them into one short item such as "Usual school runs: Paul drops off, Lina picks up" (ref "") or leave them out on a busy day; spell out any run that changed or has NO ONE SET. Lead with what is different about this day.\n' +
     'Put their own responsibilities first. Mention what someone else is doing only when it affects them (for example who has a pickup, or the other parent being out). Skip routine things that need nothing from them. Combine related candidates into one item when that reads better. ' +
     'Plain words, first names, no emoji, no exclamation marks. Never name or describe gift ideas. Do not invent anything that is not in the candidates.';
   var schema = { type: 'object', additionalProperties: false, required: ['headline', 'weather', 'items'],
@@ -1103,6 +1115,55 @@ function aiDo_(b, me) {
     });
   });
   return { summary: txt_(d.summary, 300), question: txt_(d.question, 300), items: items, dropped: dropped };
+}
+// ---------- The Assistant reads conversations ----------
+function aiConvoSafe_(t, manual) { try { return aiConvo_(t, manual); } catch (e) { console.error(e); return { error: String(e && e.message || e) }; } }
+/** When a conversation in the app settles a plan, the Assistant adds it. Calls Claude only when something new was said. */
+function aiConvo_(t, manual) {
+  var last = setting_('app|ai.convoLast', ''), since = addDays_(t, -3), people = rows_('People');
+  var cmt = rows_('Comments').filter(function (c) { return c.system !== '1' && c.time >= since; });
+  var threads = rows_('Messages').filter(function (m) { return m.time >= since || cmt.some(function (c) { return c.table === 'Messages' && c.ref === m.id; }); }).map(function (m) {
+    var cs = cmt.filter(function (c) { return c.table === 'Messages' && c.ref === m.id; }), newest = [m.time].concat(cs.map(function (c) { return c.time; })).sort().pop();
+    return { id: m.id, time: m.time, from: m.from, text: m.text, asked: m.kind === 'question' ? (m.tags || 'the other parent') : '', answerKind: m.kind === 'question' ? m.answerType : '', isNew: newest > last,
+      replies: cs.map(function (c) { return { who: c.who, time: c.time, text: c.system === 'answer' && m.answerType === 'time' ? t12_(c.text) : c.text, isAnswer: c.system === 'answer' }; }) };
+  });
+  if (!threads.some(function (x) { return x.isNew; })) return { actions: [] };
+  put_('Settings', { id: 'app|ai.convoLast', value: now_() });
+  var runs = []; for (var i = 0; i < 4; i++) { var dd = addDays_(t, i); schoolRuns_(dd).forEach(function (r) { runs.push({ key: r.sid + '|' + dd + '|' + r.kind, what: nice_(dd) + ' ' + runLine_(r) }); }); }
+  var plan = rows_('Events').filter(function (e) { return e.date >= t && e.date <= addDays_(t, 14); }).map(function (e) { return e.date + ' ' + (e.start || 'all day') + ' ' + e.title + (e.people ? ' (' + e.people + ')' : ''); })
+    .concat(rows_('Todos').filter(function (x) { return x.status !== 'Done'; }).slice(0, 40).map(function (x) { return 'To-do: ' + x.title + (x.assignee ? ' (' + x.assignee + ')' : ''); }));
+  var done = rows_('ai_requests').filter(function (q) { return q.source === 'Conversation' && q.time >= since; }).map(function (q) { return q.summary; });
+  var S = { type: 'string' }, o = function (props) { return { type: 'object', additionalProperties: false, required: Object.keys(props), properties: props }; },
+      strs = function (keys) { var x = {}; keys.forEach(function (k) { x[k] = S; }); return x; };
+  var schema = o({ actions: { type: 'array', items: o({ thread_id: S, summary: S, forPerson: S,
+    events: { type: 'array', items: o(strs(['title', 'category', 'date', 'allDay', 'endDate', 'start', 'end', 'people', 'location', 'house', 'dropoff', 'pickup', 'notes'])) },
+    todos: { type: 'array', items: o(strs(['type', 'title', 'amount', 'due', 'assignee', 'repeat', 'house', 'kid', 'notes'])) },
+    schoolRuns: { type: 'array', items: o({ key: S, who: S }) } }) } });
+  var system = 'You are the Assistant inside a family\'s home app. You read the family\'s recent conversations in the app (posts, replies, and answers to question posts). ' +
+    'When a conversation settles a concrete plan that is not already in the app, add it so nobody has to type it in. Examples: asked "What time are you coming home today?" and Paul answered 6:30 PM: add an event "Paul home" today at 18:30 with people Paul, category Family. ' +
+    'Asked "Are you picking the kids up?" and the answer was Yes: set that school run (from schoolRuns, by key) to the person who answered. Someone agreed to buy or do something: add a to-do for them.\n' +
+    'Only act on things that were clearly answered or agreed, in threads marked isNew. Never act on open questions, maybes or jokes. Never duplicate anything in "plan" or "alreadyAdded". Most of the time return no actions.\n' +
+    'Family: ' + people.map(function (p) { return p.name + (p.kind === 'kid' ? ' (kid)' : ''); }).join(', ') + '. Ride options: ' + rides_().join(', ') + '. Today is ' + nice_(t) + ' (' + t + '), time ' + now_().slice(11, 16) + '. ' +
+    'Dates are YYYY-MM-DD, times 24-hour HH:MM; "today" in a thread means the day it was written. One action per thread: summary is one short past-tense sentence ("Added Paul home at 6:30 PM today."), forPerson is the person the plan is about (a name from the family, or ""). Use "" for anything not said.';
+  var r = claude_(system, JSON.stringify({ threads: threads, schoolRuns: runs, plan: plan, alreadyAdded: done }), schema, 'low');
+  if (r.error || r.refused || !r.data) return { error: r.error || 'declined' };
+  var out = [], keys = {}; runs.forEach(function (x) { keys[x.key] = 1; });
+  (r.data.actions || []).forEach(function (a) {
+    var th = threads.filter(function (x) { return x.id === a.thread_id; })[0]; if (!th || !th.isNew) return;
+    var ops = [], refs = [];
+    (a.events || []).forEach(function (x) { var e = evClean_(x, t); if (e) { e.id = id_(); ops.push({ t: 'Events', row: e }); refs.push(['Events', e.id]); } });
+    (a.todos || []).forEach(function (x) { var e = todoClean_(x); if (e) { e.id = id_(); e.status = 'Open'; if (!e.due) e.due = addDays_(t, 7); ops.push({ t: 'Todos', row: e }); refs.push(['Todos', e.id]); } });
+    (a.schoolRuns || []).forEach(function (x) { if (!keys[x.key] || rides_().indexOf(x.who) < 0) return; var k = x.key.split('|'), ref = 'school:' + k[0] + '|' + k[2];
+      var ov = rows_('Overrides').filter(function (y) { return y.ref === ref && y.date === k[1]; })[0], row = { id: ov ? ov.id : id_(), ref: ref, date: k[1], pickup: x.who, dropoff: '', cancelled: '' };
+      ops.push({ t: 'Overrides', row: row }); refs.push(['Overrides', row.id]); });
+    if (!ops.length) return;
+    write_({ ops: ops }, 'Assistant');
+    var snippet = th.from + ': ' + th.text + th.replies.slice(-2).map(function (c) { return ' / ' + c.who + ': ' + c.text; }).join('');
+    put_('ai_requests', { id: id_(), time: now_(), who: one_(a.forPerson, people.map(function (p) { return p.name; })) || th.from, text: snippet.slice(0, 500), source: 'Conversation', status: 'done', summary: txt_(a.summary, 300), question: '', answer: '', refs: JSON.stringify(refs) });
+    ADULTS.forEach(function (p) { if (pref_(p, 'ai')) notify_(p, 'Assistant', txt_(a.summary, 300)); });
+    out.push(a.summary);
+  });
+  return { actions: out };
 }
 function jsonList_(s) { try { var a = JSON.parse(s || '[]'); return Array.isArray(a) ? a : []; } catch (e) { return []; } }
 

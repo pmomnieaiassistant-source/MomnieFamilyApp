@@ -196,6 +196,7 @@
   .av.asav { background:var(--asst); color:var(--asstbg); display:inline-flex; align-items:center; justify-content:center; }
   .asst .ahead b { color:var(--asst); } .aq { margin-top:8px; padding:10px 12px; border-radius:12px; background:var(--card); border:1px solid var(--asst); font-size:14px; }
   .aq textarea { width:100%; margin-top:8px; } .areq { padding:12px 0; border-bottom:1px solid var(--line); } .areq .q { font-weight:600; }
+  .aimk { display:inline-flex; vertical-align:middle; margin-left:5px; color:var(--asst); opacity:.45; } .aimk.c { float:right; margin:8px 10px 0 0; }
   .aiopen { float:right; margin:0 8px 0 0; height:32px; padding:0 10px; } .aibox { margin-top:4px; padding:12px; border-radius:16px; background:var(--soft); } .aibox textarea { width:100%; background:var(--card); }
   .aihead { margin-top:10px; font-size:17px; line-height:1.4; font-weight:600; letter-spacing:-.2px; }
   .wxline { display:flex; align-items:center; gap:8px; margin-top:12px; font-size:14px; } .wxline b { font-size:17px; }
@@ -336,7 +337,7 @@
 // Momnie Family app v6.0
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'], DAYN = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'], ADULTS = ['Paul', 'Shana'];
 // Shown at the bottom of Home. Bump it together with VERSION in sw.js on every release.
-const APP_VERSION = '13.1 · Nov 18, 2026';
+const APP_VERSION = '13.2 · Nov 18, 2026';
 const TABLES = ['People', 'Schools', 'SchoolCal', 'Activities', 'Overrides', 'Events', 'Caretakers', 'Childcare', 'Birthdays', 'Todos', 'TodoTypes', 'Recipes', 'DinnerRules', 'Weeks', 'Menus',
   'Groceries', 'GroceryList', 'HouseCards', 'Houses', 'WeatherRules', 'Quotes', 'Memories', 'Updates', 'Messages', 'Activity', 'Comments', 'Reactions', 'Links', 'Settings', 'Photos', 'gifts', 'ai_rules', 'ai_requests', 'daily_items', 'daily_completions'];
 const CAT = { School: '#3f6fb5', Kids: '#4f7cc2', Work: '#64748b', Family: '#5b6fa8', Dinner: '#b08a4f', Caretaker: '#3e9aa6', Shared: '#94a3b8', Birthday: '#c9806a' }, SCHOOL_C = ['#5a72b8', '#7a8597', '#4a6fb0'];
@@ -594,7 +595,7 @@ const call = (action, data) => new Promise(done => { outbox.push({ action, data,
 /** Saves rows: shows the change now and returns true; the Sheet catches up in the background. */
 function write(ops, extra) {
   ops = [].concat(ops).filter(Boolean); ops.forEach(o => { if (o.row && !o.row.id) o.row.id = nid(); });
-  if (ASSIST) { ops.forEach(o => { delete o.log; if (!ASSIST.made && o.t === ASSIST.t && o.row && !o.del) ASSIST.made = o.row.id; }); if (extra) delete extra.log; }
+  if (ASSIST) { ops.forEach(o => { if (ASSIST.quiet) delete o.log; if (!ASSIST.made && o.t === ASSIST.t && o.row && !o.del) ASSIST.made = o.row.id; }); if (extra && ASSIST.quiet) delete extra.log; }
   applyOps(ops); refresh();
   outbox.push({ action: 'write', data: Object.assign({ ops }, extra || {}), ops, done: () => {} }); pump();
   return Promise.resolve(true);
@@ -718,6 +719,7 @@ function kidWeekRows(kid, sch) {
 const RIDE_WORD = { d: 'drop-off', p: 'pickup', x: 'extended day pickup' }, RIDE_VERB = { d: 'drop off', p: 'pick up', x: 'pick up' };
 const schoolRidesDef = sid => { const r = byId('Settings', 'school|' + sid + '|rides'); try { const o = JSON.parse((r && r.value) || '{}'); return o && typeof o === 'object' ? o : {}; } catch (e) { return {}; } };
 const rideOv = (sid, date, k) => S.Overrides.find(o => o.ref === 'school:' + sid + '|' + k && o.date === date);
+const rideAI = (sid, date, k) => { const o = rideOv(sid, date, k); return o ? aiMk('Overrides', o.id) : ''; };
 /** Who does a school ride on a date: { who, usual, changed }. */
 function schoolRide(sid, date, k) { const usual = ((schoolRidesDef(sid)[DAYS[dowIdx(date)]] || {})[k]) || '', o = rideOv(sid, date, k);
   return o ? { who: o.pickup || '', usual, changed: true } : { who: usual, usual, changed: false }; }
@@ -912,7 +914,7 @@ const rideO = () => [['', 'Not set']].concat(ADULTS, S.Caretakers.map(c => c.nam
 const kidN = () => kids().map(p => p.name);
 /** Warn when a caretaker who isn't cleared to drive is picked for a ride. Returns extra ops, or null to cancel. */
 function driveCheck(names) {
-  const ops = []; if (ASSIST) return ops;
+  const ops = []; if (ASSIST && ASSIST.quiet) return ops;
   for (const n of names) { const c = S.Caretakers.find(x => x.name === n || x.id === n); if (!c || c.drive === '1') continue;
     if (!confirm(`${c.name} isn't marked as cleared to drive.\n\nOK = Clear to drive (updates their card)\nCancel = go back`)) return null;
     ops.push({ t: 'Caretakers', row: { id: c.id, drive: '1' } }); }
@@ -1176,7 +1178,7 @@ const SAVE = {
     need(v.title && v.title.trim(), 'Give it a name.'); need(v.date, 'Pick a date.'); if (v.allDay !== '1') need(v.start, 'Pick a start time, or mark it all day.');
     const isNew = !v.id, row = Object.assign({}, v, { id: v.id || nid() }), ops = [];
     if (v.category === 'Kids') { const dc = driveCheck([v.dropoff, v.pickup].filter(Boolean)); if (!dc) return false; ops.push(...dc); }
-    if (isNew && !v.gcalId && !ASSIST) { const k = norm(v.title), dup = itemsFor(v.date).find(i => ['GCal', 'Events', 'SchoolCal'].includes(i.t) && (norm(i.title) === k || norm(i.title).includes(k) || k.includes(norm(i.title))));
+    if (isNew && !v.gcalId && !(ASSIST && ASSIST.quiet)) { const k = norm(v.title), dup = itemsFor(v.date).find(i => ['GCal', 'Events', 'SchoolCal'].includes(i.t) && (norm(i.title) === k || norm(i.title).includes(k) || k.includes(norm(i.title))));
       if (dup && confirm(`This looks like a duplicate of “${dup.title}”. Merge them into one card?`)) { if (dup.t === 'GCal') row.gcalId = dup.id; else { openCard(dup.t, dup.id, v.date); return; } } }
     ops.push({ t: 'Events', row, adopt: isNew && row.gcalId ? row.gcalId : undefined, log: L(isNew ? 'event_add' : 'event_edit', `${isNew ? (row.gcalId ? 'imported from the calendar' : 'added plans') : 'updated'}: ${v.title} (${fmtDay(v.date)}${v.allDay !== '1' && v.start ? ', ' + fmtT(v.start) : ''})`, 'planner') });
     if (v._link) ops.push({ t: 'Links', row: { id: nid(), aTable: v._link[0], aRef: v._link[1], bTable: 'Events', bRef: row.id } }, sys(v._link[0], v._link[1], `added a Planner event and linked this ${NAMES[v._link[0]] || 'card'}`));
@@ -1204,7 +1206,7 @@ const SAVE = {
     const isNew = !v.id, row = Object.assign({}, v, { id: v.id || nid() }), ops = [{ t: 'Childcare', row, log: isNew ? L('care_add', `needs a caretaker: ${careTitle(row)} on ${fmtDay(v.date)}`, 'planning') : null }];
     if (isNew) ops.push({ t: 'Todos', row: { id: nid(), type: 'task', title: 'Find a caretaker for ' + fmtDay(v.date), due: v.date < addDays(TODAY, 7) ? v.date : addDays(TODAY, 7), status: 'Open', assignee: '', source: 'findcare:' + row.id } });
     if (v._link) ops.push({ t: 'Links', row: { id: nid(), aTable: v._link[0], aRef: v._link[1], bTable: 'Childcare', bRef: row.id } });
-    const ok = await write(ops); if (ok && isNew && !ASSIST) openCard('Childcare', row.id); return ok;
+    const ok = await write(ops); if (ok && isNew && !(ASSIST && ASSIST.quiet)) openCard('Childcare', row.id); return ok;
   },
   async Recipes(v) {
     need(v.name && v.name.trim(), 'Name the recipe.');
@@ -1242,12 +1244,16 @@ function editForm(t, row, extra) {
   if (t === 'Activities' && !isNew) { const g = actGroup(row); v._grp = g.map(x => x.id); v._slots = g.flatMap(x => list(x.days).map(dd => ({ day: dd, start: x.start, end: x.end }))).sort((a, b) => DAYS.indexOf(a.day) - DAYS.indexOf(b.day)); }
   if (t === 'Messages' && isNew) return form('New post', FORMS.Messages, v, SAVE.Messages, [['Post', 'off'], ['Post and notify', 'on'], ['Post as urgent', 'urgent']]);
   const ai = isNew && t === 'Events' && aiCanUse() ? { ph: "e.g. Clara's dentist next Tuesday at 3:30 at Brookline Dental, I'll take her", ai: aiEvent } : null;
-  return form((isNew ? 'New ' : 'Edit ') + (NAMES[t] || 'item'), FORMS[t], v, x => saveRow(t, x), null, ai);
+  const save = async x => { const rq = x._aiReq; delete x._aiReq; if (!rq) return saveRow(t, x);
+    ASSIST = { t, made: null }; let r; try { r = await saveRow(t, x); } finally { const made = ASSIST && ASSIST.made; ASSIST = null;
+      if (made) write({ t: 'ai_requests', row: { id: rq, refs: JSON.stringify([[t, made]]), summary: 'Filled in a new event: ' + (x.title || '') } }); }
+    return r; };
+  return form((isNew ? 'New ' : 'Edit ') + (NAMES[t] || 'item'), FORMS[t], v, save, null, ai);
 }
 // The assistant turns a sentence into an event (title, type, date, times, who, where, rides). Nothing is saved until you tap Save.
 async function aiEvent(text) { const r = await api('ai_event', { text, today: TODAY, now: nowHM() }); if (!r.event) throw new Error('The assistant could not read that. Try again or fill it in yourself.');
-  const e = r.event; write({ t: 'ai_requests', row: { id: nid(), time: stamp(), who: ME, text, source: 'New event', status: 'filled', summary: 'Filled in a new event: ' + e.title, question: '', answer: '', refs: '[]' } });
-  return Object.assign(e, e.allDay === '1' ? { start: '', end: '' } : { endDate: '', end: e.end || hm(toMin(e.start) + 60) }); }
+  const e = r.event, rq = nid(); write({ t: 'ai_requests', row: { id: rq, time: stamp(), who: ME, text, source: 'New event', status: 'filled', summary: 'Filled in a new event: ' + e.title, question: '', answer: '', refs: '[]' } });
+  e._aiReq = rq; return Object.assign(e, e.allDay === '1' ? { start: '', end: '' } : { endDate: '', end: e.end || hm(toMin(e.start) + 60) }); }
 A.add = (t, el) => editForm(t, null, el && el.dataset.d ? { date: el.dataset.d, due: el.dataset.d } : null);
 A.edit = (v, el) => { const c = ctx(el); if (c.t === 'GCal') return A.convert(v, el); editForm(c.t, byId(c.t, c.id)); };
 A.del = async (v, el) => {
@@ -1380,8 +1386,8 @@ function pDayHTML(p, d) {
   const bl = blocksFor(p, d), allDay = itemsFor(d).filter(i => !i.start && (i.people.includes(p.name) || (i.t === 'People' && i.id === p.id)) && i.src !== 'dinner');
   const row = b => b.off ? `<div class="tl off" data-a="open" data-t="${b.t}" data-id="${esc(b.id)}"><div class="tt">All day</div><div class="grow"><div class="ti">${esc(b.off)}</div></div></div>`
     : `<div class="tl ${b.school ? 'sch' : b.work ? 'wrk' : b.task ? 'tsk' : ''}" ${b.t && b.t !== 'GCal' ? `data-a="open" data-t="${b.t}" data-id="${esc(b.id)}" data-d="${d}"` : ''}><div class="tt">${fmtT(b.s)}${b.e && b.e !== b.s ? `<span>${fmtT(b.e)}</span>` : ''}</div>
-      <div class="grow"><div class="ti">${b.school ? 'School' + (b.ext ? ' · extended day' : '') : b.work ? 'Work' : esc(b.n)}</div>${b.work ? wfhHTML(p, d, b) : b.school ? `<div class="small muted">${esc((byId('Schools', b.id) || {}).name || b.n)}</div>` : b.ride ? `<div class="small muted">${rideHTML({ dropoff: b.drop, pickup: b.pick })}</div>` : b.where ? `<div class="small muted">${esc(String(b.where).replace(/<[^>]+>/g, ''))}</div>` : ''}</div></div>`;
-  return allDay.map(i => `<div class="tl off" data-a="open" data-t="${i.t}" data-id="${esc(i.id)}" data-d="${d}"><div class="tt">All day</div><div class="grow"><div class="ti">${esc(i.title)}</div></div></div>`).join('') + bl.map(row).join('');
+      <div class="grow"><div class="ti">${b.school ? 'School' + (b.ext ? ' · extended day' : '') : b.work ? 'Work' : esc(b.n) + aiMk(b.t, b.id)}</div>${b.work ? wfhHTML(p, d, b) : b.school ? `<div class="small muted">${esc((byId('Schools', b.id) || {}).name || b.n)}</div>` : b.ride ? `<div class="small muted">${rideHTML({ dropoff: b.drop, pickup: b.pick })}</div>` : b.where ? `<div class="small muted">${esc(String(b.where).replace(/<[^>]+>/g, ''))}</div>` : ''}</div></div>`;
+  return allDay.map(i => `<div class="tl off" data-a="open" data-t="${i.t}" data-id="${esc(i.id)}" data-d="${d}"><div class="tt">All day</div><div class="grow"><div class="ti">${esc(i.title)}${aiMk(i.t, i.id)}</div></div></div>`).join('') + bl.map(row).join('');
 }
 /** "From home" / "At the office"; on your own page, a switch for today and later days. */
 function wfhHTML(p, d, b) {
@@ -1469,7 +1475,7 @@ A.personTodo = name => { const p = personOf(name); editForm('Todos', null, p && 
 function cardHTML(t, id, date) {
   const r = t === 'GCal' ? CAL.find(c => c.id === id) : S[t] && byId(t, id);
   if (!r) return null;
-  return (CARD[t] ? CARD[t](r, date, t) : genericCard(r, date, t) + std()) + (t === 'gifts' ? photosHTML(t, id) : socialHTML(t, id));
+  return aiMk(t, id, 'c') + (CARD[t] ? CARD[t](r, date, t) : genericCard(r, date, t) + std()) + (t === 'gifts' ? photosHTML(t, id) : socialHTML(t, id));
 }
 function openCard(t, id, date) { if (cardHTML(t, id, date) === null) { toast('That item is gone.'); return null; } const d = sheet(() => cardHTML(t, id, date)); d._ctx = { t, id, date }; return d; }
 A.open = (v, el) => el.dataset.t === 'Todos' && String((byId('Todos', el.dataset.id) || {}).source || '').startsWith('question:') && byId('Messages', byId('Todos', el.dataset.id).source.slice(9)) ? openCard('Messages', byId('Todos', el.dataset.id).source.slice(9)) : el.dataset.t === 'People' ? goPerson(el.dataset.id) : el.dataset.t === 'Menus' && !byId('Menus', el.dataset.id) ? (ensureWeek(el.dataset.id.slice(0, 10)), openCard('Menus', el.dataset.id)) : openCard(el.dataset.t, el.dataset.id, el.dataset.d || '');
@@ -1600,7 +1606,7 @@ function pcard(i) {
   const n = cmts(i.t, i.id).filter(c => c.system !== '1').length;
   const sub = [i.sub && esc(i.sub), i.ride && rideHTML(i)].filter(Boolean).join(' · ');
   return `<div class="pc" style="--c:${esc(i.color)}" data-a="open" data-t="${i.t}" data-id="${esc(i.id)}" data-d="${i.date || ''}">${i.start ? `<div class="t">${fmtT(i.start)}</div>` : i.label ? `<div class="t">${esc(i.label)}</div>` : ''}${i.logo ? `<img src="${esc(i.logo)}" alt="">` : i.icon ? `<span class="pci">${ic(i.icon, 18)}</span>` : ''}
-    <div class="grow"><div class="ti">${esc(i.title)}</div>${sub ? `<div class="small ${i.warn || (i.ride && (!i.dropoff || !i.pickup)) ? 'red' : 'muted'}">${sub}</div>` : ''}</div>${whoDots(i.people)}${n ? `<span class="small muted">${ic('msg', 14)}${n}</span>` : ''}</div>`;
+    <div class="grow"><div class="ti">${esc(i.title)}${aiMk(i.t, i.id)}</div>${sub ? `<div class="small ${i.warn || (i.ride && (!i.dropoff || !i.pickup)) ? 'red' : 'muted'}">${sub}</div>` : ''}</div>${whoDots(i.people)}${n ? `<span class="small muted">${ic('msg', 14)}${n}</span>` : ''}</div>`;
 }
 const wxKind = c => c === 0 ? 'sun' : c <= 2 ? 'cloudsun' : c === 3 ? 'cloud' : c <= 48 ? 'fog' : c <= 67 || (c >= 80 && c <= 82) ? 'rain' : c <= 77 || c === 85 || c === 86 ? 'snow' : 'storm';
 // Rides: up arrow = who drops off, down arrow = who picks up.
@@ -1611,7 +1617,7 @@ const uvWord = u => u < 3 ? 'low' : u < 6 ? 'moderate' : u < 8 ? 'high' : 'very 
 const myTodos = () => S.Todos.filter(t => t.status !== 'Done' && (t.assignee === ME || !t.assignee));
 const todoRow = t => { const ty = typeOf(t), done = t.status === 'Done', late = !done && t.due && t.due < TODAY;
   return `<div class="li ${done ? 'done' : ''}"><button class="check ${done ? 'on' : ''}" data-a="todoDone" data-v="${t.id}" aria-label="Done">${done ? '✓' : ''}</button><div class="grow" data-a="open" data-t="Todos" data-id="${t.id}">
-    <div class="row"><span class="ti"><span class="muted">${tyIcon(ty, 17)}</span> ${esc(t.title)}</span>${t.amount ? `<span class="b">${money(t.amount)}</span>` : ''}</div>
+    <div class="row"><span class="ti"><span class="muted">${tyIcon(ty, 17)}</span> ${esc(t.title)}${aiMk('Todos', t.id)}</span>${t.amount ? `<span class="b">${money(t.amount)}</span>` : ''}</div>
     <div class="small muted"><span class="${late || t.due === TODAY ? 'red' : ''}">${done ? 'Done ' + fmtDay(t.doneOn) + ' by ' + esc(t.doneBy) : (late ? 'Overdue · ' : t.due === TODAY ? 'Due today · ' : 'Due ') + fmtDay(t.due)}</span> · ${esc(t.assignee || 'Either of us')}${t.kid ? ' · ' + esc(t.kid) : ''}${t.house ? ' · ' + esc(t.house) : ''}${t.repeat ? ' · ' + ic('repeat', 13) : ''}</div></div></div>`; };
 
 // ----- Feed -----
@@ -1643,11 +1649,11 @@ function planRows(d, after) {
     (drop[b.s + '|' + base] = drop[b.s + '|' + base] || { s: b.s, n: base, k: [] }).k.push(k.name);
     if (b.ext) (ext[b.e + '|' + base] = ext[b.e + '|' + base] || { s: b.e, n: base, k: [] }).k.push(k.name);
     else (pick[b.e + '|' + base] = pick[b.e + '|' + base] || { s: b.e, n: base, k: [] }).k.push(k.name); }));
-  schoolRuns(d).forEach(r => rows.push({ s: r.time, title: r.name + ' ' + RIDE_WORD[r.kind], who: rideTag(r), sub: esc(kidNames(r.kids)), tap: `data-a="schoolRide" data-v="${r.sid}|${d}|${r.kind}"` }));
+  schoolRuns(d).forEach(r => rows.push({ s: r.time, title: r.name + ' ' + RIDE_WORD[r.kind], who: rideTag(r) + rideAI(r.sid, d, r.kind), sub: esc(kidNames(r.kids)), tap: `data-a="schoolRide" data-v="${r.sid}|${d}|${r.kind}"` }));
   itemsFor(d).filter(i => i.t !== 'GCal' && i.src !== 'gcal' && i.src !== 'birthday' && !i.ext).forEach(i => {
     const ride = i.ride ? (!i.dropoff || !i.pickup ? `<span class="red">${!i.dropoff && !i.pickup ? 'rides' : !i.dropoff ? 'drop-off' : 'pickup'} not set</span>` : rideHTML(i)) : '';
     const sub = i.src === 'dinner' ? [i.cook && esc(i.cook) + ' cooking', i.away && `<span class="amb">${esc(i.away)} not home</span>`].filter(Boolean).join(' · ') : [i.sub && (i.warn ? `<span class="red">${esc(i.sub)}</span>` : esc(i.sub)), ride].filter(Boolean).join(' · ');
-    rows.push({ s: i.start || '', e: i.end || '', title: i.title, sub, dinner: i.src === 'dinner' }); });
+    rows.push({ s: i.start || '', e: i.end || '', title: i.title, sub, dinner: i.src === 'dinner', mk: aiMk(i.t, i.id) }); });
   return rows.filter(r => !after || !r.s || (r.e || r.s) >= after)
     .sort((a, b) => (a.dinner ? 2 : a.s ? 1 : 0) - (b.dinner ? 2 : b.s ? 1 : 0) || a.s.localeCompare(b.s));
 }
@@ -1673,7 +1679,7 @@ function aiHero(b, o) {
   const wxl = o.wd ? `<div class="wxline">${WXI(o.code, 22)}<b>${o.night || WX.now === null ? o.wd.high : WX.now}°</b><span class="muted">H ${o.wd.high}° · L ${o.wd.low}° · rain ${o.wd.rain}%${WX.place ? ' · ' + esc(WX.place) : ''}</span></div>` : '';
   const wsay = b.weather ? `<div class="wxsay">${esc(b.weather)}</div>` : o.wx.length ? `<div class="stack">${o.wx.map(w => `<div class="alert amber">${ic(w.icon, 16)}<span>${esc(w.text)}</span></div>`).join('')}</div>` : '';
   const t = b.time ? fmtT(b.time.slice(11, 16)) : '';
-  return `<div class="hero"><div class="small muted b">${new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}</div>
+  return `<div class="hero"><span class="aimk" style="float:right;margin:0" title="Written by the assistant" aria-label="Written by the assistant">${ic('spark', 15)}</span><div class="small muted b">${new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}</div>
       <div style="font-size:22px;font-weight:800;letter-spacing:-.5px">Good ${o.h < 12 ? 'morning' : o.h < 17 ? 'afternoon' : 'evening'}, ${esc(ME)}</div>
       <div class="aihead">${esc(b.headline)}</div>${wxl}${wsay}
       ${reds.length ? `<div class="stack" style="margin-top:12px">${reds.map(a => o.remHTML({ lvl: a.lvl || 'plain', icon: a.icon, text: a.text, open: a.open, sride: a.sride, nav: a.nav })).join('')}</div>` : ''}
@@ -1710,7 +1716,7 @@ function vFeed() {
     <div class="tiles3"><div><span>HIGH / LOW</span><b>${wd.high}° / ${wd.low}°</b></div><div><span>RAIN</span><b>${wd.rain}%</b></div><div><span>UV</span><b>${wd.uv} ${uvWord(wd.uv)}</b></div></div>
     ${wx.length ? `<div class="stack">${wx.map(w => `<div class="alert amber">${ic(w.icon, 16)}<span>${esc(w.text)}</span></div>`).join('')}</div>` : ''}` : '';
   const pl = planRows(sd, !night && h >= 12 ? now : '');
-  const prow = r => `<div class="prow ${!night && h < 12 && r.s && (r.e || r.s) < now ? 'past' : ''}" ${r.tap || ''}><span>${r.s ? fmtT(r.s) : r.dinner ? 'Dinner' : 'All day'}</span><span><b>${esc(r.title)}</b>${r.who ? ' ' + r.who : ''}${r.sub ? ' · ' + r.sub : ''}</span></div>`;
+  const prow = r => `<div class="prow ${!night && h < 12 && r.s && (r.e || r.s) < now ? 'past' : ''}" ${r.tap || ''}><span>${r.s ? fmtT(r.s) : r.dinner ? 'Dinner' : 'All day'}</span><span><b>${esc(r.title)}</b>${r.mk || ''}${r.who ? ' ' + r.who : ''}${r.sub ? ' · ' + r.sub : ''}</span></div>`;
   let html = `<div class="hero"><div class="small muted b">${new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}</div>
       <div style="font-size:22px;font-weight:800;letter-spacing:-.5px">Good ${h < 12 ? 'morning' : h < 17 ? 'afternoon' : 'evening'}, ${esc(ME)}</div>
     ${weather}
@@ -1797,7 +1803,10 @@ A.qAns = (v, el) => { const id = el.dataset.id, m = byId('Messages', id); if (!m
   const ops = [{ t: 'Comments', row: { id: nid(), time: stamp(), who: ME, table: 'Messages', ref: id, text: val, system: 'answer' }, log: L('answer', `answered “${short}”: ${qShow(m, val)}`, 'convo', { table: 'Messages', ref: id }) }];
   S.Todos.filter(t => t.source === 'question:' + id && t.assignee === ME && t.status !== 'Done').forEach(t => ops.push({ t: 'Todos', row: { id: t.id, status: 'Done', doneOn: TODAY, doneBy: ME } }));
   if (done && m.resolved !== '1') ops.push({ t: 'Messages', row: { id, resolved: '1', resolvedBy: ME } });
-  delete QEDIT[id]; write(ops, { notify: 'on' }); };
+  delete QEDIT[id]; write(ops, { notify: 'on' }).then(() => aiConvoSoon()); };
+const outboxEmpty = async () => { for (let i = 0; i < 60 && outbox.length; i++) await new Promise(r => setTimeout(r, 250)); };
+async function aiConvoSoon() { if (!aiOn() || ((byId('Settings', 'app|ai.convo') || {}).value || '1') !== '1') return;
+  try { await outboxEmpty(); const r = await api('ai_convo'); if (r.convo && (r.convo.actions || []).length) await load(); } catch (e) {} }
 const msgPost = (m, pin) => m.kind === 'question' ? qPost(m, pin) : `<div class="post" data-a="open" data-t="Messages" data-id="${m.id}">${avatar(m.from)}<div class="pbody"><div>${nameLink(m.from)}${list(m.tags).filter(n => n !== m.from).length ? ' → ' + list(m.tags).filter(n => n !== m.from).map(nameLink).join(', ') : ''} <span class="muted">· ${ago(m.time)}</span>${m.from !== ME && list(m.tags).includes(ME) ? ' <span class="chip ok">Tagged you</span>' : ''}${pin ? ` <span class="muted">${ic('pin', 14)}</span>` : ''}${m.urgent === '1' ? ' <span class="chip bad">Urgent</span>' : ''}</div>
   <div class="ptext msg">${withMentions(m.text)}</div>${postFoot('Messages', m.id, m.resolved === '1' ? ic('check', 14) + ' Resolved by ' + esc(m.resolvedBy) : 'Open')}</div></div>`;
 const qPost = (m, pin) => { const asked = qAsked(m), ans = qAnswers(m), left = asked.filter(n => !ans[n]);
@@ -1811,24 +1820,31 @@ function dailyHTML(a) { let j = {}; try { j = JSON.parse(a.text); } catch (e) {}
   return (j.memories || []).map(x => `${x.photo ? `<img src="${esc(photoUrl(x.photo))}" alt="" style="max-width:100%;border-radius:12px;display:block;margin-bottom:6px">` : ''}<div class="b">${x.years > 0 ? x.years + ' year' + (x.years === 1 ? '' : 's') + ' ago today' : 'On this day'}</div><div>${esc(x.note)}</div>`).join('<br>') +
     (j.quote ? `<div class="q" style="margin-top:${(j.memories || []).length ? 12 : 0}px;font-family:Georgia,serif;font-style:italic">“${esc(j.quote)}”</div>${j.author ? `<div class="small muted">${esc(j.author)}</div>` : ''}` : ''); }
 // ---------- The Assistant ----------
+// Everything the Assistant made (from requests, Fill it in, and conversations) carries a small, muted sparkle.
+let AIK = { n: -1, set: new Set() };
+const aiMade = (t, id) => { if (AIK.n !== S.ai_requests.length || AIK.v !== S.ai_requests) { AIK = { n: S.ai_requests.length, v: S.ai_requests, set: new Set(S.ai_requests.flatMap(q => jl(q.refs).map(r => r[0] + ':' + r[1]))) }; } return AIK.set.has(t + ':' + id); };
+const aiMk = (t, id, cls) => t && id && aiMade(t, id) ? `<span class="aimk ${cls || ''}" title="Made by the assistant" aria-label="Made by the assistant">${ic('spark', cls ? 15 : 12)}</span>` : '';
 // The sparkle at the top of every tab: type anything ("Clara has piano every Monday at 8 AM") and the assistant works out
 // what to make. The app saves it through the same steps as a person's save (calendar copy, caretaker to-do, and so on).
 let ASSIST = null, ASK_DRAFT = '', ASK_BUSY = '';
 const ANS_DRAFT = {};
 const jl = s => { try { const a = JSON.parse(s || '[]'); return Array.isArray(a) ? a : []; } catch (e) { return []; } };
 const ASK_IC = { Events: 'planner', Todos: 'todo', Activities: 'activity', Childcare: 'care', SchoolCal: 'school', HouseCards: 'house' };
-const askItem = ([t, id]) => { const r = byId(t, id); if (!r) return ''; const when = t === 'Childcare' ? fmtT(r.start) + '–' + fmtT(r.end) : t === 'Events' || t === 'SchoolCal' ? fmtDay(r.date) + (r.start ? ', ' + fmtT(r.start) : '') : t === 'Activities' ? actGroup(r).map(x => x.days + ' ' + fmtT(x.start)).join(' · ') : t === 'Todos' && r.due ? 'due ' + fmtDay(r.due) : '';
+const askItem = ([t, id]) => { const r = byId(t, id); if (!r) return '';
+  if (t === 'Overrides') { const [sid, k] = String(r.ref).replace('school:', '').split('|'), sch = byId('Schools', sid) || {};
+    return `<div class="alert plain" data-a="schoolRide" data-v="${esc(sid + '|' + r.date + '|' + k)}">${ic('car', 16)}<span class="grow"><b>${esc((sch.short || sch.name || 'School') + ' ' + (RIDE_WORD[k] || 'run'))}</b><span class="small muted"> · ${esc(fmtDay(r.date))} · ${esc(r.pickup || 'no one')}</span></span>${ic('chev', 16)}</div>`; } const when = t === 'Childcare' ? fmtT(r.start) + '–' + fmtT(r.end) : t === 'Events' || t === 'SchoolCal' ? fmtDay(r.date) + (r.start ? ', ' + fmtT(r.start) : '') : t === 'Activities' ? actGroup(r).map(x => x.days + ' ' + fmtT(x.start)).join(' · ') : t === 'Todos' && r.due ? 'due ' + fmtDay(r.due) : '';
   return `<div class="alert plain" data-a="open" data-t="${t}" data-id="${esc(id)}" data-d="${r.date || ''}">${ic(ASK_IC[t] || 'spark', 16)}<span class="grow"><b>${esc(titleOf(t, id) || NAMES[t])}</b>${when ? `<span class="small muted"> · ${esc(when)}</span>` : ''}</span>${ic('chev', 16)}</div>`; };
 function askPost(q) {
   const refs = jl(q.refs).filter(([t, id]) => byId(t, id)), one = refs.length === 1 ? NAMES[refs[0][0]] : '';
-  const did = q.status === 'error' ? "couldn't do this" : refs.length ? `created ${one ? 'this ' + one : refs.length + ' things'}` : q.status === 'question' ? 'needs a detail' : 'replied';
+  const convo = q.source === 'Conversation', thing = one || (refs.length === 1 && refs[0][0] === 'Overrides' ? 'school run' : '');
+  const did = q.status === 'error' ? "couldn't do this" : refs.length ? `${convo ? 'added' : 'created'} ${thing ? 'this ' + thing : refs.length + ' things'}${convo ? ' from a conversation' : ''}` : q.status === 'question' ? 'needs a detail' : 'replied';
   const mine = q.who === ME, busy = ASK_BUSY === q.id;
-  return `<div class="post asst"><span class="av asav">${ic('spark', 18)}</span><div class="pbody"><div class="ahead"><b>Assistant</b> ${did} for ${esc(q.who === ME ? 'you' : q.who)} <span class="muted">· ${ago(q.time)}</span></div>
+  return `<div class="post asst"><span class="av asav">${ic('spark', 18)}</span><div class="pbody"><div class="ahead"><b>Assistant</b> ${did}${convo ? '' : ` for ${esc(q.who === ME ? 'you' : q.who)}`} <span class="muted">· ${ago(q.time)}</span></div>
     ${q.summary ? `<div class="ptext" style="font-weight:400;margin-top:4px">${esc(q.summary)}</div>` : ''}
     ${refs.length ? `<div class="stack">${refs.map(askItem).join('')}</div>` : ''}
     ${q.status === 'question' && q.question ? `<div class="aq"><b>@${esc(q.who)}</b> ${esc(q.question)}${mine ? `<textarea data-askans="${q.id}" rows="2" placeholder="Your answer">${esc(ANS_DRAFT[q.id] || '')}</textarea>
       <div class="actions" style="margin-top:6px"><button class="btn sm" data-a="askAnswer" data-v="${q.id}" ${busy ? 'disabled' : ''}>${busy ? 'Working on it…' : 'Answer'}</button></div>` : `<div class="small muted" style="margin-top:4px">Waiting on ${esc(q.who)}</div>`}</div>` : ''}
-    <div class="small muted" style="margin-top:8px">${esc(q.who)} asked: “${esc(q.text)}”${q.answer ? ` · answered: “${esc(q.answer)}”` : ''}${q.source ? ' · from ' + esc(q.source) : ''}</div></div></div>`;
+    <div class="small muted" style="margin-top:8px">${convo ? `From the conversation: “${esc(q.text)}”` : `${esc(q.who)} asked: “${esc(q.text)}”`}${q.answer ? ` · answered: “${esc(q.answer)}”` : ''}${q.source && !convo ? ' · from ' + esc(q.source) : ''}</div></div></div>`;
 }
 /** Saves what the assistant worked out, then records the request (new) or updates it (answer). */
 async function assistApply(plan, meta, req) {
@@ -1837,7 +1853,7 @@ async function assistApply(plan, meta, req) {
     const cur = it.id ? byId(it.t, it.id) : null; if (it.id && !cur) continue;
     const v = Object.assign({}, cur || {}, it.row);
     if (it.t === 'Activities') { v._slots = (it.row.slots || []).map(x => Object.assign({}, x)); delete v.slots; if (cur) { v._grp = actGroup(cur).map(x => x.id); v.id = cur.id; } }
-    ASSIST = { t: it.t, made: null };
+    ASSIST = { t: it.t, made: null, quiet: true };
     try { const r = await (SAVE[it.t] ? SAVE[it.t](v) : saveRow(it.t, v)); if (r === false) errs.push('One item was not saved.'); else if (cur || ASSIST.made) made.push([it.t, cur ? cur.id : ASSIST.made]); }
     catch (e) { errs.push(e.message); }
     ASSIST = null;
@@ -2092,12 +2108,13 @@ const AI_TOPICS = [['meals', 'Meals and recipes'], ['birthdays', 'Birthdays and 
 A.aiEdit = (v, el) => { if (ME !== 'Paul') return; const g = k => (byId('Settings', 'app|ai.' + k) || {}).value;
   form('Assistant', [F('on', 'Turn on the assistant (daily notes in the Feed)', 'chk'), F('who', 'Who sees the AI posts', 'multi', ADULTS, { hint: 'Only these people see its notes in the Feed and get its notifications.' }),
       F('topics', 'Topics', 'multi', AI_TOPICS.map(x => x[1])),
+      F('convo', 'Turn settled conversations into plans', 'chk', null, { hint: 'When a post or question in the app settles something ("home at 6:30", "yes, I\'ll get the kids"), the assistant adds it to the plan and posts what it did.' }),
       F('use', 'Who can use the Assistant button', 'multi', ADULTS, { hint: 'The sparkle button at the top of every tab, and Fill it in on new events. Everything it makes shows in the Feed.' }),
       F('card', 'Who gets the AI Today card', 'multi', ADULTS, { hint: 'The assistant writes their card at the top of the Feed each morning and at 7 PM for tomorrow. Everyone else keeps the usual card. Leave it empty to turn it off.' }), F('hour', 'Post after', 'sel', [6, 7, 8, 9, 10, 12, 17, 19].map(h => [String(h), fmtT(pad(h) + ':00')]))],
-    { on: g('on') || '', who: aiWho().join(', '), topics: AI_TOPICS.filter(x => list(g('topics') || AI_TOPICS.map(y => y[0]).join(', ')).includes(x[0])).map(x => x[1]).join(', '), hour: g('hour') || '7', card: aiCardFor().join(', '), use: aiUseFor().join(', ') },
+    { on: g('on') || '', who: aiWho().join(', '), topics: AI_TOPICS.filter(x => list(g('topics') || AI_TOPICS.map(y => y[0]).join(', ')).includes(x[0])).map(x => x[1]).join(', '), hour: g('hour') || '7', card: aiCardFor().join(', '), use: aiUseFor().join(', '), convo: (g('convo') || '1') === '1' ? '1' : '' },
     x => { need(list(x.who).length, 'Pick at least one person to see the posts.');
       const keys = AI_TOPICS.filter(t => list(x.topics).includes(t[1])).map(t => t[0]); need(keys.length, 'Pick at least one topic.');
-      return write(['on', 'who', 'topics', 'hour', 'card', 'use'].map(k => ({ t: 'Settings', row: { id: 'app|ai.' + k, value: k === 'on' ? (x.on === '1' ? '1' : '') : k === 'who' ? ADULTS.filter(a => list(x.who).includes(a)).join(', ') : k === 'topics' ? keys.join(', ') : k === 'card' || k === 'use' ? ADULTS.filter(a => list(x[k]).includes(a)).join(', ') || 'none' : x.hour } }))); }); };
+      return write(['on', 'who', 'topics', 'hour', 'card', 'use', 'convo'].map(k => ({ t: 'Settings', row: { id: 'app|ai.' + k, value: k === 'on' ? (x.on === '1' ? '1' : '') : k === 'convo' ? (x.convo === '1' ? '1' : '0') : k === 'who' ? ADULTS.filter(a => list(x.who).includes(a)).join(', ') : k === 'topics' ? keys.join(', ') : k === 'card' || k === 'use' ? ADULTS.filter(a => list(x[k]).includes(a)).join(', ') || 'none' : x.hour } }))); }); };
 A.aiRun = async (v, el) => { el.disabled = true; el.textContent = 'Asking Claude…'; let r = null; try { r = await api('ai_run'); } catch (e) { toast(e.message); } el.disabled = false; refresh();
   if (r && r.ai) toast(r.ai.error ? r.ai.error : r.ai.notes && r.ai.notes.length ? `Posted ${r.ai.notes.length} note${r.ai.notes.length === 1 ? '' : 's'} to the Feed` : 'Nothing worth posting right now.'); };
 const pauseDays = () => +((byId('Settings', 'app|pauseDays') || {}).value || 30) || 30;
@@ -2444,6 +2461,7 @@ const PAGES = {
       <div class="kv"><span>Seen by</span>${esc(joinNames(aiWho()))}</div>
       <div class="kv"><span>Topics</span>${esc(AI_TOPICS.filter(x => topics.includes(x[0])).map(x => x[1]).join(', ') || 'None')}</div>
       ${last ? `<div class="kv"><span>Last run</span>${esc(last.replace('T', ' '))}</div>` : ''}
+      <div class="kv"><span>Conversations</span>${((byId('Settings', 'app|ai.convo') || {}).value || '1') === '1' ? 'Turns settled plans into app items' : 'Off'}</div>
       <div class="kv"><span>Assistant button</span>${esc(joinNames(aiUseFor()) || 'No one')}</div>
       <div class="kv"><span>AI Today card</span>${esc(joinNames(aiCardFor()) || 'No one')}</div>
       <div class="kv"><span>Assistant rules</span>${S.ai_rules.filter(r => r.active !== '0').length} on · <a data-a="homeOpen" data-v="airules">See and add rules</a></div>
