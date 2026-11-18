@@ -323,7 +323,7 @@
 // Momnie Family app v6.0
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'], DAYN = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'], ADULTS = ['Paul', 'Shana'];
 // Shown at the bottom of Home. Bump it together with VERSION in sw.js on every release.
-const APP_VERSION = '11.0 · Nov 18, 2026';
+const APP_VERSION = '11.1 · Nov 18, 2026';
 const TABLES = ['People', 'Schools', 'SchoolCal', 'Activities', 'Overrides', 'Events', 'Caretakers', 'Childcare', 'Birthdays', 'Todos', 'TodoTypes', 'Recipes', 'DinnerRules', 'Weeks', 'Menus',
   'Groceries', 'GroceryList', 'HouseCards', 'Houses', 'WeatherRules', 'Quotes', 'Memories', 'Updates', 'Messages', 'Activity', 'Comments', 'Reactions', 'Links', 'Settings', 'Photos', 'gifts', 'daily_items', 'daily_completions'];
 const CAT = { School: '#3f6fb5', Kids: '#4f7cc2', Work: '#64748b', Family: '#5b6fa8', Dinner: '#b08a4f', Caretaker: '#3e9aa6', Shared: '#94a3b8', Birthday: '#c9806a' }, SCHOOL_C = ['#5a72b8', '#7a8597', '#4a6fb0'];
@@ -1721,7 +1721,6 @@ const weekName = (w, cur) => w === cur ? 'This week' : w === addDays(cur, 7) ? '
 function vMenu() {
   const cur = mondayOf(TODAY); MW = MW && MW >= cur ? MW : cur;
   const w = byId('Weeks', MW), future = S.Weeks.filter(x => x.id > cur).sort((a, b) => a.id.localeCompare(b.id));
-  const last = S.Weeks.filter(x => x.id >= cur).map(x => x.id).sort().pop(), nextNew = last ? addDays(last, 7) : cur;
   let html = `<div class="weekbar"><button class="icon-btn" data-a="mweek" data-v="-7" ${MW <= cur ? 'disabled style="opacity:.25"' : ''}>‹</button><span>${weekName(MW, cur)} · ${fmtDate(MW)} – ${fmtDate(addDays(MW, 6))}</span><button class="icon-btn" data-a="mweek" data-v="7">›</button></div>`;
   if (MW !== cur) html += `<div class="pad"><button class="chip" data-a="mweek" data-v="0">‹ Back to this week</button></div>`;
   if (!S.Recipes.length) html += '<div class="empty">Add a few recipes first (Home, then Recipes). Then the app can propose a week.</div>';
@@ -1734,9 +1733,8 @@ function vMenu() {
           </div>
           ${MCHG === m.id ? `<div class="dchg" data-a="mChgClose"><button class="btn" data-a="mRandom" data-v="${m.id}">${ic('shuffle', 18)}Random</button><button class="btn" data-a="mSelect" data-v="${m.id}">${ic('list', 18)}Select</button></div>` : ''}</div>`; }).join('') +
       `${w.id > cur ? `<div class="actions pad" style="margin-bottom:6px"><button class="btn danger sm" data-a="weekDel" data-v="${w.id}">Delete this week's plan</button></div>` : ''}`; }
-  html += `<div class="sect">Future weeks</div>` + future.map(x => `<div class="li" data-a="mgo" data-v="${x.id}"><div class="hicon">${ic('planner')}</div><div class="grow"><div class="ti">${weekName(x.id, cur)}</div><div class="small muted">${fmtDate(x.id)} – ${fmtDate(addDays(x.id, 6))} · ${S.Menus.filter(m => m.week === x.id && dish(m)).length} nights planned</div></div><span class="chev">›</span></div>`).join('') +
-    `<div class="actions pad" style="margin:12px 0 4px"><button class="btn dark" data-a="weekAdd" data-v="${nextNew}">＋ Set up ${weekLow(nextNew, cur)}</button></div>
-    <div class="actions pad" style="margin-bottom:16px"><button class="btn gray sm" data-a="rules">${ic('gear', 16)}Dinner rules</button><button class="btn gray sm" data-a="ingredients">${ic('cart', 16)}Ingredients for planned meals</button></div>`;
+  html += (future.length ? `<div class="sect">Future weeks</div>` : '') + future.map(x => `<div class="li" data-a="mgo" data-v="${x.id}"><div class="hicon">${ic('planner')}</div><div class="grow"><div class="ti">${weekName(x.id, cur)}</div><div class="small muted">${fmtDate(x.id)} – ${fmtDate(addDays(x.id, 6))} · ${S.Menus.filter(m => m.week === x.id && dish(m)).length} nights planned</div></div><span class="chev">›</span></div>`).join('') +
+    `    <div class="actions pad" style="margin-bottom:16px"><button class="btn gray sm" data-a="rules">${ic('gear', 16)}Dinner rules</button><button class="btn gray sm" data-a="ingredients">${ic('cart', 16)}Ingredients for planned meals</button></div>`;
   return html;
 }
 A.mweek = n => { const cur = mondayOf(TODAY); MW = +n === 0 ? cur : addDays(MW || cur, +n); if (MW < cur) MW = cur; render(); };
