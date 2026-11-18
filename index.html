@@ -331,7 +331,7 @@
 // Momnie Family app v6.0
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'], DAYN = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'], ADULTS = ['Paul', 'Shana'];
 // Shown at the bottom of Home. Bump it together with VERSION in sw.js on every release.
-const APP_VERSION = '12.5 · Nov 18, 2026';
+const APP_VERSION = '12.6 · Nov 18, 2026';
 const TABLES = ['People', 'Schools', 'SchoolCal', 'Activities', 'Overrides', 'Events', 'Caretakers', 'Childcare', 'Birthdays', 'Todos', 'TodoTypes', 'Recipes', 'DinnerRules', 'Weeks', 'Menus',
   'Groceries', 'GroceryList', 'HouseCards', 'Houses', 'WeatherRules', 'Quotes', 'Memories', 'Updates', 'Messages', 'Activity', 'Comments', 'Reactions', 'Links', 'Settings', 'Photos', 'gifts', 'ai_rules', 'daily_items', 'daily_completions'];
 const CAT = { School: '#3f6fb5', Kids: '#4f7cc2', Work: '#64748b', Family: '#5b6fa8', Dinner: '#b08a4f', Caretaker: '#3e9aa6', Shared: '#94a3b8', Birthday: '#c9806a' }, SCHOOL_C = ['#5a72b8', '#7a8597', '#4a6fb0'];
@@ -1617,7 +1617,7 @@ function planRows(d, after) {
 // (headline, a weather sentence, the few things that matter most). Anything missing or stale shows the classic card.
 let BRIEFING = false;
 function aiCard(sd, night) {
-  const on = (byId('Settings', 'app|ai.on') || {}).value === '1' && st('ai.card', '') === '1';
+  const on = (byId('Settings', 'app|ai.on') || {}).value === '1' && aiCardFor().includes(ME);
   if (!on) return { on: false };
   let b = null; try { b = JSON.parse(st('ai.brief', '') || 'null'); } catch (e) {}
   return { on, brief: b && b.for === sd && b.mode === (night ? 'night' : 'day') && b.headline ? b : null };
@@ -1920,6 +1920,8 @@ A.choose = id => { const m = byId('Menus', id), recs = S.Recipes.filter(r => r.s
 const autofillDays = () => { const r = byId('Settings', 'app|autofillDays'); return r && r.value ? (r.value === 'none' ? [] : list(r.value)) : ['Mon', 'Tue', 'Wed', 'Thu']; };
 // AI assistant: who sees its Feed notes (Settings app|ai.who; Paul only until he chooses).
 const aiWho = () => list((byId('Settings', 'app|ai.who') || {}).value || 'Paul');
+// Who gets the AI Today card (Settings app|ai.card): Paul only until he adds others; 'none' turns it off for everyone.
+const aiCardFor = () => { const v = (byId('Settings', 'app|ai.card') || {}).value || 'Paul'; return v === 'none' ? [] : list(v); };
 const aiSees = name => aiWho().includes(name);
 const aiNoteFor = a => a.audience ? list(a.audience) : aiWho();
 // ----- Assistant rules: plain-English rules the AI assistant checks every time it runs -----
@@ -1944,11 +1946,12 @@ const aiAskBtn = area => `<button class="btn gray" data-a="aiRuleNew" data-v="${
 const AI_TOPICS = [['meals', 'Meals and recipes'], ['birthdays', 'Birthdays and gift-idea counts'], ['todos', 'To-dos and bills'], ['rides', 'Rides and caretakers'], ['week', 'The week ahead'], ['house', 'House upkeep']];
 A.aiEdit = (v, el) => { if (ME !== 'Paul') return; const g = k => (byId('Settings', 'app|ai.' + k) || {}).value;
   form('AI assistant', [F('on', 'Post daily notes to the Feed', 'chk'), F('who', 'Who sees the AI posts', 'multi', ADULTS, { hint: 'Only these people see its notes in the Feed and get its notifications.' }),
-      F('topics', 'Topics', 'multi', AI_TOPICS.map(x => x[1])), F('hour', 'Post after', 'sel', [6, 7, 8, 9, 10, 12, 17, 19].map(h => [String(h), fmtT(pad(h) + ':00')]))],
-    { on: g('on') || '', who: aiWho().join(', '), topics: AI_TOPICS.filter(x => list(g('topics') || AI_TOPICS.map(y => y[0]).join(', ')).includes(x[0])).map(x => x[1]).join(', '), hour: g('hour') || '7' },
+      F('topics', 'Topics', 'multi', AI_TOPICS.map(x => x[1])),
+      F('card', 'Who gets the AI Today card', 'multi', ADULTS, { hint: 'The assistant writes their card at the top of the Feed each morning and at 7 PM for tomorrow. Everyone else keeps the usual card. Leave it empty to turn it off.' }), F('hour', 'Post after', 'sel', [6, 7, 8, 9, 10, 12, 17, 19].map(h => [String(h), fmtT(pad(h) + ':00')]))],
+    { on: g('on') || '', who: aiWho().join(', '), topics: AI_TOPICS.filter(x => list(g('topics') || AI_TOPICS.map(y => y[0]).join(', ')).includes(x[0])).map(x => x[1]).join(', '), hour: g('hour') || '7', card: aiCardFor().join(', ') },
     x => { need(list(x.who).length, 'Pick at least one person to see the posts.');
       const keys = AI_TOPICS.filter(t => list(x.topics).includes(t[1])).map(t => t[0]); need(keys.length, 'Pick at least one topic.');
-      return write(['on', 'who', 'topics', 'hour'].map(k => ({ t: 'Settings', row: { id: 'app|ai.' + k, value: k === 'on' ? (x.on === '1' ? '1' : '') : k === 'who' ? ADULTS.filter(a => list(x.who).includes(a)).join(', ') : k === 'topics' ? keys.join(', ') : x.hour } }))); }); };
+      return write(['on', 'who', 'topics', 'hour', 'card'].map(k => ({ t: 'Settings', row: { id: 'app|ai.' + k, value: k === 'on' ? (x.on === '1' ? '1' : '') : k === 'who' ? ADULTS.filter(a => list(x.who).includes(a)).join(', ') : k === 'topics' ? keys.join(', ') : k === 'card' ? ADULTS.filter(a => list(x.card).includes(a)).join(', ') || 'none' : x.hour } }))); }); };
 A.aiRun = async (v, el) => { el.disabled = true; el.textContent = 'Asking Claude…'; let r = null; try { r = await api('ai_run'); } catch (e) { toast(e.message); } el.disabled = false; refresh();
   if (r && r.ai) toast(r.ai.error ? r.ai.error : r.ai.notes && r.ai.notes.length ? `Posted ${r.ai.notes.length} note${r.ai.notes.length === 1 ? '' : 's'} to the Feed` : 'Nothing worth posting right now.'); };
 const pauseDays = () => +((byId('Settings', 'app|pauseDays') || {}).value || 30) || 30;
@@ -2295,7 +2298,7 @@ const PAGES = {
       <div class="kv"><span>Seen by</span>${esc(joinNames(aiWho()))}</div>
       <div class="kv"><span>Topics</span>${esc(AI_TOPICS.filter(x => topics.includes(x[0])).map(x => x[1]).join(', ') || 'None')}</div>
       ${last ? `<div class="kv"><span>Last run</span>${esc(last.replace('T', ' '))}</div>` : ''}
-      <div class="kv"><span>Today card</span>${esc(joinNames(ADULTS.filter(a => (byId('Settings', a + '|ai.card') || {}).value === '1')) || 'No one yet')} · each person turns it on in Settings, Notifications and Feed</div>
+      <div class="kv"><span>AI Today card</span>${esc(joinNames(aiCardFor()) || 'No one')}</div>
       <div class="kv"><span>Assistant rules</span>${S.ai_rules.filter(r => r.active !== '0').length} on · <a data-a="homeOpen" data-v="airules">See and add rules</a></div>
       <div class="actions"><button class="btn" data-a="aiEdit">${ic('pen', 16)}Change</button><button class="btn gray" data-a="aiRun">${ic('spark', 16)}Post now</button></div>
       <div class="small muted" style="margin-top:12px">Needs an Anthropic API key in Apps Script: Project Settings, Script properties, ANTHROPIC_API_KEY. Each person can mute its notifications under Notifications and Feed.</div>`; },
@@ -2304,8 +2307,6 @@ const PAGES = {
       `<h3>Bundling</h3><div class="small muted">When several things happen close together, you get one notification that sums them up instead of a string of buzzes. Urgent alerts always come right away.</div><label>Bundle alerts that arrive within</label><select data-c="setVal" data-k="bundleMin">${[['0', 'Off (send each one)'], ['5', '5 minutes'], ['15', '15 minutes'], ['30', '30 minutes'], ['60', '1 hour']].map(([v, l]) => `<option value="${v}" ${st('bundleMin', '5') === v ? 'selected' : ''}>${l}</option>`).join('')}</select>` +
       `<div class="two"><div><label>Quiet hours start</label>${timeSelect('data-c="setVal" data-k="quietStart"', q('quietStart'), 'Off')}</div><div><label>Quiet hours end</label>${timeSelect('data-c="setVal" data-k="quietEnd"', q('quietEnd'), 'Off')}</div></div>
       <div class="actions"><button class="btn gray sm" data-a="ntest">Send me a test</button></div><h3>Show in my Feed</h3>` + FKINDS().map(([k, l]) => chk('setFlag', 'f.' + k, '1', l)).join('') +
-      ((byId('Settings', 'app|ai.on') || {}).value === '1' ? `<h3>Today card</h3>` + chk('setFlag', 'ai.card', '0', 'Let the AI assistant write my Today card') +
-        `<div class="small muted">Each morning, and at 7 PM for tomorrow, the assistant rewrites the card at the top of your Feed: a short summary of your day, what to wear and the few things that matter most for you. Urgent alerts always still show. Turn it off to go back to the usual card.</div>` : '') +
       `<h3>Weather</h3><div class="small muted">Weather follows this phone: near Boston or the Cape shows that house, anywhere else shows local weather.</div><div class="actions"><button class="btn gray sm" data-a="geoOn">${store.get('geo') === '1' ? '✓ Using my location' : 'Use my location'}</button></div>
 ` +
       (API_URL ? '' : `<h3>Connection</h3><label>Backend URL</label><input id="sUrl" value="${esc(store.get('url'))}"><div class="actions"><button class="btn gray" data-a="connect">Save and reconnect</button></div>`); }
