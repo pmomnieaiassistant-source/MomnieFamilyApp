@@ -353,7 +353,7 @@
 // Momnie Family app v6.0
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'], DAYN = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'], ADULTS = ['Paul', 'Shana'];
 // Shown at the bottom of Home. Bump it together with VERSION in sw.js on every release.
-const APP_VERSION = '14.1 · Nov 18, 2026';
+const APP_VERSION = '14.2 · Nov 18, 2026';
 const TABLES = ['People', 'Schools', 'SchoolCal', 'Activities', 'Overrides', 'Events', 'Caretakers', 'Childcare', 'Birthdays', 'Todos', 'TodoTypes', 'Recipes', 'DinnerRules', 'Weeks', 'Menus',
   'Groceries', 'GroceryList', 'HouseCards', 'Houses', 'WeatherRules', 'Quotes', 'Memories', 'Updates', 'Messages', 'Activity', 'Comments', 'Reactions', 'Links', 'Settings', 'Photos', 'gifts', 'ai_rules', 'ai_requests', 'notes', 'daily_items', 'daily_completions'];
 const CAT = { School: '#3f6fb5', Kids: '#4f7cc2', Work: '#64748b', Family: '#5b6fa8', Dinner: '#b08a4f', Caretaker: '#3e9aa6', Shared: '#94a3b8', Birthday: '#c9806a' }, SCHOOL_C = ['#5a72b8', '#7a8597', '#4a6fb0'];
@@ -1286,7 +1286,7 @@ function editForm(t, row, extra) {
   const ai = isNew && AI_FILL[t] && aiCanUse() ? { ph: AI_FILL[t], ai: t === 'Events' ? aiEvent : txt => aiFill(t, txt) } : null;
   const save = async x => { const rq = x._aiReq; delete x._aiReq; if (!rq) return saveRow(t, x);
     ASSIST = { t, made: null }; let r; try { r = await saveRow(t, x); } finally { const made = ASSIST && ASSIST.made; ASSIST = null;
-      if (made) write({ t: 'ai_requests', row: { id: rq, refs: JSON.stringify([[t, made]]) } }); }
+      if (made) { write({ t: 'ai_requests', row: { id: rq, refs: JSON.stringify([[t, made]]) } }); aiConvoSoon(); } }
     return r; };
   return form((isNew ? 'New ' : 'Edit ') + (NAMES[t] || 'item'), FORMS[t], v, save, null, ai);
 }
@@ -1925,8 +1925,10 @@ A.qAns = (v, el) => { const id = el.dataset.id, m = byId('Messages', id); if (!m
   if (done && m.resolved !== '1') ops.push({ t: 'Messages', row: { id, resolved: '1', resolvedBy: ME } });
   delete QEDIT[id]; write(ops, { notify: 'on' }).then(() => aiConvoSoon()); };
 const outboxEmpty = async () => { for (let i = 0; i < 60 && outbox.length; i++) await new Promise(r => setTimeout(r, 250)); };
-async function aiConvoSoon() { if (!aiOn() || ((byId('Settings', 'app|ai.convo') || {}).value || '1') !== '1') return;
-  try { await outboxEmpty(); const r = await api('ai_convo'); if (r.convo && (r.convo.actions || []).length) await load(); } catch (e) {} }
+// After someone uses the Assistant (a request, an answer, Fill it in), ask for a quick review while things are fresh.
+// It reads new conversation and refreshes the Today cards and notes if it has been a while. Quiet if nothing changes.
+async function aiConvoSoon() { if (!aiOn()) return;
+  try { await outboxEmpty(); const r = await api('ai_after', { today: TODAY }), a = r.after || {}; if ((a.convo || []).length || a.reviewed) await load(); } catch (e) {} }
 const msgPost = (m, pin) => m.kind === 'question' ? qPost(m, pin) : `<div class="post" data-a="open" data-t="Messages" data-id="${m.id}">${avatar(m.from)}<div class="pbody"><div>${nameLink(m.from)}${list(m.tags).filter(n => n !== m.from).length ? ' → ' + list(m.tags).filter(n => n !== m.from).map(nameLink).join(', ') : ''} <span class="muted">· ${ago(m.time)}</span>${m.from !== ME && list(m.tags).includes(ME) ? ' <span class="chip ok">Tagged you</span>' : ''}${pin ? ` <span class="muted">${ic('pin', 14)}</span>` : ''}${m.urgent === '1' ? ' <span class="chip bad">Urgent</span>' : ''}</div>
   <div class="ptext msg">${withMentions(m.text)}</div>${postFoot('Messages', m.id, m.resolved === '1' ? ic('check', 14) + ' Resolved by ' + esc(m.resolvedBy) : 'Open')}</div></div>`;
 const qPost = (m, pin) => { const asked = qAsked(m), ans = qAnswers(m), left = asked.filter(n => !ans[n]);
@@ -2006,13 +2008,13 @@ A.askOpen = () => { const src = ($('title') || {}).textContent || 'the app';
 A.askSend = async src => { const text = ASK_DRAFT.trim(); if (text.length < 4) return toast('Tell the assistant what you need.'); if (ASK_BUSY) return;
   ASK_BUSY = 'new'; refresh();
   try { const r = await api('ai_do', { text, source: src, today: TODAY, now: nowHM() }), plan = r.plan || {};
-    if (plan.error) toast(plan.error); else { await assistApply(plan, { text, source: src }); ASK_DRAFT = ''; } }
+    if (plan.error) toast(plan.error); else { await assistApply(plan, { text, source: src }); ASK_DRAFT = ''; aiConvoSoon(); } }
   catch (e) { toast(e.message); }
   ASK_BUSY = ''; refresh(); };
 A.askAnswer = async id => { const q = byId('ai_requests', id), answer = (ANS_DRAFT[id] || '').trim(); if (!q || ASK_BUSY) return; if (!answer) return toast('Type your answer first.');
   ASK_BUSY = id; refresh();
   try { const r = await api('ai_answer', { id, answer, today: TODAY, now: nowHM() }), plan = r.plan || {};
-    if (plan.error) toast(plan.error); else { await assistApply(plan, { answer }, q); delete ANS_DRAFT[id]; } }
+    if (plan.error) toast(plan.error); else { await assistApply(plan, { answer }, q); delete ANS_DRAFT[id]; aiConvoSoon(); } }
   catch (e) { toast(e.message); }
   ASK_BUSY = ''; refresh(); };
 document.addEventListener('input', e => { const k = e.target.dataset && e.target.dataset.askans; if (k) ANS_DRAFT[k] = e.target.value; });
@@ -2238,8 +2240,8 @@ A.aiEdit = (v, el) => { if (ME !== 'Paul') return; const g = k => (byId('Setting
       F('topics', 'Topics', 'multi', AI_TOPICS.map(x => x[1])),
       F('convo', 'Turn settled conversations into plans', 'chk', null, { hint: 'When a post or question in the app settles something ("home at 6:30", "yes, I\'ll get the kids"), the assistant adds it to the plan and posts what it did.' }),
       F('use', 'Who can use the Assistant button', 'multi', ADULTS, { hint: 'The sparkle button at the top of every tab, and Fill it in on new events. Everything it makes shows in the Feed.' }),
-      F('card', 'Who gets the AI Today card', 'multi', ADULTS, { hint: 'The assistant writes their card at the top of the Feed each morning and at 7 PM for tomorrow. Everyone else keeps the usual card. Leave it empty to turn it off.' }), F('hour', 'Post after', 'sel', [6, 7, 8, 9, 10, 12, 17, 19].map(h => [String(h), fmtT(pad(h) + ':00')]))],
-    { on: g('on') || '', who: aiWho().join(', '), topics: AI_TOPICS.filter(x => list(g('topics') || AI_TOPICS.map(y => y[0]).join(', ')).includes(x[0])).map(x => x[1]).join(', '), hour: g('hour') || '7', card: aiCardFor().join(', '), use: aiUseFor().join(', '), convo: (g('convo') || '1') === '1' ? '1' : '' },
+      F('card', 'Who gets the AI Today card', 'multi', ADULTS, { hint: 'The assistant writes their card at the top of the Feed each morning and at 7 PM for tomorrow. Everyone else keeps the usual card. Leave it empty to turn it off.' }), F('hour', 'Start reviewing at', 'sel', [6, 7, 8, 9, 10, 12, 17, 19].map(h => [String(h), fmtT(pad(h) + ':00')]))],
+    { on: g('on') || '', who: aiWho().join(', '), topics: AI_TOPICS.filter(x => list(g('topics') || AI_TOPICS.map(y => y[0]).join(', ')).includes(x[0])).map(x => x[1]).join(', '), hour: g('hour') || '6', card: aiCardFor().join(', '), use: aiUseFor().join(', '), convo: (g('convo') || '1') === '1' ? '1' : '' },
     x => { need(list(x.who).length, 'Pick at least one person to see the posts.');
       const keys = AI_TOPICS.filter(t => list(x.topics).includes(t[1])).map(t => t[0]); need(keys.length, 'Pick at least one topic.');
       return write(['on', 'who', 'topics', 'hour', 'card', 'use', 'convo'].map(k => ({ t: 'Settings', row: { id: 'app|ai.' + k, value: k === 'on' ? (x.on === '1' ? '1' : '') : k === 'convo' ? (x.convo === '1' ? '1' : '0') : k === 'who' ? ADULTS.filter(a => list(x.who).includes(a)).join(', ') : k === 'topics' ? keys.join(', ') : k === 'card' || k === 'use' ? ADULTS.filter(a => list(x[k]).includes(a)).join(', ') || 'none' : x.hour } }))); }); };
@@ -2601,9 +2603,9 @@ const PAGES = {
       (S.ai_rules.map(aiRuleRow).join('') || '<div class="empty">No rules yet.</div>') + `<div class="actions">${aiAskBtn('general')}</div>`;
     if (ME !== 'Paul') return '<h2>Assistant</h2>' + (aiOn() ? '' : '<div class="alert amber" style="margin-top:10px">The assistant is off, so rules are not being checked yet. Paul can turn it on here.</div>') + rules + '<div class="small muted" style="margin-top:12px">Only Paul can change the other assistant settings.</div>';
     const on = (byId('Settings', 'app|ai.on') || {}).value === '1', last = (byId('Settings', 'app|ai.last') || {}).value, topics = list((byId('Settings', 'app|ai.topics') || {}).value || AI_TOPICS.map(x => x[0]).join(', '));
-    const hour = (byId('Settings', 'app|ai.hour') || {}).value || '7';
-    return `<h2>Assistant</h2><div class="small muted">Once a day Claude reads a summary of the family's plans and posts 0 to 3 short notes to the Feed: gaps to fill, ideas, heads-ups. It is never sent what the gift ideas are.</div>
-      <div class="kv"><span>Status</span>${on ? 'On' : 'Off'}${on ? ` · posts after ${fmtT(pad(+hour) + ':00')}` : ''}</div>
+    const hour = (byId('Settings', 'app|ai.hour') || {}).value || '6';
+    return `<h2>Assistant</h2><div class="small muted">Every couple of hours Claude reads a summary of the family's plans and posts a few short notes to the Feed (up to 3 a day): gaps to fill, ideas, heads-ups. It also keeps the Today cards fresh and reads conversations. It is never sent what the gift ideas are.</div>
+      <div class="kv"><span>Status</span>${on ? 'On' : 'Off'}${on ? ` · reviews every 2 hours, ${fmtT(pad(+hour) + ':00')} to 10 PM` : ''}</div>
       <div class="kv"><span>Seen by</span>${esc(joinNames(aiWho()))}</div>
       <div class="kv"><span>Topics</span>${esc(AI_TOPICS.filter(x => topics.includes(x[0])).map(x => x[1]).join(', ') || 'None')}</div>
       ${last ? `<div class="kv"><span>Last run</span>${esc(last.replace('T', ' '))}</div>` : ''}

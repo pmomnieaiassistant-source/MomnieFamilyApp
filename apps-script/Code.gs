@@ -1,6 +1,10 @@
 /**
  * Momnie Family app backend
- * Version 3.22 (2026-11-18)
+ * Version 3.23 (2026-11-18)
+ *   3.23: Fixes the Assistant button, Fill it in and answering a question, which 3.22 broke (their routes were
+ *         removed by mistake). The assistant now reviews far more often: every two hours from 6 AM to 10 PM (notes,
+ *         rules, Today cards, conversations), and straight after anyone uses the Assistant button, answers a question
+ *         or runs it by hand. A daily cap keeps the Feed from filling up.
  *   3.22: One "Run the assistant now" button (ai_all, Paul only) runs the notes, the AI Today cards and the conversation
  *         check together. The Today card's own refresh button is gone.
  *   3.21: Hide a calendar entry or series from the planner (gcal_hide / gcal_unhide): it gets the app's hidden key,
@@ -322,6 +326,17 @@ function route_(b, me) {
       if (me !== 'Paul') return { ok: false, error: 'Only Paul can run the assistant.' };
       if (setting_('app|ai.on', '') !== '1') return { ok: false, error: 'Turn the assistant on first.' };
       return aiAll_(isDate_(b.today) ? b.today : today_());
+    case 'ai_event':   // "Fill it in" on a new event: fills in the form, saves nothing
+      if (setting_('app|ai.on', '') !== '1') return { ok: false, error: 'The assistant is off.' };
+      if (aiUseFor_().indexOf(me) < 0) return { ok: false, error: 'The assistant is not turned on for you.' };
+      return aiEvent_(String(b.text || '').slice(0, 1000), isDate_(b.today) ? b.today : today_(), String(b.now || ''), me);
+    case 'ai_do':      // the Assistant button: works out what to create (the app saves it)
+    case 'ai_answer':  // an answer to the Assistant's question: works out what to change
+      if (setting_('app|ai.on', '') !== '1') return { ok: false, error: 'The assistant is off.' };
+      if (aiUseFor_().indexOf(me) < 0) return { ok: false, error: 'The assistant is not turned on for you.' };
+      return { plan: aiDo_(b, me) };
+    case 'ai_after':   // the app calls this once a request has been saved: a quick review while things are fresh
+      return { after: aiAfter_(isDate_(b.today) ? b.today : today_()) };
     case 'ai_convo':   // after someone answers a question post: turn a settled plan into app items
       if (setting_('app|ai.on', '') !== '1' || setting_('app|ai.convo', '1') !== '1') return { convo: null };
       return { convo: aiConvoSafe_(today_(), false) };
@@ -733,10 +748,7 @@ function jobs_(fromTrigger) {
   if (t.slice(8) === '01' && once_('monthcard', t)) monthCard_(t);
   if (!fromTrigger) return;
   flushQueues_();
-  if (setting_('app|ai.on', '') === '1' && hour >= Number(setting_('app|ai.hour', '7')) && once_('ai', t)) aiSafe_(t);
-  if (setting_('app|ai.on', '') === '1' && setting_('app|ai.convo', '1') === '1' && hour >= 6 && hour < 23) aiConvoSafe_(t, false);   // only calls Claude when there is new conversation
-  if (setting_('app|ai.on', '') === '1' && hour >= 5 && hour < 19 && once_('brief_am', t)) briefAll_(t, 'day');
-  if (setting_('app|ai.on', '') === '1' && hour >= 19 && once_('brief_pm', t)) briefAll_(addDays_(t, 1), 'night');   // hourly tick only: never slows down opening the app
+  if (setting_('app|ai.on', '') === '1') aiReview_(t, hour);   // hourly tick only: never slows down opening the app
   if (hour >= 7 && once_('digest', t)) digest_(t);
   if (hour >= 20 && once_('gaps', t)) gaps_(t);
   if (hour >= 6 && once_('wx_am', t)) wxAlerts_(0, 'morning');
@@ -921,6 +933,7 @@ function aiContext_(t) {
   c.openRequests = rows_('ai_requests').filter(function (q) { return (q.status === 'question' || q.status === 'error') && q.time >= addDays_(t, -7); })
     .map(function (q) { return q.who + ' asked on ' + String(q.time).slice(0, 10) + ': "' + q.text + '" | ' + (q.status === 'question' ? 'still waiting for their answer to: ' + q.question : 'could not be done: ' + q.summary); });
   c.note = 'Everything listed is today or later, except overdue to-dos. Past events and meals are history: do not write about them.';
+  c.generalNotesLeftToday = Math.max(0, 3 - freeToday_(t));
   c.recentNotes = rows_('Activity').filter(function (a) { return a.type === 'ai' && a.time >= addDays_(t, -10); }).map(function (a) { return a.time.slice(0, 10) + ': ' + a.text; }).slice(-15);
   return c;
 }
@@ -941,12 +954,14 @@ function claude_(system, content, schema, effort) {
   try { return { data: JSON.parse(text) }; } catch (e) { return { error: 'Could not read the answer.' }; }
 }
 /** Asks Claude for 0 to 3 notes and posts them to the Feed. Returns the notes (or why there are none). */
+/** How many general (not rule) notes the assistant has posted today. */
+function freeToday_(t) { return rows_('Activity').filter(function (a) { return a.type === 'ai' && String(a.time).slice(0, 10) === t && String(a.ref || '').indexOf('rule:') !== 0; }).length; }
 function aiPosts_(t, manual) {
   var ctx = aiContext_(t);
   var system = 'You are the AI assistant inside a family\'s shared home app (parents Paul and Shana, and their kids). Each morning you read a summary of the family\'s plans and write 0 to 3 short notes for the app\'s Feed.\n' +
     'Write only notes that help: something to act on, a gap in the plan, a timely idea or a useful heads-up. If nothing is worth saying, return no notes; that is often the right answer.\n' +
     'Each note: one or two plain sentences, under 220 characters, warm and practical, first names only, no emoji, no greeting, no sign-off. Use dates like "Thu" or "Nov 20".\n' +
-    'Do not repeat or rephrase anything in recentNotes. Never name or describe gift ideas; at most say how many are saved. Do not invent facts that are not in the summary.\n' +
+    'You run every couple of hours, so most runs should return no notes. Post a general note only when something is new or has changed since recentNotes, and never more than generalNotesLeftToday of them. Do not repeat or rephrase anything in recentNotes. Never name or describe gift ideas; at most say how many are saved. Do not invent facts that are not in the summary.\n' +
     'The family may give you standing rules (in "rules"). Check every rule against the summary. When a rule applies, write one note for it, set rule_id to that rule\'s id, and word it for the people in tellOnly (use @Name to tag someone). A rule note does not count toward the 3-note limit, and a rule that does not apply gets no note. ' +
     'Notes not tied to a rule must stay within the listed topics and set rule_id to "".\n' +
     'openRequests are things someone asked the Assistant for that are still waiting. If one has waited since before today, you may write one short nudge to that person (tag them with @Name) with topic "week"; never nudge about the same request twice (check recentNotes).';
@@ -958,8 +973,8 @@ function aiPosts_(t, manual) {
   if (r.error) { put_('Settings', { id: 'app|ai.last', value: now_() + ' · ' + r.error.slice(0, 200) }); return { error: r.error }; }
   if (r.refused) { put_('Settings', { id: 'app|ai.last', value: now_() + ' · declined' }); return { notes: [] }; }
   var notes = [], rulesById = {}; aiRules_().forEach(function (x) { rulesById[x.id] = x; });
-  var all = ((r.data && r.data.notes) || []).filter(function (n) { return n && n.text; }), free = 0;
-  notes = all.filter(function (n) { return rulesById[n.rule_id] || free++ < 3; });
+  var all = ((r.data && r.data.notes) || []).filter(function (n) { return n && n.text; }), left = Math.max(0, 3 - freeToday_(t)), free = 0;   // at most 3 general notes a day; rule notes are not capped
+  notes = all.filter(function (n) { return rulesById[n.rule_id] || free++ < left; });
   var who = list_(setting_('app|ai.who', 'Paul'));
   notes.forEach(function (n) {
     var rule = rulesById[n.rule_id], aud = rule && rule.audience ? list_(rule.audience) : who;   // a rule's note goes only to the people it names
@@ -974,9 +989,33 @@ function aiPosts_(t, manual) {
 /** Who gets the AI Today card: Paul's choice in the app (app|ai.card), Paul only until he adds others. */
 function aiCardFor_() { var v = setting_('app|ai.card', 'Paul'); return v === 'none' ? [] : list_(v); }
 function briefAll_(d, mode) { var done = [], err = ''; aiCardFor_().forEach(function (p) { try { var b = aiBrief_(p, d, mode); if (b && b.error) err = b.error; else done.push(p); } catch (e) { console.error(e); err = String(e && e.message || e); } }); return { done: done, error: err }; }
+/** Minutes since a timestamp saved in Settings (a big number if it never ran). */
+function minsSince_(key) { var v = setting_(key, ''); if (!v) return 99999;
+  var ms = function (iso) { var m = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/.exec(String(iso)); return m ? Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5]) : NaN; };
+  var d = (ms(now_()) - ms(v)) / 60000; return isNaN(d) ? 99999 : Math.round(d); }
+function stamp_(key) { put_('Settings', { id: key, value: now_() }); }
+/** The scheduled review (hourly tick): every two hours from 6 AM to 10 PM. Notes and rules, the Today cards, and conversations. */
+function aiReview_(t, hour) {
+  var gap = Number(setting_('app|ai.every', '110'));   // minutes; a little under two hours so an hourly tick never skips a slot
+  if (hour < Number(setting_('app|ai.hour', '6')) || hour >= 22) return;   // the "start at" hour is Paul's choice in Settings, Assistant
+  if (minsSince_('job|ai_review_at') >= gap) { stamp_('job|ai_review_at'); aiSafe_(t); aiCardsSafe_(t, hour); }
+  if (setting_('app|ai.convo', '1') === '1') aiConvoSafe_(t, false);   // every tick; only calls Claude when there is something new
+}
+/** Today cards: tomorrow's from 7 PM, today's before that. */
+function aiCardsSafe_(t, hour) { try { if (hour >= 19) briefAll_(addDays_(t, 1), 'night'); else briefAll_(t, 'day'); } catch (e) { console.error(e); } }
+/** A quick review right after someone uses the Assistant: conversations, then the Today cards and the notes if it has been a while. */
+function aiAfter_(t) {
+  if (setting_('app|ai.on', '') !== '1') return { skipped: 'off' };
+  if (minsSince_('job|ai_after_at') < 5) return { skipped: 'recent' };   // several requests close together share one review
+  stamp_('job|ai_after_at');
+  var hour = Number(now_().slice(11, 13)), out = {};
+  if (setting_('app|ai.convo', '1') === '1') out.convo = (aiConvoSafe_(t, true) || {}).actions || [];
+  if (minsSince_('job|ai_review_at') >= 30) { stamp_('job|ai_review_at'); aiSafe_(t); aiCardsSafe_(t, hour); out.reviewed = true; }
+  return out;
+}
 /** Everything the assistant does, now: notes for the Feed, the AI Today cards, and plans from conversations. */
 function aiAll_(t) {
-  var night = Number(now_().slice(11, 13)) >= 19, notes = aiPosts_(t, true), cards = briefAll_(night ? addDays_(t, 1) : t, night ? 'night' : 'day'), convo = setting_('app|ai.convo', '1') === '1' ? aiConvoSafe_(t, true) : {};
+  stamp_('job|ai_review_at'); var night = Number(now_().slice(11, 13)) >= 19, notes = aiPosts_(t, true), cards = briefAll_(night ? addDays_(t, 1) : t, night ? 'night' : 'day'), convo = setting_('app|ai.convo', '1') === '1' ? aiConvoSafe_(t, true) : {};
   return { notes: notes, cards: cards.done, cardError: cards.error, convo: convo.actions || [] };
 }
 /** Everything on person p's plate for date d, each with a ref the app can open. Gift ideas are never included. */
