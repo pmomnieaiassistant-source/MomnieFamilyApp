@@ -1,6 +1,7 @@
 /**
  * Momnie Family app backend
- * Version 3.17 (2026-11-18)
+ * Version 3.18 (2026-11-18)
+ *   3.18: Question posts (Messages kind, answerType, options) and the built-in "App question" to-do type.
  *   3.17: The Assistant. Type anything ("Clara has piano every Monday at 8 AM") and it works out what to create:
  *         events, to-dos and bills, weekly activities, caretaker requests, school calendar days, house cards
  *         (ai_do). It can ask a follow-up question, and the answer revises what it made (ai_answer). Every
@@ -69,7 +70,7 @@ var T = {
   Quotes: 'id,quote,author,lastShown',
   Memories: 'id,date,note,photo',
   Updates: 'id,date,title,message,hiddenFrom,label',   // label: optional heading over a splash screen, e.g. "A bit from Paul"
-  Messages: 'id,time,from,text,tags,visibility,pinUntil,urgent,resolved,resolvedBy',
+  Messages: 'id,time,from,text,tags,visibility,pinUntil,urgent,resolved,resolvedBy,kind,answerType,options',   // kind 'question': answerType yesno / time / choice / text
   Activity: 'id,time,who,type,text,amount,table,ref,cat,audience',   // audience: who sees an AI assistant note
   Comments: 'id,time,who,table,ref,text,system',
   Reactions: 'id,time,who,table,ref,emoji',
@@ -1230,6 +1231,7 @@ function setup() {
     { id: 'appt', name: 'Appointment to book', emoji: '', assignee: '', builtin: '1', fields: 'kid' },
     { id: 'house', name: 'House', emoji: '', assignee: '', builtin: '1', fields: '' },
     { id: 'buy', name: 'Buy', emoji: '', assignee: 'Shana', builtin: '1', fields: 'link' },
+    { id: 'question', name: 'App question', emoji: '', assignee: '', builtin: '1', fields: '' },
     { id: 'paycare', name: 'Pay caretaker', emoji: '', assignee: 'Paul', builtin: '1', fields: 'amount' }]);
   seed('WeatherRules', [
     { metric: 'rain', op: '>', threshold: '50', message: 'Send kids with rain gear', when: 'night', push: '1', urgent: '', enabled: '1' },
