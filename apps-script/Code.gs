@@ -1,6 +1,7 @@
 /**
  * Momnie Family app backend
- * Version 3.24 (2026-11-18)
+ * Version 3.25 (2026-11-18)
+ *   3.25: Work hours can differ by day (Settings person|<id>|hours); the morning summary uses them.
  *   3.24: The assistant tidies up after itself. Each review it checks its own recent notes and open questions
  *         against the current plan and clears the ones that are outdated (the question was answered somewhere
  *         else, the gap was filled, the day has passed). Cleared posts leave the Feed but stay in the Assistant's
@@ -1056,10 +1057,11 @@ function briefCands_(p, d, mode) {
   var t = today_(), day = DAYS[dow_(d)], c = [], add = function (ref, text) { c.push({ ref: ref, what: text }); };
   var people = rows_('People'), me = people.filter(function (x) { return x.name === p; })[0] || {};
   people.forEach(function (x) {
-    if (x.kind === 'kid' || !x.workStart || list_(x.workDays).indexOf(day) < 0) return;
+    var hrs = (jsonSafe_(setting_('person|' + x.id + '|hours', '{}'))[day]) || {}, ws = hrs.s || x.workStart, we = hrs.e || (hrs.s ? '' : x.workEnd);
+    if (x.kind === 'kid' || !ws || list_(x.workDays).indexOf(day) < 0) return;
     var w = jsonSafe_(setting_('person|' + x.id + '|wfh', '{}')), dates = w.dates && typeof w.dates === 'object' ? w.dates : {};
     var where = dates[d] || (list_(w.days).indexOf(day) >= 0 ? 'home' : 'office');
-    add('People:' + x.id, (x.name === p ? 'You work' : x.name + ' works') + ' ' + t12_(x.workStart) + (x.workEnd ? '–' + t12_(x.workEnd) : '') + ', ' + (where === 'home' ? 'from home' : 'in the office'));
+    add('People:' + x.id, (x.name === p ? 'You work' : x.name + ' works') + ' ' + t12_(ws) + (we ? '–' + t12_(we) : '') + ', ' + (where === 'home' ? 'from home' : 'in the office'));
   });
   schoolRuns_(d).forEach(function (r) { add('run:' + r.sid + '|' + d + '|' + r.kind, runLine_(r) + (r.who && !r.changed ? ' (the usual)' : '')); });
   kidOcc_(d).forEach(function (o) { add(o.t + ':' + o.id, t12_(o.start) + ' ' + o.title + ' (' + o.kids + '): drop-off ' + (o.dropoff || 'NOT SET') + ', pickup ' + (o.pickup || 'NOT SET')); });
