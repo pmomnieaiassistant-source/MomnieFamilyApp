@@ -215,6 +215,9 @@
   .wseg button { border:0; background:none; font:inherit; font-size:13px; font-weight:700; color:var(--muted); padding:5px 12px; border-radius:8px; display:inline-flex; align-items:center; gap:4px; }
   .wseg button.on { background:var(--card); color:var(--accent); box-shadow:0 1px 3px rgba(0,0,0,.12); } .small.wfh { color:var(--accent); font-weight:600; }
   dialog:not(.splash)::before { content:''; display:block; width:40px; height:5px; border-radius:3px; background:var(--line); margin:-12px auto 8px; }
+  .pickbar { display:flex; align-items:center; gap:10px; margin:10px 12px 0; padding:12px 14px; border-radius:14px; background:var(--accent); color:var(--onacc); }
+  .pickbar .btn { flex:none; } .rcard.pickable { cursor:pointer; } .rcard.pickable:active { transform:scale(.99); }
+  .dcard.flash { animation:flash 1.6s ease-out; } @keyframes flash { 0% { box-shadow:0 0 0 3px var(--accent); } 100% { box-shadow:0 0 0 3px transparent; } }
   .dcard.clearing { box-shadow:inset 0 0 0 2px #e5484d; } .dcard.clearing::after { content:'Release to clear'; position:absolute; right:14px; top:12px; font-size:12px; font-weight:700; color:#e5484d; }
   input.fk { flex:0 0 38% !important; font-weight:600; } .pbox .li.plain:last-child { border-bottom:0; } .psec .lbl { margin:0 0 4px; } .li.plain { padding:10px 0; border-bottom:1px solid var(--line); }
   a.mention { color:var(--accent); font-weight:700; } .plink { cursor:pointer; }
@@ -307,7 +310,7 @@
 // Momnie Family app v6.0
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'], DAYN = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'], ADULTS = ['Paul', 'Shana'];
 // Shown at the bottom of Home. Bump it together with VERSION in sw.js on every release.
-const APP_VERSION = '9.9 · Nov 18, 2026';
+const APP_VERSION = '10.0 · Nov 18, 2026';
 const TABLES = ['People', 'Schools', 'SchoolCal', 'Activities', 'Overrides', 'Events', 'Caretakers', 'Childcare', 'Birthdays', 'Todos', 'TodoTypes', 'Recipes', 'DinnerRules', 'Weeks', 'Menus',
   'Groceries', 'GroceryList', 'HouseCards', 'Houses', 'WeatherRules', 'Quotes', 'Memories', 'Updates', 'Messages', 'Activity', 'Comments', 'Reactions', 'Links', 'Settings', 'Photos', 'gifts', 'daily_items', 'daily_completions'];
 const CAT = { School: '#3f6fb5', Kids: '#4f7cc2', Work: '#64748b', Family: '#5b6fa8', Dinner: '#b08a4f', Caretaker: '#3e9aa6', Shared: '#94a3b8', Birthday: '#c9806a' }, SCHOOL_C = ['#5a72b8', '#7a8597', '#4a6fb0'];
@@ -1560,13 +1563,14 @@ A.dayAdd = d => { const s = sheet(`<h2>Add to ${fmtDay(d)}</h2><div class="actio
 A.addOn = (t, el) => { A.close(null, el); editForm(t, null, t === 'Todos' ? { due: el.dataset.d } : t === 'Activities' ? { days: DAYS[dowIdx(el.dataset.d)], from: el.dataset.d } : { date: el.dataset.d }); };
 
 // ----- Dinner -----
+let PFOR = '', PFLASH = '';   // picking a recipe for this Menus night (from Select), and the night to highlight after
 let DT = 'menu', MW = '', GH = '', GF = false, RQ = '', RFQ = '', RS = 'stale', RT = [], RPICK = '', RMENU = false;
 const RHIDE = new Set();
 const gchk = () => { try { return new Set(JSON.parse(store.get('gchk') || '[]')); } catch (e) { return new Set(); } };
 function vDinner() {
   return `<div class="seg">${[['menu', 'Menu'], ['rec', 'Recipes'], ['groc', 'Groceries']].map(([k, l]) => `<button class="${DT === k ? 'on' : ''}" data-a="dtab" data-v="${k}">${l}</button>`).join('')}</div>` + ({ menu: vMenu, rec: vRecFeed, groc: vGroc })[DT]();
 }
-A.dtab = v => { DT = v; render(); };
+A.dtab = v => { DT = v; if (v !== 'rec') PFOR = ''; render(); };
 const weekLow = (w, cur) => w === cur ? 'this week' : w === addDays(cur, 7) ? 'next week' : 'the week of ' + fmtDate(w);
 const weekName = (w, cur) => w === cur ? 'This week' : w === addDays(cur, 7) ? 'Next week' : 'Week of ' + fmtDate(w);
 function vMenu() {
@@ -1580,7 +1584,7 @@ function vMenu() {
   else { const ms = S.Menus.filter(m => m.week === w.id).sort((a, b) => a.date.localeCompare(b.date));
     html += `<div class="row pad" style="margin:4px 0"><span class="small muted">Swipe a night right to change it, or left to clear it.</span></div>` +
       ms.map(m => { const r = byId('Recipes', m.recipeId), name = dish(m), past = m.date < TODAY;
-        return `<div class="card dcard" data-menu="${m.id}" ${past ? '' : 'data-swipe="1"'} style="${past ? 'opacity:.55' : ''}"><div class="row"><span class="small b ${m.date === TODAY ? '' : 'muted'}" style="${m.date === TODAY ? 'color:var(--accent)' : ''}">${m.day.toUpperCase()} ${fmtDate(m.date)}${m.date === TODAY ? ' · TONIGHT' : ''}</span><span>${m.cook ? `<span class="chip">${ic('meals', 13)} ${esc(m.cook)}</span> ` : ''}${m.away ? `<span class="chip bad">${esc(m.away)} out</span>` : ''}${m.skipped === '1' ? '<span class="chip bad">Skipped</span>' : ''}</span></div>
+        return `<div class="card dcard ${PFLASH === m.id ? 'flash' : ''}" data-menu="${m.id}" ${past ? '' : 'data-swipe="1"'} style="${past ? 'opacity:.55' : ''}"><div class="row"><span class="small b ${m.date === TODAY ? '' : 'muted'}" style="${m.date === TODAY ? 'color:var(--accent)' : ''}">${m.day.toUpperCase()} ${fmtDate(m.date)}${m.date === TODAY ? ' · TONIGHT' : ''}</span><span>${m.cook ? `<span class="chip">${ic('meals', 13)} ${esc(m.cook)}</span> ` : ''}${m.away ? `<span class="chip bad">${esc(m.away)} out</span>` : ''}${m.skipped === '1' ? '<span class="chip bad">Skipped</span>' : ''}</span></div>
           <div class="row" style="margin-top:4px"><div class="grow" data-a="open" data-t="Menus" data-id="${m.id}"><div style="font-size:18px;font-weight:800" class="${name ? '' : 'muted'}">${esc(name || 'No dinner planned')}</div>${r && r.tags ? `<div class="small muted">${list(r.tags).map(t => '#' + esc(t)).join(' ')}</div>` : ''}</div>
           </div>
           ${MCHG === m.id ? `<div class="dchg" data-a="mChgClose"><button class="btn" data-a="mRandom" data-v="${m.id}">${ic('shuffle', 18)}Random</button><button class="btn" data-a="mSelect" data-v="${m.id}">${ic('list', 18)}Select</button></div>` : ''}</div>`; }).join('') +
@@ -1600,7 +1604,16 @@ A.swap = id => { const m = byId('Menus', id); return call('dinner_swap', { id, l
 // Swiping a night right shows two choices over it: Random (a new suggestion) or Select (pick from the list).
 let MCHG = '';
 A.mRandom = id => { MCHG = ''; render(); A.swap(id); };
-A.mSelect = id => { MCHG = ''; render(); A.choose(id); };
+A.mSelect = id => { MCHG = ''; PFOR = id; RPICK = ''; RMENU = false; DT = 'rec'; render(); window.scrollTo(0, 0); };
+A.pickCancel = () => { const id = PFOR; PFOR = ''; DT = 'menu'; render(); menuShow(id, false); };
+/** Tapping a recipe while picking: it goes on that night, then back to the weekly menu with the night highlighted. */
+A.pickFor = rid => { const m = byId('Menus', PFOR), r = byId('Recipes', rid); PFOR = ''; if (!m || !r) { DT = 'menu'; render(); return; }
+  const was = m.skipped === '1' ? '' : dish(m);
+  write({ t: 'Menus', row: { id: m.id, recipeId: rid, note: '', kept: '1', skipped: '' }, log: menuLog(m, 'menu_set', `${was ? 'changed' : 'planned'} dinner for ${fmtDay(m.date)}: ${was ? was + ' → ' : ''}${r.name}`) });
+  DT = 'menu'; MW = mondayOf(m.date); render(); menuShow(m.id, true); toast(`${r.name} → ${m.date === TODAY ? 'tonight' : fmtDay(m.date)}`); };
+function menuShow(id, flash) { const el = document.querySelector(`.dcard[data-menu="${id}"]`); if (!el) return window.scrollTo(0, 0);
+  window.scrollTo(0, Math.max(0, el.getBoundingClientRect().top + window.scrollY - window.innerHeight / 3));
+  if (flash) { PFLASH = id; el.classList.add('flash'); clearTimeout(menuShow.t); menuShow.t = setTimeout(() => { PFLASH = ''; document.querySelectorAll('.dcard.flash').forEach(x => x.classList.remove('flash')); }, 1800); } }
 A.mChgClose = () => { MCHG = ''; render(); };
 A.skip = id => { const m = byId('Menus', id), on = m.skipped !== '1'; write({ t: 'Menus', row: { id, skipped: on ? '1' : '' }, log: on ? L('menu_skip', `skipped dinner on ${fmtDay(m.date)} (${dish(m)})`, 'dinner') : null }); };
 // Who's making dinner that night. Tap the same person again to clear it.
@@ -1698,6 +1711,10 @@ function vRecFeed() {
   rs.sort(cmp);
   const card = r => { const s = st.get(r.id), a = avgRating(r), my = myStars(r), nx = nextPlanned(r.id), recent = s.last && s.last >= addDays(TODAY, -RECENT_DAYS), paused = r.pausedUntil && r.pausedUntil >= TODAY;
     const cov = coverOf('Recipes', r.id);
+    if (PFOR) return `<div class="rcard pickable ${recent || paused ? 'dim' : ''}" data-a="pickFor" data-v="${r.id}"><div class="rin">${cov ? `<img class="rcover" src="${esc(photoSrc(cov.fileId, 900))}" alt="" loading="lazy">` : ''}<div class="rrow"><div class="grow"><div class="ti">${esc(r.name)}</div>
+      <div class="small">${a ? `<span class="rstars stars">${starTxt(a)}</span> ${a.toFixed(1)}` : '<span class="muted">Not rated yet</span>'}</div>
+      <div class="small muted">${s.last ? 'Had ' + daysAgo(s.last) : 'Never made'}${r.tags ? ' · ' + list(r.tags).map(t => '#' + esc(t)).join(' ') : ''}</div>${nx ? `<div style="margin-top:4px"><span class="chip ok">${nx.date === TODAY ? 'Tonight' : 'On ' + nightName(nx.date)}</span></div>` : ''}</div>
+      <span class="chev">›</span></div></div></div>`;
     return `<div class="rcard ${recent || paused ? 'dim' : ''}" data-rid="${r.id}"><div class="under"><span class="yes">${ic('plus', 16)} Add to a night</span><span class="no">Not now</span></div>
       <div class="rin">${cov ? `<img class="rcover" src="${esc(photoSrc(cov.fileId, 900))}" alt="" loading="lazy" data-a="open" data-t="Recipes" data-id="${r.id}">` : ''}<div class="rrow"><div class="grow" data-a="open" data-t="Recipes" data-id="${r.id}"><div class="ti">${esc(r.name)}</div>
       <div class="small">${a ? `<span class="rstars stars">${starTxt(a)}</span> ${a.toFixed(1)}` : '<span class="muted">Not rated yet</span>'}${my ? ` <span class="muted">· you ${my}★</span>` : ''}</div>
@@ -1706,7 +1723,9 @@ function vRecFeed() {
       <button class="btn gray sm rpick" data-a="recPick" data-v="${r.id}" aria-label="Add to a night">${RPICK === r.id ? ic('x', 16) : ic('plus', 16)}</button></div></div>${RPICK === r.id ? `<div class="rnights">${nightsHTML(r.id)}</div>` : ''}</div>`; };
   const SORTS = [['stale', 'Not had lately'], ['top', 'Top rated'], ['recent', 'Recently made'], ['az', 'A–Z']], on = (RS !== 'stale' ? 1 : 0) + RT.length;
   const applied = [RS !== 'stale' ? SORTS.find(x => x[0] === RS)[1] : ''].concat(RT.map(t => '#' + t)).filter(Boolean);
-  return `<div class="rbar"><div class="rsearch"><input placeholder="Search recipes" value="${esc(RFQ)}" onchange="RFQ=this.value;refresh()"><button class="rmbtn ${on ? 'on' : ''}" data-a="recMenu" aria-label="Sort and tags" aria-expanded="${RMENU}">${ic('menu', 22)}${on ? `<i>${on}</i>` : ''}</button></div>
+  const pm = PFOR && byId('Menus', PFOR);
+  return (pm ? `<div class="pickbar"><div class="grow"><b>Pick dinner for ${pm.date === TODAY ? 'tonight' : esc(fmtDay(pm.date))}</b><div class="small">Tap a recipe to put it on that night.</div></div><button class="btn gray sm" data-a="pickCancel">Cancel</button></div>` : '') +
+    `<div class="rbar"><div class="rsearch"><input placeholder="Search recipes" value="${esc(RFQ)}" onchange="RFQ=this.value;refresh()"><button class="rmbtn ${on ? 'on' : ''}" data-a="recMenu" aria-label="Sort and tags" aria-expanded="${RMENU}">${ic('menu', 22)}${on ? `<i>${on}</i>` : ''}</button></div>
     ${RMENU ? `<div class="rshade" data-a="recMenu"></div><div class="rmenu" role="dialog" aria-label="Sort and tags"><div class="lbl" style="margin-top:0">Sort by</div>
       ${SORTS.map(([k, l]) => `<button class="rmopt ${RS === k ? 'on' : ''}" data-a="recSort" data-v="${k}">${RS === k ? ic('check', 16) : '<span style="width:16px"></span>'}${l}</button>`).join('')}
       ${tags.length ? `<div class="lbl">Tags</div><div class="rmtags">${tags.map(t => `<button class="chip ${RT.includes(t) ? 'on' : ''}" data-a="recTag" data-v="${esc(t)}">#${esc(t)}</button>`).join('')}</div>` : ''}
