@@ -1,6 +1,7 @@
 /**
  * Momnie Family app backend
- * Version 3.26 (2026-11-18)
+ * Version 3.27 (2026-11-18)
+ *   3.27: Activity.subject, so the Feed shows only the newest post when something changes back and forth.
  *   3.26: A kid can have days they don't go to school (kid|<id>|schedule {"Mon":{"off":"1"}}): no runs or ride reminders those days.
  *   3.25: Work hours can differ by day (Settings person|<id>|hours); the morning summary uses them.
  *   3.24: The assistant tidies up after itself. Each review it checks its own recent notes and open questions
@@ -92,7 +93,7 @@ var T = {
   Memories: 'id,date,note,photo',
   Updates: 'id,date,title,message,hiddenFrom,label',   // label: optional heading over a splash screen, e.g. "A bit from Paul"
   Messages: 'id,time,from,text,tags,visibility,pinUntil,urgent,resolved,resolvedBy,kind,answerType,options',   // kind 'question': answerType yesno / time / choice / text
-  Activity: 'id,time,who,type,text,amount,table,ref,cat,audience,state',   // audience: who sees an AI assistant note; state: 'cleared' = the assistant retired it
+  Activity: 'id,time,who,type,text,amount,table,ref,cat,audience,state,subject',   // audience: who sees an AI assistant note; state: 'cleared' = the assistant retired it
   Comments: 'id,time,who,table,ref,text,system',
   Reactions: 'id,time,who,table,ref,emoji',
   Links: 'id,aTable,aRef,bTable,bRef,by',
@@ -388,7 +389,7 @@ function write_(b, me) {
 
 function log_(who, log, t, ref) {
   put_('Activity', { time: log.time || now_(), who: who, type: log.type || '', text: log.text || '', amount: log.amount === undefined ? '' : log.amount,
-    table: log.table || t || '', ref: log.ref || ref || '', cat: log.cat || '', audience: log.audience || '' });
+    table: log.table || t || '', ref: log.ref || ref || '', cat: log.cat || '', audience: log.audience || '', subject: log.subject || '' });   // subject: newer posts about the same thing replace older ones in the Feed
   if (who !== 'App' && who !== 'AI assistant' && who !== 'Assistant') _logs.push(log);   // AI notes notify only their chosen audience (aiPosts_)
 }
 
