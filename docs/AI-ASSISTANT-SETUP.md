@@ -117,3 +117,11 @@ To see detailed errors: in Apps Script open **Executions** in the left sidebar a
   in the Sheet.
 
 It only talks to Claude when the assistant is on, and it reads conversations only when something new was said.
+
+## The assistant tidies up after itself
+
+Each review the assistant checks its own recent notes and open questions against the current plan and clears the
+ones that are out of date (for example, a "who is making dinner?" note once someone is set to cook). Cleared posts
+leave the Feed but stay in the Assistant page's request log. If someone settles a question in a post or reply (for
+example "I'll cook tonight"), the assistant updates the plan and clears the question. General notes expire after 3
+days and unanswered questions after 7.
