@@ -322,7 +322,7 @@
 </style>
 </head>
 <body>
-<header><h1 id="title">Feed</h1><div style="display:flex"><button class="icon-btn" id="hdrGear" data-a="openSettings" aria-label="Settings" style="display:none"></button><button class="icon-btn" id="hdrAsk" data-a="askOpen" aria-label="Assistant" style="display:none"></button><button class="icon-btn" id="hdrReload" data-a="reload" aria-label="Refresh"></button></div></header>
+<header><h1 id="title">Feed</h1><div style="display:flex"><button class="icon-btn" id="hdrAsk" data-a="askOpen" aria-label="Assistant" style="display:none"></button><button class="icon-btn" id="hdrReload" data-a="reload" aria-label="Refresh"></button></div></header>
 <main id="view"><div class="empty">Loading…</div></main>
 <nav class="bottom">
   <button data-a="nav" data-v="feed" data-ic="feed"><span>Feed</span></button>
@@ -337,7 +337,7 @@
 // Momnie Family app v6.0
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'], DAYN = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'], ADULTS = ['Paul', 'Shana'];
 // Shown at the bottom of Home. Bump it together with VERSION in sw.js on every release.
-const APP_VERSION = '13.2 · Nov 18, 2026';
+const APP_VERSION = '13.3 · Nov 18, 2026';
 const TABLES = ['People', 'Schools', 'SchoolCal', 'Activities', 'Overrides', 'Events', 'Caretakers', 'Childcare', 'Birthdays', 'Todos', 'TodoTypes', 'Recipes', 'DinnerRules', 'Weeks', 'Menus',
   'Groceries', 'GroceryList', 'HouseCards', 'Houses', 'WeatherRules', 'Quotes', 'Memories', 'Updates', 'Messages', 'Activity', 'Comments', 'Reactions', 'Links', 'Settings', 'Photos', 'gifts', 'ai_rules', 'ai_requests', 'daily_items', 'daily_completions'];
 const CAT = { School: '#3f6fb5', Kids: '#4f7cc2', Work: '#64748b', Family: '#5b6fa8', Dinner: '#b08a4f', Caretaker: '#3e9aa6', Shared: '#94a3b8', Birthday: '#c9806a' }, SCHOOL_C = ['#5a72b8', '#7a8597', '#4a6fb0'];
@@ -1593,7 +1593,7 @@ function render() {
   $('title').textContent = pv ? (pv.name === ME ? 'Me' : pv.name) : TITLES[view];
   document.querySelectorAll('nav.bottom button').forEach(b => b.className = b.dataset.v === view ? 'on' : '');
   if (!ME) return;
-  $('hdrGear').style.display = view === 'home' ? '' : 'none'; $('hdrAsk').style.display = aiCanUse() ? '' : 'none';
+  $('hdrAsk').style.display = aiCanUse() ? '' : 'none';
   $('view').innerHTML = ({ feed: vFeed, planner: vPlanner, meals: vDinner, todo: vTodo, home: vHome, person: vPerson })[view]();
   if (view === 'person') document.documentElement.style.setProperty('--hdrh', document.querySelector('header').offsetHeight + 'px');
 }
@@ -2638,7 +2638,7 @@ A.dinClear = id => { const m = byId('Menus', id); if (!m || (!m.recipeId && !m.n
   document.addEventListener('touchmove', e => { if (y0 === null) return; if (window.scrollY > 0) { y0 = null; set(0, true); return; } d = Math.min(110, Math.max(0, e.touches[0].clientY - y0) * 0.5); set(d, false); }, { passive: true });
   document.addEventListener('touchend', async () => { if (y0 === null) return; y0 = null; if (d < TRIG) { set(0, true); return; } on = true; ic.textContent = '↻'; el.classList.add('spin'); set(60, true); try { await load(); } catch (e) { toast(e.message); } el.classList.remove('spin'); on = false; set(0, true); }); })();
 document.querySelectorAll('nav.bottom button').forEach(b => b.insertAdjacentHTML('afterbegin', ic(b.dataset.ic, 24)));
-$('hdrGear').innerHTML = ic('gear', 22); $('hdrAsk').innerHTML = ic('spark', 21); $('hdrReload').innerHTML = ic('refresh', 21);
+$('hdrAsk').innerHTML = ic('spark', 21); $('hdrReload').innerHTML = ic('refresh', 21);
 boot();
 </script>
 </body>
