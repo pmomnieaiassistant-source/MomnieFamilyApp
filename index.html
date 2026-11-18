@@ -323,7 +323,7 @@
 // Momnie Family app v6.0
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'], DAYN = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'], ADULTS = ['Paul', 'Shana'];
 // Shown at the bottom of Home. Bump it together with VERSION in sw.js on every release.
-const APP_VERSION = '11.4 · Nov 18, 2026';
+const APP_VERSION = '11.5 · Nov 18, 2026';
 const TABLES = ['People', 'Schools', 'SchoolCal', 'Activities', 'Overrides', 'Events', 'Caretakers', 'Childcare', 'Birthdays', 'Todos', 'TodoTypes', 'Recipes', 'DinnerRules', 'Weeks', 'Menus',
   'Groceries', 'GroceryList', 'HouseCards', 'Houses', 'WeatherRules', 'Quotes', 'Memories', 'Updates', 'Messages', 'Activity', 'Comments', 'Reactions', 'Links', 'Settings', 'Photos', 'gifts', 'daily_items', 'daily_completions'];
 const CAT = { School: '#3f6fb5', Kids: '#4f7cc2', Work: '#64748b', Family: '#5b6fa8', Dinner: '#b08a4f', Caretaker: '#3e9aa6', Shared: '#94a3b8', Birthday: '#c9806a' }, SCHOOL_C = ['#5a72b8', '#7a8597', '#4a6fb0'];
@@ -1713,7 +1713,8 @@ let DT = 'menu', MW = '', GH = '', GF = false, RQ = '', RFQ = '', RS = 'stale', 
 const RHIDE = new Set();
 const gchk = () => { try { return new Set(JSON.parse(store.get('gchk') || '[]')); } catch (e) { return new Set(); } };
 function vDinner() {
-  return `<div class="seg">${[['menu', 'Menu'], ['rec', 'Recipes'], ['groc', 'Groceries']].map(([k, l]) => `<button class="${DT === k ? 'on' : ''}" data-a="dtab" data-v="${k}">${l}</button>`).join('')}</div>` + ({ menu: vMenu, rec: vRecFeed, groc: vGroc })[DT]();
+  return `<div class="seg">${[['menu', 'Menu'], ['rec', 'Recipes'], ['groc', 'Groceries']].map(([k, l]) => `<button class="${DT === k ? 'on' : ''}" data-a="dtab" data-v="${k}">${l}</button>`).join('')}</div>` + ({ menu: vMenu, rec: vRecFeed, groc: vGroc })[DT]() +
+    (DT === 'menu' ? `<button class="fab" data-a="autofill" aria-label="Autofill empty nights">${ic('refresh', 20)}Autofill</button>` : '');
 }
 A.dtab = v => { DT = v; if (v !== 'rec') PFOR = ''; RACT = ''; render(); };
 const weekLow = (w, cur) => w === cur ? 'this week' : w === addDays(cur, 7) ? 'next week' : 'the week of ' + fmtDate(w);
@@ -1732,11 +1733,33 @@ function vMenu() {
           </div>
           ${MCHG === m.id ? `<div class="dchg" data-a="mChgClose"><button class="btn" data-a="mRandom" data-v="${m.id}">${ic('shuffle', 18)}Random</button><button class="btn" data-a="mSelect" data-v="${m.id}">${ic('list', 18)}Select</button></div>` : ''}</div>`; }).join('') +
       ''; }
-  html += '<div style="height:16px"></div>';
+  html += '<div style="height:84px"></div>';   // room so the Autofill button never covers Sunday
   return html;
 }
 // Every week starts with no dinner planned. A week only gets saved (Weeks + 7 Menus rows) when something is put on one of its nights.
 const MWMAX = 8;
+/** Picks a recipe for one night the way Random does: the night's rule first, then favor good ratings and new recipes, avoid
+ *  anything had in the last 2 weeks and anything already that week; paused and archived recipes are left out. */
+function autoPick(date, used) {
+  const rule = ruleOf(DAYS[dowIdx(date)]), live = S.Recipes.filter(r => r.name && r.status !== 'archived' && !(r.pausedUntil && r.pausedUntil >= date));
+  if (rule.type === 'recipe' && live.some(r => r.id === rule.value) && !used.includes(rule.value)) return rule.value;
+  let pool = rule.type === 'tag' ? live.filter(r => list(String(r.tags || '').toLowerCase().replace(/#/g, '')).includes(String(rule.value || '').toLowerCase())) : live;
+  if (!pool.length) pool = live; if (!pool.length) return '';
+  const fresh = pool.filter(r => !used.includes(r.id)), c = fresh.length ? fresh : pool, cut = addDays(date, -14);
+  const w = c.map(r => { const st = recipeStats(r.id), nx = S.Menus.some(m => m.recipeId === r.id && m.date >= addDays(date, -14) && m.date <= addDays(date, 14) && m.date !== date); let x = 1 + (avgRating(r) || 3); if (!st.n) x *= 2; if ((st.last && st.last >= cut) || nx) x *= .15; return x; });
+  let roll = Math.random() * w.reduce((a, b) => a + b, 0); for (let i = 0; i < c.length; i++) { roll -= w[i]; if (roll <= 0) return c[i].id; } return c[c.length - 1].id;
+}
+/** The corner button: fills the empty nights of the week on screen, on the nights chosen in Dinner rules. */
+A.autofill = () => { const wk = MW || mondayOf(TODAY), days = autofillDays();
+  if (!days.length) return toast('No nights are set to autofill. Choose them in Home, Meals, Dinner rules.');
+  if (!S.Recipes.some(r => r.name && r.status !== 'archived')) return toast('Add a few recipes first.');
+  ensureWeek(wk);
+  const ms = S.Menus.filter(m => m.week === wk), used = ms.map(m => m.recipeId).filter(Boolean), ops = [];
+  ms.filter(m => m.date >= TODAY && days.includes(m.day) && !m.recipeId && !m.note && m.skipped !== '1').sort((a, b) => a.date.localeCompare(b.date)).forEach(m => {
+    const rid = autoPick(m.date, used); if (!rid) return; used.push(rid); ops.push({ t: 'Menus', row: { id: m.id, recipeId: rid, note: '', kept: '', skipped: '' } }); });
+  if (!ops.length) return toast('Nothing to fill. Those nights already have dinner.');
+  ops[0].log = L('menu_set', `filled ${ops.length} night${ops.length === 1 ? '' : 's'} for ${weekLow(wk, mondayOf(TODAY))}`, 'dinner');
+  write(ops); ops.forEach(o => { const el = document.querySelector(`.dcard[data-menu="${o.row.id}"]`); if (el) { el.classList.add('flash'); setTimeout(() => el.classList.remove('flash'), 1600); } }); };
 const ruleOf = d => byId('DinnerRules', d) || {};
 const weekNights = wk => DAYS.map((d, i) => ({ id: wk + '-' + d, week: wk, day: d, date: addDays(wk, i), recipeId: '', note: '', kept: '', skipped: '', away: ruleOf(d).away || '', cook: ruleOf(d).cook || '', _virtual: 1 }));
 /** Saves an empty week if it isn't saved yet (instant on screen, synced in the background). */
@@ -1781,14 +1804,16 @@ A.away = (p, el) => { const m = byId('Menus', ctx(el).id), a = list(m.away), on 
 A.choose = id => { const m = byId('Menus', id), recs = S.Recipes.filter(r => r.status !== 'archived').sort((a, b) => a.name.localeCompare(b.name));
   form(fmtLong(m.date), [F('pick', 'Dinner', 'sel', recs.map(r => ['r:' + r.id, r.name]).concat([['n:Takeout', 'Takeout'], ['n:Eating out', 'Eating out'], ['n:Leftovers', 'Leftovers'], ['n:', 'No dinner planned']]))], { pick: m.recipeId ? 'r:' + m.recipeId : 'n:' + (m.note || '') },
     v => write({ t: 'Menus', row: { id, recipeId: v.pick[0] === 'r' ? v.pick.slice(2) : '', note: v.pick[0] === 'n' ? v.pick.slice(2) : '', kept: '1', skipped: '' }, log: menuLog(m, 'menu_set', `changed dinner for ${fmtDay(m.date)}`) })); };
+const autofillDays = () => { const r = byId('Settings', 'app|autofillDays'); return r && r.value ? (r.value === 'none' ? [] : list(r.value)) : ['Mon', 'Tue', 'Wed', 'Thu']; };
 const pauseDays = () => +((byId('Settings', 'app|pauseDays') || {}).value || 30) || 30;
 A.rules = () => { const tags = [...new Set(S.Recipes.flatMap(r => list(r.tags.toLowerCase())))].sort(), recs = S.Recipes.slice().sort((a, b) => a.name.localeCompare(b.name));
   const rule = d => byId('DinnerRules', d) || (DAYS.indexOf(d) >= 4 ? { type: 'off', value: '' } : { type: 'any', value: '' }), val = r => r.type === 'any' ? 'any' : r.type + ':' + r.value;
   const opts = [['any', 'Anything'], ['off:', 'Nothing planned'], ['off:Takeout', 'Takeout'], ['off:Eating out', 'Eating out'], ['off:Leftovers', 'Leftovers']].concat(tags.map(t => ['tag:' + t, '#' + t]), recs.map(r => ['recipe:' + r.id, 'Always: ' + r.name]));
-  const v = { draftDay: (byId('Settings', 'app|draftDay') || {}).value || 'Mon', pauseDays: String(pauseDays()) }; DAYS.forEach(d => { v[d] = val(rule(d)); v['a' + d] = rule(d).away || ''; v['c' + d] = rule(d).cook || ''; });
+  const v = { draftDay: (byId('Settings', 'app|draftDay') || {}).value || 'Mon', pauseDays: String(pauseDays()), autofill: autofillDays().join(', ') }; DAYS.forEach(d => { v[d] = val(rule(d)); v['a' + d] = rule(d).away || ''; v['c' + d] = rule(d).cook || ''; });
   form('Dinner rules', DAYS.flatMap(d => [F(d, DAYN[DAYS.indexOf(d)], 'sel', opts), F('c' + d, 'Usually cooks', 'sel', [['', 'No one set']].concat(ADULTS.map(a => [a, a]))), F('a' + d, 'Usually not home', 'multi', ADULTS)]).concat(F('draftDay', "Next week's draft appears every", 'sel', DAYS.map((d, i) => [d, DAYN[i]])),
+    F('autofill', 'Autofill button fills these nights (when empty)', 'multi', DAYS),
     F('pauseDays', 'Swipe left, Pause: leave a recipe out of the menu for', 'sel', [['7', '1 week'], ['14', '2 weeks'], ['30', '1 month'], ['60', '2 months'], ['90', '3 months']])), v,
-    x => write(DAYS.map(d => { const i = x[d].indexOf(':'); return { t: 'DinnerRules', row: { id: d, type: i < 0 ? x[d] : x[d].slice(0, i), value: i < 0 ? '' : x[d].slice(i + 1), away: x['a' + d] || '', cook: x['c' + d] || '' } }; }).concat({ t: 'Settings', row: { id: 'app|draftDay', value: x.draftDay } }, { t: 'Settings', row: { id: 'app|pauseDays', value: x.pauseDays } }), { log: L('rules', 'updated the dinner rules', 'dinner') })); };
+    x => write(DAYS.map(d => { const i = x[d].indexOf(':'); return { t: 'DinnerRules', row: { id: d, type: i < 0 ? x[d] : x[d].slice(0, i), value: i < 0 ? '' : x[d].slice(i + 1), away: x['a' + d] || '', cook: x['c' + d] || '' } }; }).concat({ t: 'Settings', row: { id: 'app|draftDay', value: x.draftDay } }, { t: 'Settings', row: { id: 'app|pauseDays', value: x.pauseDays } }, { t: 'Settings', row: { id: 'app|autofillDays', value: DAYS.filter(d => list(x.autofill).includes(d)).join(', ') || 'none' } }), { log: L('rules', 'updated the dinner rules', 'dinner') })); };
 A.ingredients = () => sheet(() => { const weeks = S.Weeks.filter(w => addDays(w.id, 6) >= TODAY).sort((a, b) => a.id.localeCompare(b.id));
   return '<h2>Ingredients for planned meals</h2>' + (weeks.map(w => { const ms = S.Menus.filter(m => m.week === w.id && m.recipeId && m.skipped !== '1' && m.date >= TODAY).sort((a, b) => a.date.localeCompare(b.date)); if (!ms.length) return '';
     return `<h3>Week of ${fmtDate(w.id)}</h3>` + ms.map(m => { const n = recipeNeeds(m.date, m.date, 'unique').filter(x => x.menu.id === m.id), p = list((byId('Recipes', m.recipeId) || {}).pantry);
