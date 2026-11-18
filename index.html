@@ -207,6 +207,9 @@
   .pwk { display:flex; align-items:center; justify-content:space-between; margin:12px 12px 4px; text-align:center; }
   .pdaybox.today { border-color:var(--accent); } .pdaybox.past { opacity:.6; }
   .pgifts .rbar { margin-right:0 !important; }
+  .wseg { display:inline-flex; margin-top:5px; padding:3px; gap:3px; border-radius:10px; background:var(--soft); }
+  .wseg button { border:0; background:none; font:inherit; font-size:13px; font-weight:700; color:var(--muted); padding:5px 12px; border-radius:8px; display:inline-flex; align-items:center; gap:4px; }
+  .wseg button.on { background:var(--card); color:var(--accent); box-shadow:0 1px 3px rgba(0,0,0,.12); } .small.wfh { color:var(--accent); font-weight:600; }
   dialog:not(.splash)::before { content:''; display:block; width:40px; height:5px; border-radius:3px; background:var(--line); margin:-12px auto 8px; }
   .dcard { transition:transform .15s; } .dcard.clearing { box-shadow:inset 0 0 0 2px #e5484d; } .dcard.clearing::after { content:'Release to clear'; position:absolute; right:14px; top:12px; font-size:12px; font-weight:700; color:#e5484d; }
   input.fk { flex:0 0 38% !important; font-weight:600; } .pbox .li.plain:last-child { border-bottom:0; } .psec .lbl { margin:0 0 4px; } .li.plain { padding:10px 0; border-bottom:1px solid var(--line); }
@@ -300,7 +303,7 @@
 // Momnie Family app v6.0
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'], DAYN = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'], ADULTS = ['Paul', 'Shana'];
 // Shown at the bottom of Home. Bump it together with VERSION in sw.js on every release.
-const APP_VERSION = '9.0 · Nov 18, 2026';
+const APP_VERSION = '9.1 · Nov 18, 2026';
 const TABLES = ['People', 'Schools', 'SchoolCal', 'Activities', 'Overrides', 'Events', 'Caretakers', 'Childcare', 'Birthdays', 'Todos', 'TodoTypes', 'Recipes', 'DinnerRules', 'Weeks', 'Menus',
   'Groceries', 'GroceryList', 'HouseCards', 'Houses', 'WeatherRules', 'Quotes', 'Memories', 'Updates', 'Messages', 'Activity', 'Comments', 'Reactions', 'Links', 'Settings', 'Photos', 'gifts', 'daily_items', 'daily_completions'];
 const CAT = { Kids: '#4f7cc2', Work: '#64748b', Family: '#5b6fa8', Dinner: '#b08a4f', Caretaker: '#3e9aa6', Shared: '#94a3b8', Birthday: '#c9806a' }, SCHOOL_C = ['#5a72b8', '#7a8597', '#4a6fb0'];
@@ -621,7 +624,8 @@ function conflictsFor(d) {
   items.filter(i => i.t === 'SchoolCal' && (i.kind === 'off' || i.kind === 'half')).forEach(i => {
     const working = S.People.filter(p => p.kind === 'adult' && list(p.workDays).includes(dow));
     if (working.length >= S.People.filter(p => p.kind === 'adult').length && working.length && !S.Childcare.some(c => c.date === d))
-      out.push({ text: `${day}: ${i.title} (${i.sub}) and you're both working. Who's covering?`, open: ['SchoolCal', i.id, d] });
+      { const home = working.filter(p => workWhere(p, d) === 'home').map(p => p.name);
+        out.push({ text: `${day}: ${i.title} (${i.sub}) and you're both working${home.length ? ' (' + joinNames(home) + ' from home)' : ''}. Who's covering?`, open: ['SchoolCal', i.id, d] }); }
   });
   return out;
 }
@@ -682,13 +686,19 @@ function whereIs(kid) {
   return (off ? 'No school · ' : '') + (a.s <= now ? `${a.n} until ${fmtT(a.e)}` : `${a.n} ${fmtT(a.s)}`) + (b ? `, then ${b.n} ${fmtT(b.s)}` : '');
 }
 /** A person's day as time blocks: school, work, activities, events and the rides they're driving. */
+// ----- Office or home -----
+// Settings row person|<id>|wfh holds {"days":"Fri", "dates":{"2026-11-20":"home"}}: usual home days, plus one-off changes by date.
+const wfhOf = p => { const r = byId('Settings', 'person|' + p.id + '|wfh'); try { const o = JSON.parse((r && r.value) || '{}'); return { days: list(o.days), dates: o.dates && typeof o.dates === 'object' ? o.dates : {} }; } catch (e) { return { days: [], dates: {} }; } };
+const workWhere = (p, d) => { const w = wfhOf(p); return w.dates[d] || (w.days.includes(DAYS[dowIdx(d)]) ? 'home' : 'office'); };
+const wfhSave = (p, w, log) => { const keep = {}; Object.keys(w.dates).forEach(d => { if (d >= addDays(TODAY, -14)) keep[d] = w.dates[d]; });
+  return { t: 'Settings', row: { id: 'person|' + p.id + '|wfh', value: JSON.stringify({ days: w.days.join(', '), dates: keep }) }, log }; };
 function blocksFor(p, d) {
   const items = itemsFor(d), dow = dowIdx(d), out = [];
   if (p.kind === 'kid') { const sch = byId('Schools', p.schoolId);
     if (sch && dow < 5 && schoolDay(sch, d, p).s) { const c = items.find(i => i.t === 'SchoolCal' && i.src === 'school:' + sch.id && (i.kind === 'off' || i.kind === 'half')), sd = schoolDay(sch, d, p);
       if (!c || c.kind === 'half') out.push({ n: (sch.short || sch.name) + (sd.ext && !c ? ' extended day' : ''), s: sd.s, e: c && c.end ? c.end : c ? '12:00' : sd.e, school: 1, ext: !!(sd.ext && !c), t: 'Schools', id: sch.id });
       else out.push({ off: c.title || 'No school', t: 'SchoolCal', id: c.id }); } }
-  else if (list(p.workDays).includes(DAYS[dow]) && p.workStart) out.push({ n: 'Work', s: p.workStart, e: p.workEnd || p.workStart, work: 1 });
+  else if (list(p.workDays).includes(DAYS[dow]) && p.workStart) { const home = workWhere(p, d) === 'home'; out.push({ n: home ? 'Work from home' : 'Work', s: p.workStart, e: p.workEnd || p.workStart, work: 1, home }); }
   items.forEach(i => { if (!i.start || i.src === 'dinner' || i.ext) return;   // extended day is already the school block above
     if (i.people.includes(p.name) && i.t !== 'Childcare') out.push({ n: i.title, s: i.start, e: i.end || i.start, where: i.sub, drop: i.dropoff, pick: i.pickup, ride: i.ride, t: i.t, id: i.id });
     if (p.kind !== 'kid') { if (i.dropoff === p.name) out.push({ n: 'Drop off ' + (kidNames(i.people) || 'kids') + ' at ' + i.title, s: i.start, e: i.start, t: i.t, id: i.id, task: 1 });
@@ -701,9 +711,9 @@ function statusOf(p) {
   const now = nowHM(), bl = blocksFor(p, TODAY), off = bl.find(b => b.off), timed = bl.filter(b => !b.off);
   const ride = b => b.school ? `pickup ${fmtT(b.e)}` : b.ride ? [b.drop && `drop-off ${b.drop}`, b.pick && `pickup ${b.pick}${b.e ? ' ' + fmtT(b.e) : ''}`].filter(Boolean).join(', ') || 'rides not set' : b.e && b.e !== b.s ? 'until ' + fmtT(b.e) : '';
   const cur = timed.filter(b => !b.task && b.s <= now && now < b.e).pop(), nxt = timed.find(b => b.s > now);
-  let st = cur ? `${cur.work ? 'At work' : 'At ' + cur.n}${ride(cur) ? ' (' + ride(cur) + ')' : ''}` : off ? `Home · ${off.off}` : 'Home';
-  let next = nxt ? `${nxt.task ? nxt.n : nxt.work ? 'Work' : nxt.n} ${fmtT(nxt.s)}${!nxt.task && !nxt.work && ride(nxt) && !nxt.school ? ' · ' + ride(nxt) : nxt.school ? ' · ' + ride(nxt) : ''}` : '';
-  if (!nxt) { const tm = addDays(TODAY, 1), t1 = blocksFor(p, tm).filter(b => !b.off)[0]; if (t1) next = `Tomorrow: ${t1.work ? 'Work' : t1.n} ${fmtT(t1.s)}`; }
+  let st = cur ? `${cur.work ? (cur.home ? 'Working from home' : 'At work') : 'At ' + cur.n}${ride(cur) ? ' (' + ride(cur) + ')' : ''}` : off ? `Home · ${off.off}` : 'Home';
+  let next = nxt ? `${nxt.task || nxt.work ? nxt.n : nxt.n} ${fmtT(nxt.s)}${!nxt.task && !nxt.work && ride(nxt) && !nxt.school ? ' · ' + ride(nxt) : nxt.school ? ' · ' + ride(nxt) : ''}` : '';
+  if (!nxt) { const tm = addDays(TODAY, 1), t1 = blocksFor(p, tm).filter(b => !b.off)[0]; if (t1) next = `Tomorrow: ${t1.n} ${fmtT(t1.s)}`; }
   const rides = timed.filter(b => b.task && b.s > now).length;
   return { now: st, next, open: cur || nxt || off, warn: timed.some(b => b.ride && b.s > now && (!b.drop || !b.pick)), rides, busy: !!cur };
 }
@@ -771,7 +781,7 @@ function fieldHTML(f, v) {
     return `<label>${esc(f.l)}</label>${timeSelect(`data-k="${f.k}"`, val)}${du ? `<div class="small muted dur">(${du})</div>` : ''}`; }
   if (f.t === 'chk') return `<label class="check-row"><input type="checkbox" data-k="${f.k}" ${val === '1' ? 'checked' : ''}> ${esc(f.l)}</label>`;
   if (f.t === 'sel') return `<label>${esc(f.l)}</label><select data-k="${f.k}">${o.map(x => { const [a, b] = Array.isArray(x) ? x : [x, x]; return `<option value="${esc(a)}" ${a === val ? 'selected' : ''}>${esc(noEmo(b))}</option>`; }).join('')}</select>`;
-  if (f.t === 'multi') return `<label>${esc(f.l)}</label><div style="display:flex;flex-wrap:wrap;gap:6px">${o.map(x => `<button type="button" class="chip ${list(val).includes(x) ? 'on' : ''}" data-mk="${f.k}" data-mv="${esc(x)}">${esc(x)}</button>`).join('')}</div>`;
+  if (f.t === 'multi') return `<label>${esc(f.l)}</label><div style="display:flex;flex-wrap:wrap;gap:6px">${o.map(x => `<button type="button" class="chip ${list(val).includes(x) ? 'on' : ''}" data-mk="${f.k}" data-mv="${esc(x)}">${esc(x)}</button>`).join('')}</div>${f.hint ? `<div class="small muted" style="margin-top:6px">${esc(f.hint)}</div>` : ''}`;
   if (f.t === 'area') return `<label>${esc(f.l)}</label><textarea data-k="${f.k}" placeholder="${esc(f.ph || '')}">${esc(val)}</textarea>`;
   if (f.t === 'ing') return `<label>${esc(f.l)}</label><div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:6px">${list(val).map(n => `<button type="button" class="chip" data-ingrm="${f.k}" data-mv="${esc(n)}">${esc(n)} ✕</button>`).join('')}</div>
     <input data-ing="${f.k}" placeholder="Type to search groceries" autocomplete="off"><div class="sugg" data-for="${f.k}" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px"></div>`;
@@ -799,7 +809,7 @@ function form(title, fields, vals, onSave, buttons) {
     if (f && (f.re || f.t === 'time')) draw(); });
   d.addEventListener('click', async ev => {
     const t = ev.target, m = t.closest('[data-mk]');
-    if (m) { const a = list(v[m.dataset.mk]), x = m.dataset.mv; v[m.dataset.mk] = (a.includes(x) ? a.filter(y => y !== x) : a.concat(x)).join(', '); m.classList.toggle('on'); return; }
+    if (m) { const a = list(v[m.dataset.mk]), x = m.dataset.mv; v[m.dataset.mk] = (a.includes(x) ? a.filter(y => y !== x) : a.concat(x)).join(', '); m.classList.toggle('on'); const mf = fs(v).find(y => y.k === m.dataset.mk); if (mf && mf.re) draw(); return; }
     const ra = t.closest('[data-radd]');
     if (ra) { const k = ra.dataset.radd, rows = v[k] = v[k] || [], last = rows[rows.length - 1] || {}; rows.push(k === '_slots' ? { start: last.start || '', end: last.end || '' } : {}); draw(); const ins = d.querySelectorAll(`[data-rk="${k}"][data-ri="${rows.length - 1}"]`); if (ins[0] && ins[0].tagName === 'INPUT') ins[0].focus(); return; }
     const rc = t.closest('[data-rcopy]');
@@ -873,7 +883,8 @@ const FORMS = {
         saved = raw || Object.fromEntries(sc.filter(w => w.start && w.ext && list(x.extDays).includes(w.day)).map(w => [w.day, { x: w.ext }]));
         return sc.map(w => ({ day: w.day, e: (saved[w.day] || {}).e || '', x: (saved[w.day] || {}).x || '', _pk: w.start ? w.end : '', _xk: w.start ? w.ext : '' })); },
       cols: [{ c: 'day', t: 'label', cls: 'u' }, { c: 'e', t: 'time', cls: 'n', ph: r => r._pk ? 'School ' + fmtT(r._pk) : 'No school' }, { c: 'x', t: 'time', cls: 'n', ph: () => 'No extended day' }] }),
-    F('workDays', 'Usual work days', 'multi', DAYS, { show: x => x.kind !== 'kid' }), F('workStart', 'Work starts', 'time', null, { show: x => x.kind !== 'kid' }), F('workEnd', 'Work ends', 'time', null, { show: x => x.kind !== 'kid', dur: 'workStart' }),
+    F('workDays', 'Usual work days', 'multi', DAYS, { show: x => x.kind !== 'kid', re: 1 }), F('workStart', 'Work starts', 'time', null, { show: x => x.kind !== 'kid' }), F('workEnd', 'Work ends', 'time', null, { show: x => x.kind !== 'kid', dur: 'workStart' }),
+    F('_wfh', 'Usually work from home on', 'multi', x => DAYS.filter(d => list(x.workDays).includes(d)), { show: x => x.kind !== 'kid' && list(x.workDays).length > 0, hint: 'Change any single day from your page: Planner tab, Office or Home.' }),
     F('birthday', 'Birthday', 'date'), F('notes', 'Notes (sizes, doctors, anything)', 'area')],
   Schools: [F('name', 'School name'), F('short', 'Short name'),
     F('_week', 'School schedule', 'rows', null, { fixed: 1, noDur: 1, copy: 1, step: 5, init: x => schoolWeek(x).map(w => ({ day: w.day, start: w.start, end: w.end })), hint: 'Start and pickup for each day. Leave a day blank if there is no school.',
@@ -916,7 +927,9 @@ function dinnerAwayOps(ev) {
 const SAVE = {
   People(v) { need(v.name && v.name.trim(), 'Name is required.');
     const row = Object.assign({}, v, { id: v.id || nid() }), ops = [{ t: 'People', row }];
-    delete row._sched; delete row.extDays;
+    delete row._sched; delete row.extDays; delete row._wfh;
+    if (row.workDays) row.workDays = DAYS.filter(d => list(row.workDays).includes(d)).join(', ');
+    if (row.kind !== 'kid' && v._wfh !== undefined) { const w = v.id ? wfhOf(byId('People', v.id) || row) : { days: [], dates: {} }; w.days = list(v._wfh).filter(d => list(row.workDays).includes(d)); ops.push(wfhSave(row, w)); }
     if (row.kind === 'kid' && v._sched) { v._sched.forEach(r => need(!r.x || !r.e || r.x > r.e, 'The extended-day pickup must be after the pickup.')); const sch = {}; v._sched.forEach(r => { if (r.e || r.x) sch[r.day] = { e: r.e || '', x: r.x || '' }; });
       ops.push({ t: 'Settings', row: { id: 'kid|' + row.id + '|schedule', value: Object.keys(sch).length ? JSON.stringify(sch) : '' } }); }
     return write(ops); },
@@ -1135,9 +1148,17 @@ function pDayHTML(p, d) {
   const bl = blocksFor(p, d), allDay = itemsFor(d).filter(i => !i.start && (i.people.includes(p.name) || (i.t === 'People' && i.id === p.id)) && i.src !== 'dinner');
   const row = b => b.off ? `<div class="tl off" data-a="open" data-t="${b.t}" data-id="${esc(b.id)}"><div class="tt">All day</div><div class="grow"><div class="ti">${esc(b.off)}</div></div></div>`
     : `<div class="tl ${b.school ? 'sch' : b.work ? 'wrk' : b.task ? 'tsk' : ''}" ${b.t && b.t !== 'GCal' ? `data-a="open" data-t="${b.t}" data-id="${esc(b.id)}" data-d="${d}"` : ''}><div class="tt">${fmtT(b.s)}${b.e && b.e !== b.s ? `<span>${fmtT(b.e)}</span>` : ''}</div>
-      <div class="grow"><div class="ti">${b.school ? 'School' + (b.ext ? ' · extended day' : '') : esc(b.n)}</div>${b.school ? `<div class="small muted">${esc((byId('Schools', b.id) || {}).name || b.n)}</div>` : b.ride ? `<div class="small muted">${rideHTML({ dropoff: b.drop, pickup: b.pick })}</div>` : b.where ? `<div class="small muted">${esc(String(b.where).replace(/<[^>]+>/g, ''))}</div>` : ''}</div></div>`;
+      <div class="grow"><div class="ti">${b.school ? 'School' + (b.ext ? ' · extended day' : '') : b.work ? 'Work' : esc(b.n)}</div>${b.work ? wfhHTML(p, d, b) : b.school ? `<div class="small muted">${esc((byId('Schools', b.id) || {}).name || b.n)}</div>` : b.ride ? `<div class="small muted">${rideHTML({ dropoff: b.drop, pickup: b.pick })}</div>` : b.where ? `<div class="small muted">${esc(String(b.where).replace(/<[^>]+>/g, ''))}</div>` : ''}</div></div>`;
   return allDay.map(i => `<div class="tl off" data-a="open" data-t="${i.t}" data-id="${esc(i.id)}" data-d="${d}"><div class="tt">All day</div><div class="grow"><div class="ti">${esc(i.title)}</div></div></div>`).join('') + bl.map(row).join('');
 }
+/** "From home" / "At the office"; on your own page, a switch for today and later days. */
+function wfhHTML(p, d, b) {
+  if (p.name !== ME || d < TODAY) return `<div class="small ${b.home ? 'wfh' : 'muted'}">${b.home ? ic('house', 13) + ' From home' : 'At the office'}</div>`;
+  return `<div class="wseg" role="group" aria-label="Where are you working ${fmtDay(d)}"><button class="${b.home ? '' : 'on'}" data-a="wfhSet" data-v="${d}|office">Office</button><button class="${b.home ? 'on' : ''}" data-a="wfhSet" data-v="${d}|home">${ic('house', 13)}Home</button></div>`;
+}
+A.wfhSet = v => { const [d, mode] = v.split('|'), p = personOf(ME); if (!p || workWhere(p, d) === mode) return; const w = wfhOf(p), usual = w.days.includes(DAYS[dowIdx(d)]) ? 'home' : 'office';
+  if (mode === usual) delete w.dates[d]; else w.dates[d] = mode;
+  write(wfhSave(p, w, L('wfh', `is working ${mode === 'home' ? 'from home' : 'from the office'} ${d === TODAY ? 'today' : d === addDays(TODAY, 1) ? 'tomorrow' : 'on ' + fmtDay(d)}`, 'planner'))); };
 function personPage(p) {
   const kid = p.kind === 'kid', me = p.name === ME, st = statusOf(p), age = p.birthday && p.birthday.length >= 10 ? ageOn({ year: +p.birthday.slice(0, 4), md: p.birthday.slice(5) }, TODAY) : null;
   const open = pTodos(p).filter(t => t.status !== 'Done').sort((a, b) => (a.due || '9').localeCompare(b.due || '9')), late = open.filter(t => t.due && t.due < TODAY);
@@ -1182,7 +1203,7 @@ function personPage(p) {
         (p.birthday ? kv('Birthday', fmtLong(p.birthday.length >= 10 ? p.birthday : TODAY.slice(0, 4) + '-' + p.birthday.slice(-5)) + (age !== null ? ` · ${age} years old` : '') + (bd ? (bd.days === 0 ? ' · today!' : ` · turns ${bd.turns} in ${bd.days} days`) : '')) : kv('Birthday', 'Not set'))) +
       box('Facts', facts.map(fact).join('') || `<div class="small muted">Add sizes, doctors, allergies and anything else worth having in one place.</div>`, link('factsEdit', p.id, ic('pen', 15) + (facts.length ? 'Edit' : 'Add'))) +
       (kid && s ? box('School', kv('School', s.name) + kv('Pickup', kidWeekTxt(p, s) || 'not set') + (kidExtTxt(p, s) ? kv('Extended day', kidExtTxt(p, s)) : '') + kv('School hours', schoolHoursTxt(s)) + kv('Contacts and teachers', s.contacts), link('personEdit', p.id, ic('pen', 15) + 'Pickups')) : '') +
-      (!kid ? box('Work', p.workDays ? kv('Days', p.workDays) + (p.workStart ? kv('Hours', fmtT(p.workStart) + '–' + fmtT(p.workEnd)) : '') : '<div class="small muted">No usual work schedule set.</div>', link('personEdit', p.id, ic('pen', 15) + 'Edit')) : '') +
+      (!kid ? box('Work', p.workDays ? kv('Days', p.workDays) + (p.workStart ? kv('Hours', fmtT(p.workStart) + '–' + fmtT(p.workEnd)) : '') + kv('Usually from home', wfhOf(p).days.join(', ') || 'Never (office every work day)') + kv('This week', DAYS.slice(0, 5).map((dn, i) => { const d = addDays(mondayOf(TODAY), i); return list(p.workDays).includes(dn) ? dn + ' ' + (workWhere(p, d) === 'home' ? 'home' : 'office') : null; }).filter(Boolean).join(' · ')) : '<div class="small muted">No usual work schedule set.</div>', link('personEdit', p.id, ic('pen', 15) + 'Edit')) : '') +
       box('Activities', acts.map(g => `<div class="li plain" data-a="open" data-t="Activities" data-id="${g[0].id}"><div class="grow"><div class="ti">${esc(g[0].name)}</div><div class="small muted">${esc(schedTxt(g))}</div></div><span class="chev">›</span></div>`).join('')) +
       box('Notes', p.notes ? `<div style="white-space:pre-wrap">${esc(p.notes)}</div>` : '<div class="small muted">Nothing yet.</div>', link('personEdit', p.id, ic('pen', 15) + 'Edit'));
   } else {
@@ -1210,7 +1231,7 @@ function goPerson(id) {
 function leavePerson() { if (view !== 'person') return; view = prevView || 'home'; render(); window.scrollTo(0, prevY); }
 A.personBack = () => { if (history.state && history.state.person) history.back(); else leavePerson(); };
 window.addEventListener('popstate', () => { if (view === 'person') leavePerson(); });
-A.personEdit = id => { const p = byId('People', id); if (p) editForm('People', p); };
+A.personEdit = id => { const p = byId('People', id); if (p) editForm('People', p, p.kind === 'kid' ? null : { _wfh: wfhOf(p).days.join(', ') }); };
 A.personEvent = (name, el) => editForm('Events', null, Object.assign({ people: name }, el && el.dataset && el.dataset.d ? { date: el.dataset.d } : {}));
 A.personTodo = name => { const p = personOf(name); editForm('Todos', null, p && p.kind === 'kid' ? { kid: name } : { assignee: name }); };
 function cardHTML(t, id, date) {
