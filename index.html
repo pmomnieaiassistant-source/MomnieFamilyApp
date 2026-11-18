@@ -323,7 +323,7 @@
 // Momnie Family app v6.0
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'], DAYN = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'], ADULTS = ['Paul', 'Shana'];
 // Shown at the bottom of Home. Bump it together with VERSION in sw.js on every release.
-const APP_VERSION = '11.3 · Nov 18, 2026';
+const APP_VERSION = '11.4 · Nov 18, 2026';
 const TABLES = ['People', 'Schools', 'SchoolCal', 'Activities', 'Overrides', 'Events', 'Caretakers', 'Childcare', 'Birthdays', 'Todos', 'TodoTypes', 'Recipes', 'DinnerRules', 'Weeks', 'Menus',
   'Groceries', 'GroceryList', 'HouseCards', 'Houses', 'WeatherRules', 'Quotes', 'Memories', 'Updates', 'Messages', 'Activity', 'Comments', 'Reactions', 'Links', 'Settings', 'Photos', 'gifts', 'daily_items', 'daily_completions'];
 const CAT = { School: '#3f6fb5', Kids: '#4f7cc2', Work: '#64748b', Family: '#5b6fa8', Dinner: '#b08a4f', Caretaker: '#3e9aa6', Shared: '#94a3b8', Birthday: '#c9806a' }, SCHOOL_C = ['#5a72b8', '#7a8597', '#4a6fb0'];
@@ -1395,7 +1395,7 @@ function cardHTML(t, id, date) {
   return (CARD[t] ? CARD[t](r, date, t) : genericCard(r, date, t) + std()) + (t === 'gifts' ? photosHTML(t, id) : socialHTML(t, id));
 }
 function openCard(t, id, date) { if (cardHTML(t, id, date) === null) { toast('That item is gone.'); return null; } const d = sheet(() => cardHTML(t, id, date)); d._ctx = { t, id, date }; return d; }
-A.open = (v, el) => el.dataset.t === 'People' ? goPerson(el.dataset.id) : openCard(el.dataset.t, el.dataset.id, el.dataset.d || '');
+A.open = (v, el) => el.dataset.t === 'People' ? goPerson(el.dataset.id) : el.dataset.t === 'Menus' && !byId('Menus', el.dataset.id) ? (ensureWeek(el.dataset.id.slice(0, 10)), openCard('Menus', el.dataset.id)) : openCard(el.dataset.t, el.dataset.id, el.dataset.d || '');
 A.soon = () => toast('Feature coming soon');
 // ---------- photos ----------
 let photoFor = null;
@@ -1724,23 +1724,28 @@ function vMenu() {
   let html = `<div class="weekbar"><button class="icon-btn" data-a="mweek" data-v="-7" ${MW <= cur ? 'disabled style="opacity:.25"' : ''}>‹</button><span>${weekName(MW, cur)} · ${fmtDate(MW)} – ${fmtDate(addDays(MW, 6))}</span><button class="icon-btn" data-a="mweek" data-v="7" ${MW >= maxW ? 'disabled style="opacity:.25"' : ''}>›</button></div>`;
   if (MW !== cur) html += `<div class="pad"><button class="chip" data-a="mweek" data-v="0">‹ Back to this week</button></div>`;
   if (!S.Recipes.length) html += '<div class="empty">Add a few recipes first (Meals, Recipes, ＋). Then the app can propose a week.</div>';
-  if (!w) html += MWSET === MW ? `<div class="empty">Setting up ${weekLow(MW, cur)}…</div>` : `<div class="empty">${MW === cur ? 'This week isn\'t planned yet.' : 'This week isn\'t set up yet.'}<br><br><button class="btn" data-a="weekAdd" data-v="${MW}">Set up ${weekLow(MW, cur)}</button></div>`;
-  else { const ms = S.Menus.filter(m => m.week === w.id).sort((a, b) => a.date.localeCompare(b.date));
+  { const ms = w ? S.Menus.filter(m => m.week === w.id).sort((a, b) => a.date.localeCompare(b.date)) : weekNights(MW);
     html += `<div class="row pad" style="margin:4px 0"><span class="small muted">Swipe a night right to change it, or left to clear it.</span></div>` +
       ms.map(m => { const r = byId('Recipes', m.recipeId), name = dish(m), past = m.date < TODAY;
         return `<div class="card dcard ${PFLASH === m.id ? 'flash' : ''}" data-menu="${m.id}" ${past ? '' : 'data-swipe="1"'} style="${past ? 'opacity:.55' : ''}"><div class="row"><span class="small b ${m.date === TODAY ? '' : 'muted'}" style="${m.date === TODAY ? 'color:var(--accent)' : ''}">${m.day.toUpperCase()} ${fmtDate(m.date)}${m.date === TODAY ? ' · TONIGHT' : ''}</span><span>${m.cook ? `<span class="chip">${ic('meals', 13)} ${esc(m.cook)}</span> ` : ''}${m.away ? `<span class="chip bad">${esc(m.away)} out</span>` : ''}${m.skipped === '1' ? '<span class="chip bad">Skipped</span>' : ''}</span></div>
           <div class="row" style="margin-top:4px"><div class="grow" data-a="open" data-t="Menus" data-id="${m.id}"><div style="font-size:18px;font-weight:800" class="${name ? '' : 'muted'}">${esc(name || 'No dinner planned')}</div>${r && r.tags ? `<div class="small muted">${list(r.tags).map(t => '#' + esc(t)).join(' ')}</div>` : ''}</div>
           </div>
           ${MCHG === m.id ? `<div class="dchg" data-a="mChgClose"><button class="btn" data-a="mRandom" data-v="${m.id}">${ic('shuffle', 18)}Random</button><button class="btn" data-a="mSelect" data-v="${m.id}">${ic('list', 18)}Select</button></div>` : ''}</div>`; }).join('') +
-      `${w.id > cur ? `<div class="actions pad" style="margin-bottom:6px"><button class="btn danger sm" data-a="weekDel" data-v="${w.id}">Delete this week's plan</button></div>` : ''}`; }
+      ''; }
   html += '<div style="height:16px"></div>';
   return html;
 }
-// The arrows go up to 8 weeks ahead. Moving onto a week that isn't set up yet sets it up (a draft, like the automatic one).
-const MWMAX = 8; let MWSET = '';
-A.mweek = async n => { const cur = mondayOf(TODAY); MW = +n === 0 ? cur : addDays(MW || cur, +n); if (MW < cur) MW = cur; if (MW > addDays(cur, 7 * MWMAX)) MW = addDays(cur, 7 * MWMAX);
-  if (!byId('Weeks', MW) && S.Recipes.length && MWSET !== MW) { const w = MWSET = MW; render(); await call('week_add', { week: w }); if (MWSET === w) MWSET = ''; }
-  render(); };
+// Every week starts with no dinner planned. A week only gets saved (Weeks + 7 Menus rows) when something is put on one of its nights.
+const MWMAX = 8;
+const ruleOf = d => byId('DinnerRules', d) || {};
+const weekNights = wk => DAYS.map((d, i) => ({ id: wk + '-' + d, week: wk, day: d, date: addDays(wk, i), recipeId: '', note: '', kept: '', skipped: '', away: ruleOf(d).away || '', cook: ruleOf(d).cook || '', _virtual: 1 }));
+/** Saves an empty week if it isn't saved yet (instant on screen, synced in the background). */
+// Shown on this phone right away; the script creates the week and only adds nights that don't exist yet,
+// so a week already planned on the other phone is never overwritten. Saves made after this are sent after it, in order.
+function ensureWeek(wk) { if (byId('Weeks', wk)) return;
+  applyOps([{ t: 'Weeks', row: { id: wk, status: 'draft', lockedBy: '' } }].concat(weekNights(wk).map(n => { const r = Object.assign({}, n); delete r._virtual; return { t: 'Menus', row: r }; })));
+  call('week_add', { week: wk }); }
+A.mweek = n => { const cur = mondayOf(TODAY); MW = +n === 0 ? cur : addDays(MW || cur, +n); if (MW < cur) MW = cur; if (MW > addDays(cur, 7 * MWMAX)) MW = addDays(cur, 7 * MWMAX); render(); };
 A.mgo = w => { MW = w; render(); window.scrollTo(0, 0); };
 A.weekAdd = async w => { if (await call('week_add', { week: w })) { MW = w; render(); window.scrollTo(0, 0); } };
 A.weekDel = w => { if (confirm("Delete this week's plan?")) write(S.Menus.filter(m => m.week === w).map(m => ({ t: 'Menus', del: m.id })).concat({ t: 'Weeks', del: w })); };
@@ -1749,8 +1754,8 @@ const menuLog = (m, type, text) => m.date >= TODAY && m.date < addDays(TODAY, 7)
 A.swap = id => { const m = byId('Menus', id); return call('dinner_swap', { id, log: menuLog(m, 'menu_swap', `swapped dinner for ${fmtDay(m.date)}`) }); };
 // Swiping a night right shows two choices over it: Random (a new suggestion) or Select (pick from the list).
 let MCHG = '';
-A.mRandom = id => { MCHG = ''; render(); A.swap(id); };
-A.mSelect = id => { MCHG = ''; PFOR = id; RPICK = ''; RMENU = false; DT = 'rec'; render(); window.scrollTo(0, 0); };
+A.mRandom = id => { MCHG = ''; ensureWeek(id.slice(0, 10)); render(); A.swap(id); };
+A.mSelect = id => { MCHG = ''; ensureWeek(id.slice(0, 10)); PFOR = id; RPICK = ''; RMENU = false; DT = 'rec'; render(); window.scrollTo(0, 0); };
 // While picking, a touch on a recipe counts however long it's held, as long as the finger doesn't slide (sliding scrolls).
 // iOS otherwise turns a held touch into text selection or the image menu and never sends the tap.
 (function () { let el = null, x0 = 0, y0 = 0;
@@ -1917,7 +1922,7 @@ A.recUnhide = () => { RHIDE.clear(); render(); };
 A.recPlace = async v => {
   const [rid, d] = v.split('|'), r = byId('Recipes', rid); if (!r) return;
   let m = S.Menus.find(x => x.date === d);
-  if (!m && !byId('Weeks', mondayOf(d))) { toast('Setting up ' + weekLow(mondayOf(d), mondayOf(TODAY)) + '…'); if (!await call('week_add', { week: mondayOf(d) })) return; m = S.Menus.find(x => x.date === d); }
+  if (!m) { ensureWeek(mondayOf(d)); m = S.Menus.find(x => x.date === d); }
   if (!m) { toast("Couldn't find that night. Pull down to refresh and try again."); return; }
   if (m.recipeId === rid && m.skipped !== '1') { toast(`Already on ${fmtDay(d)}`); return; }
   const was = m.skipped === '1' ? '' : dish(m);
