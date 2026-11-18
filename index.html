@@ -92,6 +92,7 @@
   .rcard > .rin { display:block; background:var(--card); transition:transform .15s; position:relative; z-index:1; }
   .rcard .under { position:absolute; inset:0; display:flex; justify-content:space-between; align-items:center; padding:0 20px; background:var(--soft); font-weight:700; font-size:14px; }
   .rcard .under .yes { color:var(--green); } .rcard .under .no { color:var(--muted); }
+  .rcard .dchg { z-index:3; border-radius:20px; }
   .rcard.dim .ti, .rcard.dim .small { opacity:.5; }
   .rcard .ti { font-weight:700; font-size:16px; }
   .nights { display:flex; gap:8px; overflow-x:auto; padding:8px 16px 12px; scrollbar-width:none; } .nights::-webkit-scrollbar { display:none; }
@@ -310,7 +311,7 @@
 // Momnie Family app v6.0
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'], DAYN = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'], ADULTS = ['Paul', 'Shana'];
 // Shown at the bottom of Home. Bump it together with VERSION in sw.js on every release.
-const APP_VERSION = '10.2 · Nov 18, 2026';
+const APP_VERSION = '10.3 · Nov 18, 2026';
 const TABLES = ['People', 'Schools', 'SchoolCal', 'Activities', 'Overrides', 'Events', 'Caretakers', 'Childcare', 'Birthdays', 'Todos', 'TodoTypes', 'Recipes', 'DinnerRules', 'Weeks', 'Menus',
   'Groceries', 'GroceryList', 'HouseCards', 'Houses', 'WeatherRules', 'Quotes', 'Memories', 'Updates', 'Messages', 'Activity', 'Comments', 'Reactions', 'Links', 'Settings', 'Photos', 'gifts', 'daily_items', 'daily_completions'];
 const CAT = { School: '#3f6fb5', Kids: '#4f7cc2', Work: '#64748b', Family: '#5b6fa8', Dinner: '#b08a4f', Caretaker: '#3e9aa6', Shared: '#94a3b8', Birthday: '#c9806a' }, SCHOOL_C = ['#5a72b8', '#7a8597', '#4a6fb0'];
@@ -1563,14 +1564,14 @@ A.dayAdd = d => { const s = sheet(`<h2>Add to ${fmtDay(d)}</h2><div class="actio
 A.addOn = (t, el) => { A.close(null, el); editForm(t, null, t === 'Todos' ? { due: el.dataset.d } : t === 'Activities' ? { days: DAYS[dowIdx(el.dataset.d)], from: el.dataset.d } : { date: el.dataset.d }); };
 
 // ----- Dinner -----
-let PFOR = '', PFLASH = '';   // picking a recipe for this Menus night (from Select), and the night to highlight after
+let PFOR = '', PFLASH = '', RACT = '', RARCH = false;   // RACT: recipe showing Pause / Archive; RARCH: showing archived recipes   // picking a recipe for this Menus night (from Select), and the night to highlight after
 let DT = 'menu', MW = '', GH = '', GF = false, RQ = '', RFQ = '', RS = 'stale', RT = [], RPICK = '', RMENU = false;
 const RHIDE = new Set();
 const gchk = () => { try { return new Set(JSON.parse(store.get('gchk') || '[]')); } catch (e) { return new Set(); } };
 function vDinner() {
   return `<div class="seg">${[['menu', 'Menu'], ['rec', 'Recipes'], ['groc', 'Groceries']].map(([k, l]) => `<button class="${DT === k ? 'on' : ''}" data-a="dtab" data-v="${k}">${l}</button>`).join('')}</div>` + ({ menu: vMenu, rec: vRecFeed, groc: vGroc })[DT]();
 }
-A.dtab = v => { DT = v; if (v !== 'rec') PFOR = ''; render(); };
+A.dtab = v => { DT = v; if (v !== 'rec') PFOR = ''; RACT = ''; render(); };
 const weekLow = (w, cur) => w === cur ? 'this week' : w === addDays(cur, 7) ? 'next week' : 'the week of ' + fmtDate(w);
 const weekName = (w, cur) => w === cur ? 'This week' : w === addDays(cur, 7) ? 'Next week' : 'Week of ' + fmtDate(w);
 function vMenu() {
@@ -1630,12 +1631,14 @@ A.away = (p, el) => { const m = byId('Menus', ctx(el).id), a = list(m.away), on 
 A.choose = id => { const m = byId('Menus', id), recs = S.Recipes.filter(r => r.status !== 'archived').sort((a, b) => a.name.localeCompare(b.name));
   form(fmtLong(m.date), [F('pick', 'Dinner', 'sel', recs.map(r => ['r:' + r.id, r.name]).concat([['n:Takeout', 'Takeout'], ['n:Eating out', 'Eating out'], ['n:Leftovers', 'Leftovers'], ['n:', 'No dinner planned']]))], { pick: m.recipeId ? 'r:' + m.recipeId : 'n:' + (m.note || '') },
     v => write({ t: 'Menus', row: { id, recipeId: v.pick[0] === 'r' ? v.pick.slice(2) : '', note: v.pick[0] === 'n' ? v.pick.slice(2) : '', kept: '1', skipped: '' }, log: menuLog(m, 'menu_set', `changed dinner for ${fmtDay(m.date)}`) })); };
+const pauseDays = () => +((byId('Settings', 'app|pauseDays') || {}).value || 30) || 30;
 A.rules = () => { const tags = [...new Set(S.Recipes.flatMap(r => list(r.tags.toLowerCase())))].sort(), recs = S.Recipes.slice().sort((a, b) => a.name.localeCompare(b.name));
   const rule = d => byId('DinnerRules', d) || (DAYS.indexOf(d) >= 4 ? { type: 'off', value: '' } : { type: 'any', value: '' }), val = r => r.type === 'any' ? 'any' : r.type + ':' + r.value;
   const opts = [['any', 'Anything'], ['off:', 'Nothing planned'], ['off:Takeout', 'Takeout'], ['off:Eating out', 'Eating out'], ['off:Leftovers', 'Leftovers']].concat(tags.map(t => ['tag:' + t, '#' + t]), recs.map(r => ['recipe:' + r.id, 'Always: ' + r.name]));
-  const v = { draftDay: (byId('Settings', 'app|draftDay') || {}).value || 'Mon' }; DAYS.forEach(d => { v[d] = val(rule(d)); v['a' + d] = rule(d).away || ''; v['c' + d] = rule(d).cook || ''; });
-  form('Dinner rules', DAYS.flatMap(d => [F(d, DAYN[DAYS.indexOf(d)], 'sel', opts), F('c' + d, 'Usually cooks', 'sel', [['', 'No one set']].concat(ADULTS.map(a => [a, a]))), F('a' + d, 'Usually not home', 'multi', ADULTS)]).concat(F('draftDay', "Next week's draft appears every", 'sel', DAYS.map((d, i) => [d, DAYN[i]]))), v,
-    x => write(DAYS.map(d => { const i = x[d].indexOf(':'); return { t: 'DinnerRules', row: { id: d, type: i < 0 ? x[d] : x[d].slice(0, i), value: i < 0 ? '' : x[d].slice(i + 1), away: x['a' + d] || '', cook: x['c' + d] || '' } }; }).concat({ t: 'Settings', row: { id: 'app|draftDay', value: x.draftDay } }), { log: L('rules', 'updated the dinner rules', 'dinner') })); };
+  const v = { draftDay: (byId('Settings', 'app|draftDay') || {}).value || 'Mon', pauseDays: String(pauseDays()) }; DAYS.forEach(d => { v[d] = val(rule(d)); v['a' + d] = rule(d).away || ''; v['c' + d] = rule(d).cook || ''; });
+  form('Dinner rules', DAYS.flatMap(d => [F(d, DAYN[DAYS.indexOf(d)], 'sel', opts), F('c' + d, 'Usually cooks', 'sel', [['', 'No one set']].concat(ADULTS.map(a => [a, a]))), F('a' + d, 'Usually not home', 'multi', ADULTS)]).concat(F('draftDay', "Next week's draft appears every", 'sel', DAYS.map((d, i) => [d, DAYN[i]])),
+    F('pauseDays', 'Swipe left, Pause: leave a recipe out of the menu for', 'sel', [['7', '1 week'], ['14', '2 weeks'], ['30', '1 month'], ['60', '2 months'], ['90', '3 months']])), v,
+    x => write(DAYS.map(d => { const i = x[d].indexOf(':'); return { t: 'DinnerRules', row: { id: d, type: i < 0 ? x[d] : x[d].slice(0, i), value: i < 0 ? '' : x[d].slice(i + 1), away: x['a' + d] || '', cook: x['c' + d] || '' } }; }).concat({ t: 'Settings', row: { id: 'app|draftDay', value: x.draftDay } }, { t: 'Settings', row: { id: 'app|pauseDays', value: x.pauseDays } }), { log: L('rules', 'updated the dinner rules', 'dinner') })); };
 A.ingredients = () => sheet(() => { const weeks = S.Weeks.filter(w => addDays(w.id, 6) >= TODAY).sort((a, b) => a.id.localeCompare(b.id));
   return '<h2>Ingredients for planned meals</h2>' + (weeks.map(w => { const ms = S.Menus.filter(m => m.week === w.id && m.recipeId && m.skipped !== '1' && m.date >= TODAY).sort((a, b) => a.date.localeCompare(b.date)); if (!ms.length) return '';
     return `<h3>Week of ${fmtDate(w.id)}</h3>` + ms.map(m => { const n = recipeNeeds(m.date, m.date, 'unique').filter(x => x.menu.id === m.id), p = list((byId('Recipes', m.recipeId) || {}).pantry);
@@ -1706,7 +1709,7 @@ function nightsHTML(rid) {
   return `<div class="nights">${out.join('')}</div>`;
 }
 function vRecFeed() {
-  const q = RFQ.toLowerCase(), live = S.Recipes.filter(r => r.name && r.status !== 'archived');
+  const q = RFQ.toLowerCase(), live = S.Recipes.filter(r => r.name && (RARCH && !PFOR ? r.status === 'archived' : r.status !== 'archived'));
   const tagsOf = r => list(String(r.tags || '').toLowerCase()), tags = [...new Set(live.flatMap(tagsOf))].sort();
   const rs = live.filter(r => !RHIDE.has(r.id) && RT.every(t => tagsOf(r).includes(t)) && (!q || (r.name + ' ' + r.tags + ' ' + (r.description || '')).toLowerCase().includes(q)));
   const st = new Map(rs.map(r => [r.id, recipeStats(r.id)])), last = r => st.get(r.id).last, byName = (a, b) => a.name.localeCompare(b.name);
@@ -1722,30 +1725,42 @@ function vRecFeed() {
       <div class="small">${a ? `<span class="rstars stars">${starTxt(a)}</span> ${a.toFixed(1)}` : '<span class="muted">Not rated yet</span>'}</div>
       <div class="small muted">${s.last ? 'Had ' + daysAgo(s.last) : 'Never made'}${r.tags ? ' · ' + list(r.tags).map(t => '#' + esc(t)).join(' ') : ''}</div>${nx ? `<div style="margin-top:4px"><span class="chip ok">${nx.date === TODAY ? 'Tonight' : 'On ' + nightName(nx.date)}</span></div>` : ''}</div>
       <span class="chev">›</span></div></div></div>`;
-    return `<div class="rcard ${recent || paused ? 'dim' : ''}" data-rid="${r.id}"><div class="under"><span class="yes">${ic('plus', 16)} Add to a night</span><span class="no">Not now</span></div>
+    const arch = r.status === 'archived';
+    return `<div class="rcard ${recent || paused || arch ? 'dim' : ''}" data-rid="${r.id}"><div class="under"><span class="yes">${arch ? '' : ic('plus', 16) + ' Add to a night'}</span><span class="no">${arch ? 'Restore' : 'Pause or archive'}</span></div>
       <div class="rin">${cov ? `<img class="rcover" src="${esc(photoSrc(cov.fileId, 900))}" alt="" loading="lazy" data-a="open" data-t="Recipes" data-id="${r.id}">` : ''}<div class="rrow"><div class="grow" data-a="open" data-t="Recipes" data-id="${r.id}"><div class="ti">${esc(r.name)}</div>
       <div class="small">${a ? `<span class="rstars stars">${starTxt(a)}</span> ${a.toFixed(1)}` : '<span class="muted">Not rated yet</span>'}${my ? ` <span class="muted">· you ${my}★</span>` : ''}</div>
       <div class="small muted">${s.last ? 'Had ' + daysAgo(s.last) : 'Never made'}${s.n > 1 ? ` · made ${s.n} times` : ''}${r.tags ? ' · ' + list(r.tags).map(t => '#' + esc(t)).join(' ') : ''}</div>
-      ${nx || paused ? `<div style="margin-top:4px">${nx ? `<span class="chip ok">${nx.date === TODAY ? 'Tonight' : 'On ' + nightName(nx.date)}</span> ` : ''}${paused ? `<span class="chip">Paused until ${fmtDate(r.pausedUntil)}</span>` : ''}</div>` : ''}</div>
-      <button class="btn gray sm rpick" data-a="recPick" data-v="${r.id}" aria-label="Add to a night">${RPICK === r.id ? ic('x', 16) : ic('plus', 16)}</button></div></div>${RPICK === r.id ? `<div class="rnights">${nightsHTML(r.id)}</div>` : ''}</div>`; };
+      ${nx || paused || arch ? `<div style="margin-top:4px">${nx ? `<span class="chip ok">${nx.date === TODAY ? 'Tonight' : 'On ' + nightName(nx.date)}</span> ` : ''}${paused ? `<span class="chip">Paused until ${fmtDate(r.pausedUntil)}</span>` : ''}${arch ? '<span class="chip">Archived</span>' : ''}</div>` : ''}</div>
+      </div></div>${RPICK === r.id ? `<div class="rnights">${nightsHTML(r.id)}<div class="actions" style="padding:0 14px 12px;margin-top:0"><button class="btn gray sm" data-a="recPick" data-v="${r.id}">Close</button></div></div>` : ''}
+      ${RACT === r.id ? `<div class="dchg" data-a="recActClose">${arch ? `<button class="btn" data-a="recRestore" data-v="${r.id}">${ic('refresh', 18)}Restore</button>`
+        : `<button class="btn" data-a="${paused ? 'recUnpause' : 'recPauseGo'}" data-v="${r.id}">${ic('clock', 18)}${paused ? 'Unpause' : 'Pause ' + pauseTxt()}</button><button class="btn" data-a="recArchive" data-v="${r.id}">${ic('trash', 18)}Archive</button>`}</div>` : ''}</div>`; };
   const SORTS = [['stale', 'Not had lately'], ['top', 'Top rated'], ['recent', 'Recently made'], ['az', 'A–Z']], on = (RS !== 'stale' ? 1 : 0) + RT.length;
   const applied = [RS !== 'stale' ? SORTS.find(x => x[0] === RS)[1] : ''].concat(RT.map(t => '#' + t)).filter(Boolean);
   const pm = PFOR && byId('Menus', PFOR);
   return (pm ? `<div class="pickbar"><div class="grow"><b>Pick dinner for ${pm.date === TODAY ? 'tonight' : esc(fmtDay(pm.date))}</b><div class="small">Tap a recipe to put it on that night.</div></div><button class="btn gray sm" data-a="pickCancel">Cancel</button></div>` : '') +
-    `<div class="rbar"><div class="rsearch"><input placeholder="Search recipes" value="${esc(RFQ)}" onchange="RFQ=this.value;refresh()"><button class="rmbtn ${on ? 'on' : ''}" data-a="recMenu" aria-label="Sort and tags" aria-expanded="${RMENU}">${ic('menu', 22)}${on ? `<i>${on}</i>` : ''}</button></div>
+    `<div class="rbar"><div class="rsearch"><input placeholder="${RARCH && !PFOR ? 'Search archived recipes' : 'Search recipes'}" value="${esc(RFQ)}" onchange="RFQ=this.value;refresh()">${PFOR ? '' : `<button class="rmbtn" data-a="add" data-v="Recipes" aria-label="New recipe">${ic('plus', 22)}</button>`}<button class="rmbtn ${on ? 'on' : ''}" data-a="recMenu" aria-label="Sort and tags" aria-expanded="${RMENU}">${ic('menu', 22)}${on ? `<i>${on}</i>` : ''}</button></div>
     ${RMENU ? `<div class="rshade" data-a="recMenu"></div><div class="rmenu" role="dialog" aria-label="Sort and tags"><div class="lbl" style="margin-top:0">Sort by</div>
       ${SORTS.map(([k, l]) => `<button class="rmopt ${RS === k ? 'on' : ''}" data-a="recSort" data-v="${k}">${RS === k ? ic('check', 16) : '<span style="width:16px"></span>'}${l}</button>`).join('')}
       ${tags.length ? `<div class="lbl">Tags</div><div class="rmtags">${tags.map(t => `<button class="chip ${RT.includes(t) ? 'on' : ''}" data-a="recTag" data-v="${esc(t)}">#${esc(t)}</button>`).join('')}</div>` : ''}
+      ${PFOR ? '' : `<div class="lbl">Show</div><button class="rmopt ${RARCH ? '' : 'on'}" data-a="recArch" data-v="">${RARCH ? '<span style="width:16px"></span>' : ic('check', 16)}Recipes in use</button><button class="rmopt ${RARCH ? 'on' : ''}" data-a="recArch" data-v="1">${RARCH ? ic('check', 16) : '<span style="width:16px"></span>'}Archived recipes</button>`}
       <div class="actions"><button class="btn gray sm" data-a="recClear">Clear</button><button class="btn sm" data-a="recMenu">Done</button></div>
-      <div class="small muted" style="margin-top:10px">Swipe a recipe right to put it on a night, left to skip it for now.</div></div>` : ''}
+      <div class="small muted" style="margin-top:10px">Swipe a recipe right to put it on a night, left to pause or archive it.</div></div>` : ''}
     ${applied.length ? `<div class="small muted rapplied">${esc(applied.join(' · '))} · <a data-a="recClear">Clear</a></div>` : ''}</div>` +
-    (rs.map(card).join('') || `<div class="empty">${live.length ? 'Nothing matches.' : 'No recipes yet. Add some under Home, then Recipes.'}</div>`) +
+    (RARCH && !PFOR ? `<div class="small muted" style="margin:0 16px 10px">Archived recipes are never suggested. Swipe one left to restore it. <a data-a="recArch" data-v="">Back to recipes in use</a></div>` : '') +
+    (rs.map(card).join('') || `<div class="empty">${live.length ? 'Nothing matches.' : RARCH ? 'Nothing archived.' : 'No recipes yet. Tap ＋ above to add one.'}</div>`) +
     (RHIDE.size ? `<div class="actions pad" style="margin:12px 0"><button class="chip" data-a="recUnhide">Show ${RHIDE.size} skipped</button></div>` : '') + '<div style="height:16px"></div>';
 }
 A.recMenu = () => { RMENU = !RMENU; render(); };
 A.recSort = v => { RS = v; render(); };
 A.recTag = v => { RT = RT.includes(v) ? RT.filter(t => t !== v) : RT.concat(v); render(); };
-A.recClear = () => { RS = 'stale'; RT = []; RMENU = false; render(); };
+A.recClear = () => { RS = 'stale'; RT = []; RARCH = false; RMENU = false; render(); };
+A.recArch = v => { RARCH = !!v; RMENU = false; RACT = ''; RPICK = ''; render(); window.scrollTo(0, 0); };
+const pauseTxt = () => { const n = pauseDays(); return n % 30 === 0 ? (n / 30) + ' month' + (n > 30 ? 's' : '') : n % 7 === 0 ? (n / 7) + ' week' + (n > 7 ? 's' : '') : n + ' days'; };
+A.recActClose = () => { RACT = ''; render(); };
+A.recPauseGo = id => { const r = byId('Recipes', id); RACT = ''; if (r) write({ t: 'Recipes', row: { id, pausedUntil: addDays(TODAY, pauseDays()) } }); };
+A.recUnpause = id => { RACT = ''; write({ t: 'Recipes', row: { id, pausedUntil: '' } }); };
+A.recArchive = id => { const r = byId('Recipes', id); RACT = ''; if (r) write({ t: 'Recipes', row: { id, status: 'archived' }, log: L('recipe', 'archived a recipe: ' + r.name, 'dinner') }); };
+A.recRestore = id => { const r = byId('Recipes', id); RACT = ''; if (r) write({ t: 'Recipes', row: { id, status: '' }, log: L('recipe', 'restored a recipe: ' + r.name, 'dinner') }); };
 A.recPick = id => { RPICK = RPICK === id ? '' : id; render(); };
 A.recHide = id => { RHIDE.add(id); if (RPICK === id) RPICK = ''; render(); undoToast('Skipped for now', () => { RHIDE.delete(id); render(); }); };
 A.recUnhide = () => { RHIDE.clear(); render(); };
@@ -1889,6 +1904,7 @@ A.dlEdit = id => { const it = byId('daily_items', id); if (it) dailyForm(it); };
 
 // ----- Home -----
 const SETTINGS = [['Caretakers', 'care', 'Caretakers', 'Boston and Cape rosters, rates, driving'], ['birthdays', 'cake', 'Birthdays', 'Friends and family'], ['WeatherRules', 'weather', 'Weather rules', 'If-then reminders based on the forecast'],
+  ['rules', 'book', 'Dinner and recipes', 'Rules for each night, who cooks, draft day, how long a paused recipe sits out'],
   ['Groceries', 'cart', 'Grocery library', 'Saved items with brands and notes'], ['TodoTypes', 'tag', 'To-do types', 'Types and who they go to by default'], ['memories', 'quote', 'Quotes and memories', 'The morning splash screen'],
   ['settings', 'bell', 'Notifications and Feed', 'Push alerts, bundling, quiet hours, what shows in your Feed'], ['device', 'phone', 'This phone', 'Your personal link and sign-in']];
 // Muted section colors for the Home icons.
@@ -1908,7 +1924,6 @@ function vHome() {
     hrow('homeOpen', 'Activities', 'activity', 'Activities', grp.length ? `${grp.length} repeating, for kids and parents` : 'Repeating activities like hockey or piano') +
     hrow('homeOpen', 'houses', 'house', 'House', 'Info and upkeep · ' + houses) +
     hrow('homeOpen', 'gifts', 'gift', 'Gift ideas', 'Ideas for everyone, any time of year') +
-    hrow('homeOpen', 'recipes', 'book', 'Recipes', `${S.Recipes.filter(r => r.status !== 'archived').length} saved, with ratings and history`) +
     hrow('openSettings', '', 'gear', 'Settings', 'Caretakers, birthdays, weather, notifications and more') +
     `<div class="hfoot"><div class="ver">Version ${APP_VERSION}</div>Made with love by your husband Paul.<br><a data-a="feedback">Click here to provide constructive feedback</a></div>`;
 }
@@ -1947,7 +1962,7 @@ const PAGES = {
 ` +
       (API_URL ? '' : `<h3>Connection</h3><label>Backend URL</label><input id="sUrl" value="${esc(store.get('url'))}"><div class="actions"><button class="btn gray" data-a="connect">Save and reconnect</button></div>`); }
 };
-A.homeOpen = k => { if (!ME && k !== 'settings') return; sheet(() => PAGES[k]()); };
+A.homeOpen = k => { if (!ME && k !== 'settings') return; if (k === 'rules') return A.rules(); sheet(() => PAGES[k]()); };
 A.settings = () => sheet(ME ? () => PAGES.settings() : `<h2>Connect</h2><label>Backend URL (Apps Script web app)</label><input id="sUrl" value="${esc(store.get('url'))}" placeholder="https://script.google.com/macros/s/.../exec"><div class="actions"><button class="btn" data-a="connect">Connect</button></div>`);
 A.editH = id => editForm('Houses', byId('Houses', id));
 A.setFlag = (v, el) => setSt(el.dataset.k, v === '1' ? '1' : '0'); A.setVal = (v, el) => setSt(el.dataset.k, v);
@@ -2079,7 +2094,7 @@ document.addEventListener('visibilitychange', () => {
 A.dinClear = id => { const m = byId('Menus', id); if (!m || (!m.recipeId && !m.note)) return;
   write({ t: 'Menus', row: { id, recipeId: '', note: '', kept: '1', skipped: '' }, log: menuLog(m, 'menu_set', `cleared dinner for ${fmtDay(m.date)}`) });
 };
-// swipe on a recipe in Meals > Recipes: right = pick a night, left = skip for now
+// swipe on a recipe in Meals > Recipes: right = pick a night, left = Pause / Archive (Restore for an archived one)
 (function () { let x0 = null, y0 = 0, el = null, inn = null, moved = false;
   document.addEventListener('touchstart', e => { el = e.target.closest('.rcard[data-rid]'); inn = el && el.querySelector('.rin'); moved = false; if (el) { x0 = e.touches[0].clientX; y0 = e.touches[0].clientY; } }, { passive: true });
   document.addEventListener('touchmove', e => { if (!el || x0 === null) return; const dx = e.touches[0].clientX - x0;
@@ -2088,7 +2103,8 @@ A.dinClear = id => { const m = byId('Menus', id); if (!m || (!m.recipeId && !m.n
   document.addEventListener('touchend', e => { if (!el || x0 === null) return; const dx = e.changedTouches[0].clientX - x0, id = el.dataset.rid, p = inn; p.style.transition = ''; p.style.transform = ''; el = null; x0 = null;
     if (!moved || Math.abs(dx) < 80) return;
     const stop = ev => { ev.stopPropagation(); ev.preventDefault(); }; document.addEventListener('click', stop, { capture: true, once: true }); setTimeout(() => document.removeEventListener('click', stop, { capture: true }), 400);
-    if (dx > 0) { RPICK = id; render(); } else A.recHide(id); }); })();
+    const arch = (byId('Recipes', id) || {}).status === 'archived';
+    if (dx > 0) { if (!arch) { RACT = ''; RPICK = id; render(); } } else { RPICK = ''; RACT = id; render(); } }); })();
 // swipe left on a Feed post to delete it
 (function () { let x0 = null, y0 = 0, el = null, post = null, moved = false;
   document.addEventListener('touchstart', e => { el = e.target.closest('.swipe[data-fid]'); post = el && el.querySelector('.post'); moved = false; if (el) { x0 = e.touches[0].clientX; y0 = e.touches[0].clientY; } }, { passive: true });
