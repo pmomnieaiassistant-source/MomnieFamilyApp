@@ -331,7 +331,7 @@
 // Momnie Family app v6.0
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'], DAYN = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'], ADULTS = ['Paul', 'Shana'];
 // Shown at the bottom of Home. Bump it together with VERSION in sw.js on every release.
-const APP_VERSION = '12.4 · Nov 18, 2026';
+const APP_VERSION = '12.5 · Nov 18, 2026';
 const TABLES = ['People', 'Schools', 'SchoolCal', 'Activities', 'Overrides', 'Events', 'Caretakers', 'Childcare', 'Birthdays', 'Todos', 'TodoTypes', 'Recipes', 'DinnerRules', 'Weeks', 'Menus',
   'Groceries', 'GroceryList', 'HouseCards', 'Houses', 'WeatherRules', 'Quotes', 'Memories', 'Updates', 'Messages', 'Activity', 'Comments', 'Reactions', 'Links', 'Settings', 'Photos', 'gifts', 'ai_rules', 'daily_items', 'daily_completions'];
 const CAT = { School: '#3f6fb5', Kids: '#4f7cc2', Work: '#64748b', Family: '#5b6fa8', Dinner: '#b08a4f', Caretaker: '#3e9aa6', Shared: '#94a3b8', Birthday: '#c9806a' }, SCHOOL_C = ['#5a72b8', '#7a8597', '#4a6fb0'];
@@ -1018,7 +1018,7 @@ A.impAll = async (v, el) => { const seen = new Set(), add = (IMP.res ? IMP.res.r
   A.close(null, el); await write(add.flatMap(x => recipeOps(Object.assign({}, x), seen))); toast(`Added ${add.length} recipe${add.length === 1 ? '' : 's'}`); };
 // Home, Meals: the dinner rules and the instructions to give an AI.
 A.mealsHome = () => sheet(() => `<h2>Meals</h2>` + hrow('rules', '', 'gear', 'Dinner rules', 'Each night, who cooks, who is out, draft day, pause length') +
-  hrow('aiRuleNew', 'meals', 'spark', 'Ask assistant', 'A meal rule in plain English, e.g. suggest a dinner if tomorrow is empty') +
+  hrow('aiRuleNew', 'meals', 'spark', 'Create rule', 'A meal rule in plain English, e.g. suggest a dinner if tomorrow is empty') +
   hrow('llmCopy', '', 'copy', 'Copy LLM instructions', 'Paste into ChatGPT or Claude with a recipe, then import the answer under Meals, Recipes, ＋') +
   `<details style="margin-top:14px"><summary class="small muted">See the instructions</summary><pre class="llmtxt">${esc(LLM_INSTRUCTIONS)}</pre></details>`);
 A.llmCopy = async () => { try { await navigator.clipboard.writeText(LLM_INSTRUCTIONS); toast('Copied. Paste into ChatGPT or Claude with a recipe.'); }
@@ -1928,7 +1928,7 @@ const AI_EXAMPLES = { general: 'e.g. If we both have evening plans and no careta
   meals: 'e.g. If no dinner is planned for tomorrow by 8 PM, suggest something we haven\'t had in a while.', todos: 'e.g. If a bill has been unpaid for two weeks, tell Paul privately to do it today.',
   rides: 'e.g. If the person picking up from school has a work event that day, ask who is covering.', house: 'e.g. Remind us a week before any house upkeep is due.', family: 'e.g. Two weeks before a kid\'s birthday, tell us if fewer than 3 gift ideas are saved.' };
 function aiRuleForm(rule, area) { const r = rule || {}, a = r.area || area || 'general';
-  form(rule ? 'Assistant rule' : 'Ask assistant', v => [F('text', 'What should the assistant watch for?', 'area', null, { ph: AI_EXAMPLES[v.area] || AI_EXAMPLES.general }),
+  form('Assistant rule', v => [F('text', 'Create rule', 'area', null, { ph: AI_EXAMPLES[v.area] || AI_EXAMPLES.general }),
       F('audience', 'Who should hear about it', 'multi', ADULTS, { hint: 'Just one person makes it a private note. Each time it runs, the assistant checks this rule and posts only when it applies.' }),
       F('area', 'About', 'sel', AI_AREAS, { re: 1 }), F('active', 'On', 'chk')],
     { id: r.id || '', text: r.text || '', audience: r.audience || ME, area: a, active: rule ? (r.active === '0' ? '' : '1') : '1' },
@@ -1940,7 +1940,7 @@ A.aiRuleNew = area => aiRuleForm(null, area || 'general');
 A.aiRuleEdit = id => { const r = byId('ai_rules', id); if (r) aiRuleForm(r); };
 const aiRuleRow = r => `<div class="li" style="padding:12px 0" data-a="aiRuleEdit" data-v="${r.id}"><div class="grow"><div class="ti">${esc(r.text)}</div>
   <div class="small muted">${ic('spark', 13)} Assistant · ${esc((AI_AREAS.find(x => x[0] === r.area) || AI_AREAS[0])[1])} · tells ${esc(joinNames(list(r.audience)) || 'everyone')}${list(r.audience).length === 1 ? ' (private)' : ''}${r.active === '0' ? ' · off' : ''}${r.created_by ? ' · added by ' + esc(r.created_by) : ''}</div></div><span class="chev">›</span></div>`;
-const aiAskBtn = area => `<button class="btn gray" data-a="aiRuleNew" data-v="${area}">${ic('spark', 16)}Ask assistant</button>`;
+const aiAskBtn = area => `<button class="btn gray" data-a="aiRuleNew" data-v="${area}" aria-label="Create a rule with the assistant" title="Create a rule with the assistant" style="flex:0 0 auto;padding-left:16px;padding-right:16px">${ic('spark', 20)}</button>`;
 const AI_TOPICS = [['meals', 'Meals and recipes'], ['birthdays', 'Birthdays and gift-idea counts'], ['todos', 'To-dos and bills'], ['rides', 'Rides and caretakers'], ['week', 'The week ahead'], ['house', 'House upkeep']];
 A.aiEdit = (v, el) => { if (ME !== 'Paul') return; const g = k => (byId('Settings', 'app|ai.' + k) || {}).value;
   form('AI assistant', [F('on', 'Post daily notes to the Feed', 'chk'), F('who', 'Who sees the AI posts', 'multi', ADULTS, { hint: 'Only these people see its notes in the Feed and get its notifications.' }),
