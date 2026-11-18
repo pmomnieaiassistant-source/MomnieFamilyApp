@@ -216,7 +216,7 @@
   .wseg button.on { background:var(--card); color:var(--accent); box-shadow:0 1px 3px rgba(0,0,0,.12); } .small.wfh { color:var(--accent); font-weight:600; }
   dialog:not(.splash)::before { content:''; display:block; width:40px; height:5px; border-radius:3px; background:var(--line); margin:-12px auto 8px; }
   .pickbar { display:flex; align-items:center; gap:10px; margin:10px 12px 0; padding:12px 14px; border-radius:14px; background:var(--accent); color:var(--onacc); }
-  .pickbar .btn { flex:none; } .rcard.pickable { cursor:pointer; } .rcard.pickable:active { transform:scale(.99); }
+  .pickbar .btn { flex:none; } .rcard.pickable { cursor:pointer; -webkit-user-select:none; user-select:none; -webkit-touch-callout:none; } .rcard.pickable img { pointer-events:none; } .rcard.pickable:active { transform:scale(.99); }
   .dcard.flash { animation:flash 1.6s ease-out; } @keyframes flash { 0% { box-shadow:0 0 0 3px var(--accent); } 100% { box-shadow:0 0 0 3px transparent; } }
   .dcard.clearing { box-shadow:inset 0 0 0 2px #e5484d; } .dcard.clearing::after { content:'Release to clear'; position:absolute; right:14px; top:12px; font-size:12px; font-weight:700; color:#e5484d; }
   input.fk { flex:0 0 38% !important; font-weight:600; } .pbox .li.plain:last-child { border-bottom:0; } .psec .lbl { margin:0 0 4px; } .li.plain { padding:10px 0; border-bottom:1px solid var(--line); }
@@ -310,7 +310,7 @@
 // Momnie Family app v6.0
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'], DAYN = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'], ADULTS = ['Paul', 'Shana'];
 // Shown at the bottom of Home. Bump it together with VERSION in sw.js on every release.
-const APP_VERSION = '10.0 · Nov 18, 2026';
+const APP_VERSION = '10.1 · Nov 18, 2026';
 const TABLES = ['People', 'Schools', 'SchoolCal', 'Activities', 'Overrides', 'Events', 'Caretakers', 'Childcare', 'Birthdays', 'Todos', 'TodoTypes', 'Recipes', 'DinnerRules', 'Weeks', 'Menus',
   'Groceries', 'GroceryList', 'HouseCards', 'Houses', 'WeatherRules', 'Quotes', 'Memories', 'Updates', 'Messages', 'Activity', 'Comments', 'Reactions', 'Links', 'Settings', 'Photos', 'gifts', 'daily_items', 'daily_completions'];
 const CAT = { School: '#3f6fb5', Kids: '#4f7cc2', Work: '#64748b', Family: '#5b6fa8', Dinner: '#b08a4f', Caretaker: '#3e9aa6', Shared: '#94a3b8', Birthday: '#c9806a' }, SCHOOL_C = ['#5a72b8', '#7a8597', '#4a6fb0'];
@@ -1605,9 +1605,16 @@ A.swap = id => { const m = byId('Menus', id); return call('dinner_swap', { id, l
 let MCHG = '';
 A.mRandom = id => { MCHG = ''; render(); A.swap(id); };
 A.mSelect = id => { MCHG = ''; PFOR = id; RPICK = ''; RMENU = false; DT = 'rec'; render(); window.scrollTo(0, 0); };
+// While picking, a touch on a recipe counts however long it's held, as long as the finger doesn't slide (sliding scrolls).
+// iOS otherwise turns a held touch into text selection or the image menu and never sends the tap.
+(function () { let el = null, x0 = 0, y0 = 0;
+  document.addEventListener('touchstart', e => { el = e.target.closest && e.target.closest('.rcard.pickable'); if (el) { x0 = e.touches[0].clientX; y0 = e.touches[0].clientY; } }, { passive: true });
+  document.addEventListener('touchmove', e => { if (el && (Math.abs(e.touches[0].clientX - x0) > 10 || Math.abs(e.touches[0].clientY - y0) > 10)) el = null; }, { passive: true });
+  document.addEventListener('touchend', e => { if (!el) return; const t = el; el = null; e.preventDefault(); if (PFOR) A.pickFor(t.dataset.v); }, { passive: false });
+  document.addEventListener('touchcancel', () => { el = null; }); })();
 A.pickCancel = () => { const id = PFOR; PFOR = ''; DT = 'menu'; render(); menuShow(id, false); };
 /** Tapping a recipe while picking: it goes on that night, then back to the weekly menu with the night highlighted. */
-A.pickFor = rid => { const m = byId('Menus', PFOR), r = byId('Recipes', rid); PFOR = ''; if (!m || !r) { DT = 'menu'; render(); return; }
+A.pickFor = rid => { if (!PFOR) return; const m = byId('Menus', PFOR), r = byId('Recipes', rid); PFOR = ''; if (!m || !r) { DT = 'menu'; render(); return; }
   const was = m.skipped === '1' ? '' : dish(m);
   write({ t: 'Menus', row: { id: m.id, recipeId: rid, note: '', kept: '1', skipped: '' }, log: menuLog(m, 'menu_set', `${was ? 'changed' : 'planned'} dinner for ${fmtDay(m.date)}: ${was ? was + ' → ' : ''}${r.name}`) });
   DT = 'menu'; MW = mondayOf(m.date); render(); menuShow(m.id, true); toast(`${r.name} → ${m.date === TODAY ? 'tonight' : fmtDay(m.date)}`); };
