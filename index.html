@@ -353,7 +353,7 @@
 // Momnie Family app v6.0
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'], DAYN = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'], ADULTS = ['Paul', 'Shana'];
 // Shown at the bottom of Home. Bump it together with VERSION in sw.js on every release.
-const APP_VERSION = '14.8 · Nov 18, 2026';
+const APP_VERSION = '14.9 · Nov 18, 2026';
 const TABLES = ['People', 'Schools', 'SchoolCal', 'Activities', 'Overrides', 'Events', 'Caretakers', 'Childcare', 'Birthdays', 'Todos', 'TodoTypes', 'Recipes', 'DinnerRules', 'Weeks', 'Menus',
   'Groceries', 'GroceryList', 'HouseCards', 'Houses', 'WeatherRules', 'Quotes', 'Memories', 'Updates', 'Messages', 'Activity', 'Comments', 'Reactions', 'Links', 'Settings', 'Photos', 'gifts', 'ai_rules', 'ai_requests', 'notes', 'daily_items', 'daily_completions'];
 const CAT = { School: '#3f6fb5', Kids: '#4f7cc2', Work: '#64748b', Family: '#5b6fa8', Dinner: '#b08a4f', Caretaker: '#3e9aa6', Shared: '#94a3b8', Birthday: '#c9806a' }, SCHOOL_C = ['#5a72b8', '#7a8597', '#4a6fb0'];
@@ -1363,6 +1363,7 @@ function genericCard(r, d, t) {
     if (f.t === 'date') val = val.length >= 10 ? fmtDay(val) : val; if (f.t === 'time') val = fmtT(val); return f.k === 'link' || f.k === 'where' ? kvh(f.l, linkOr(val)) : kv(f.l, val); }).join('');
 }
 const CARD = {
+  WeatherRules(r) { return `<h2>${esc(r.message || 'Weather rule')}</h2>` + kv('Rule', wxRuleTxt(r)) + kv('Notification', r.push === '1' ? (r.urgent === '1' ? 'Yes, urgent' : 'Yes') : 'No, it shows in the Today card') + kv('On', r.enabled === '0' ? 'Off' : 'On') + std(); },
   gifts(g) { if (!giftSeen(g)) return '<h2>Gift idea</h2><div class="empty">This one is a surprise.</div>'; const own = g.recipient === ME, img = giftPhoto(g, 1200);
     return (img ? `<img class="phbig" style="margin-top:28px;max-height:280px;object-fit:cover" src="${esc(img)}" alt="">` : '') + `<h2>${esc(g.name)}</h2>` +
       kv('For', own ? 'You (your wish list)' : g.recipient) + kv('', g.description) + kvh('Website', g.url && linkOr(g.url)) + (own ? '' : kv('Who is buying it', g.assigned_to || 'No one yet')) +
@@ -1550,7 +1551,8 @@ window.addEventListener('popstate', () => { if (view === 'person') leavePerson()
 // ----- Household pages (Schools, Activities, House): full pages of cards; tap a card to open and edit it -----
 function goHH(k) { sheets.slice().forEach(d => d.close()); if (view !== 'hh') { prevView = view === 'person' ? 'home' : view; prevY = window.scrollY; try { history.pushState({ hh: k }, ''); } catch (e) {} }
   HH = k; view = 'hh'; render(); window.scrollTo(0, 0); }
-function leaveHH() { if (view !== 'hh') return; view = prevView || 'home'; render(); window.scrollTo(0, prevY); }
+let HH_FROM = '';
+function leaveHH() { if (view !== 'hh') return; view = prevView || 'home'; render(); window.scrollTo(0, prevY); if (HH_FROM === 'settings') { HH_FROM = ''; A.openSettings(); } }
 A.hhBack = () => { if (history.state && history.state.hh) history.back(); else if (HH.includes(':')) { HH = hhParent(HH); render(); } else leaveHH(); };
 const hhParent = k => ({ school: 'Schools', act: 'Activities', house: 'houses' })[k.split(':')[0]] || 'Schools';
 // Open a profile page for one school, activity or house.
@@ -1558,6 +1560,9 @@ A.hhGo = k => { sheets.slice().forEach(d => d.close()); if (view !== 'hh') { pre
   try { history.pushState({ hh: k }, ''); } catch (e) {} HH = k; view = 'hh'; render(); window.scrollTo(0, 0); };
 const hhTitle = () => { const [k, id] = HH.split(':'); if (!id) return HH_TITLES[HH];
   if (k === 'school') { const x = byId('Schools', id); return x ? x.short || x.name : 'School'; } if (k === 'act') { const x = byId('Activities', id); return x ? x.name : 'Activity'; } return id === 'Cape' ? 'Cape house' : id; };
+const WX_WORD = { rain: 'rain chance', snow: 'snow', low: 'low', high: 'high', uv: 'UV' }, wxUnit = m => m === 'rain' ? '%' : m === 'snow' ? ' in' : m === 'uv' ? '' : '°';
+const wxRuleTxt = r => `If the ${WX_WORD[r.metric] || r.metric} is ${r.op === '<' ? 'below' : 'above'} ${r.threshold}${wxUnit(r.metric)} · ${r.when === 'night' ? 'the evening before' : 'that morning'}`;
+const acard = (attrs, title, lines, chip, extra) => `<div class="box hcard" ${attrs}><div class="row" style="align-items:flex-start"><div class="grow"><div class="htitle">${title}</div>${lines.filter(Boolean).map(l => `<div class="small muted" style="margin-top:3px">${l}</div>`).join('')}</div>${chip ? `<span class="chip">${chip}</span>` : ''}</div>${extra || ''}</div>`;
 const hhCard = (t, id, title, lines, chip, go) => `<div class="box hcard" ${go ? `data-a="hhGo" data-v="${esc(go)}"` : `data-a="open" data-t="${t}" data-id="${esc(id)}"`}><div class="row" style="align-items:flex-start"><div class="grow"><div class="htitle">${esc(title)}${aiMk(t, id)}</div>${lines.filter(Boolean).map(l => `<div class="small muted" style="margin-top:3px">${l}</div>`).join('')}</div>${chip ? `<span class="chip">${chip}</span>` : ''}</div></div>`;
 function vHH() {
   const back = `<div class="pad"><button class="lnk back" data-a="hhBack">${ic('left', 18)}Back</button></div>`;
@@ -1568,6 +1573,29 @@ function vHH() {
   if (HH === 'Activities') return back + (actGroups().map(g => { const a = g[0];
       return hhCard('Activities', a.id, a.name, [esc(joinNames(list(a.kids))), esc(schedTxt(g)), a.kids && (a.dropoff || a.pickup) ? rideHTML(a) : '', esc([a.location, a.until ? 'until ' + fmtDay(a.until) : ''].filter(Boolean).join(' · '))], '', 'act:' + a.id); }).join('') || '<div class="empty">No activities yet.</div>') +
       `<div style="height:90px"></div><button class="fab" data-a="add" data-v="Activities" aria-label="Add an activity">${ic('plus', 20)}Activity</button>`;
+  if (HH === 'Caretakers') { const up = S.Childcare.filter(c => c.date >= TODAY && c.confirmedId).sort((a, b) => (a.date + a.start).localeCompare(b.date + b.start));
+    return back + (S.Caretakers.slice().sort((a, b) => a.name.localeCompare(b.name)).map(k => { const nx = up.find(c => c.confirmedId === k.id), pay = k.unpaid === '1' || k.pay === 'unpaid' ? 'Unpaid' : k.pay === 'weekly' ? `Paid weekly${k.payDay ? ' on ' + k.payDay : ''}${k.weekly ? ' · $' + k.weekly : ''}` : k.rate ? '$' + k.rate + '/hr' : '';
+      return acard(`data-a="open" data-t="Caretakers" data-id="${esc(k.id)}"`, esc(k.name), [esc([k.relationship, list(k.roster).join(' and ')].filter(Boolean).join(' · ')), esc([pay, k.phone].filter(Boolean).join(' · ')), nx ? `${ic('clock', 13)} Next: ${esc(fmtDay(nx.date))}, ${esc(fmtT(nx.start))}` : ''], k.drive === '1' ? 'Drives' : ''); }).join('') || '<div class="empty">No caretakers yet.</div>') +
+      `<div style="height:90px"></div><button class="fab" data-a="add" data-v="Caretakers" aria-label="Add a caretaker">${ic('plus', 20)}Caretaker</button>`; }
+  if (HH === 'birthdays') { const next = b => { let n = TODAY.slice(0, 4) + '-' + b.md; if (n < TODAY) n = (+TODAY.slice(0, 4) + 1) + '-' + b.md; return n; }, days = d => Math.round((parse(d) - parse(TODAY)) / 864e5);
+    const bs = allBirthdays().map(b => Object.assign({}, b, { next: next(b) })).sort((a, b) => a.next.localeCompare(b.next) || a.name.localeCompare(b.name));
+    return back + (bs.map(b => { const n = days(b.next), turns = b.year ? ageOn(b, b.next) : null;
+      return acard(`data-a="open" data-t="${b.t}" data-id="${esc(b.id)}"`, esc(b.name), [parse(b.next).toLocaleDateString('en-US', { weekday: 'short', month: 'long', day: 'numeric' }) + (turns !== null && turns > 0 ? ` · turns ${turns}` : ''), n > 0 && n <= 30 ? `In ${n} day${n === 1 ? '' : 's'}` : ''],
+        n <= 14 ? (n === 0 ? 'Today' : 'Soon') : ''); }).join('') || '<div class="empty">No birthdays yet.</div>') +
+      `<div class="pad small muted">Family and caretakers with a birthday on their card show here too.</div><div style="height:90px"></div><button class="fab" data-a="add" data-v="Birthdays" aria-label="Add a birthday">${ic('plus', 20)}Birthday</button>`; }
+  if (HH === 'WeatherRules') {
+    return back + S.WeatherRules.map(r => acard(`data-a="open" data-t="WeatherRules" data-id="${esc(r.id)}"`, esc(r.message), [esc(wxRuleTxt(r)), r.push === '1' ? `${ic('bell', 13)} Sends a notification${r.urgent === '1' ? ' (urgent)' : ''}` : ''], r.enabled === '0' ? 'Off' : '')).join('') +
+      (S.ai_rules.some(r => r.area === 'weather') ? `<div class="sect">Assistant rules</div>` + S.ai_rules.filter(r => r.area === 'weather').map(r => acard(`data-a="aiRuleEdit" data-v="${esc(r.id)}"`, esc(r.text) + `<span class="aimk">${ic('spark', 12)}</span>`, [`Tells ${esc(joinNames(list(r.audience)) || 'everyone')}${list(r.audience).length === 1 ? ' (private)' : ''}`], r.active === '0' ? 'Off' : '')).join('') : '') +
+      (S.WeatherRules.length || S.ai_rules.some(r => r.area === 'weather') ? '' : '<div class="empty">No weather rules yet.</div>') +
+      `<div class="pad"><div class="row" style="gap:10px;justify-content:flex-start"><span class="small muted grow">Or describe a rule in your own words:</span>${aiAskBtn('weather')}</div></div>` +
+      `<div style="height:90px"></div><button class="fab" data-a="add" data-v="WeatherRules" aria-label="Add a weather rule">${ic('plus', 20)}Rule</button>`; }
+  if (HH === 'Groceries') { const cats = [...new Set(S.Groceries.map(g => g.category || 'Other'))].sort((a, b) => a === 'Other' ? 1 : b === 'Other' ? -1 : a.localeCompare(b));
+    return back + (cats.map(c => `<div class="sect">${esc(c)}</div>` + S.Groceries.filter(g => (g.category || 'Other') === c).sort((a, b) => a.name.localeCompare(b.name)).map(g =>
+      acard(`data-a="open" data-t="Groceries" data-id="${esc(g.id)}"`, esc(g.name), [esc(g.details || ''), esc(g.altNames ? 'Also: ' + g.altNames : '')], +g.recurDays ? 'Every ' + g.recurDays + ' days' : '')).join('')).join('') || '<div class="empty">Empty so far.</div>') +
+      `<div style="height:90px"></div><button class="fab" data-a="add" data-v="Groceries" aria-label="Add a grocery card">${ic('plus', 20)}Grocery</button>`; }
+  if (HH === 'TodoTypes') { const FW = { amount: 'amount', where: 'where to pay', kid: 'which kid', link: 'a link' };
+    return back + S.TodoTypes.map(t => acard(`data-a="open" data-t="TodoTypes" data-id="${esc(t.id)}"`, esc(t.name), [`Goes to ${esc(t.assignee || 'either of us')}`, list(t.fields).length ? 'Asks for ' + esc(list(t.fields).map(f => FW[f] || f).join(', ')) : ''], t.builtin === '1' ? 'Built in' : '')).join('') +
+      `<div style="height:90px"></div><button class="fab" data-a="add" data-v="TodoTypes" aria-label="Add a to-do type">${ic('plus', 20)}Type</button>`; }
   if (HH === 'houses') return back + ['Boston', 'Cape'].map(h => { const cs = S.HouseCards.filter(c => c.house === h), due = cs.filter(c => c.kind === 'upkeep' && c.nextDue && c.nextDue <= addDays(TODAY, 30));
       return hhCard('HouseCards', h, h === 'Cape' ? 'Cape house' : 'Boston', [`${cs.filter(c => c.kind === 'upkeep').length} upkeep · ${cs.filter(c => c.kind !== 'upkeep').length} info`, due.length ? `<span class="amb">${due.length} due in the next month</span>` : 'Nothing due this month'], '', 'house:' + h); }).join('') +
     `<div style="height:90px"></div><button class="fab" data-a="add" data-v="HouseCards" aria-label="Add house info or upkeep">${ic('plus', 20)}Add</button>`;
@@ -1752,7 +1780,7 @@ A.pause = (v, el) => { const r = byId('Recipes', ctx(el).id); if (r.pausedUntil 
 A.archive = (v, el) => { const r = byId('Recipes', ctx(el).id); write({ t: 'Recipes', row: { id: r.id, status: r.status === 'archived' ? '' : 'archived' } }); };
 // ---------- views ----------
 const TITLES = { feed: 'Feed', planner: 'Planner', meals: 'Meals', todo: 'To-Do', home: 'Home' };
-const HH_TITLES = { Schools: 'Schools', Activities: 'Activities', houses: 'House' };
+const HH_TITLES = { Schools: 'Schools', Activities: 'Activities', houses: 'House', Caretakers: 'Caretakers', birthdays: 'Birthdays', WeatherRules: 'Weather rules', Groceries: 'Grocery library', TodoTypes: 'To-do types' };
 let HH = '';
 function render() {
   const pv = view === 'person' && byId('People', PERSON);
@@ -2591,9 +2619,9 @@ function vHome() {
 A.feedback = () => form('Constructive feedback', [F('idea', 'What would make the app better?', 'area', null, { ph: 'Ideas, annoyances, anything' })], {}, async v => {
   need(v.idea && v.idea.trim(), 'Write your idea first.');
   const ok = await write({ t: 'ideas', row: { id: nid(), text: v.idea.trim() } }); if (ok) toast('Thank you! Paul will see it.'); return ok; });
-A.openSettings = () => sheet(() => '<h2>Settings</h2><div style="clear:both"></div>' + [['ai', 'spark', 'Assistant', [ME === 'Paul' ? (aiOn() ? 'On' : 'Off') : '', S.ai_rules.length ? (n => `${n} rule${n === 1 ? '' : 's'} on`)(S.ai_rules.filter(r => r.active !== '0').length) : 'Rules in plain English'].filter(Boolean).join(' · ')],
+A.openSettings = () => { const d = sheet(() => '<h2>Settings</h2><div style="clear:both"></div>' + [['ai', 'spark', 'Assistant', [ME === 'Paul' ? (aiOn() ? 'On' : 'Off') : '', S.ai_rules.length ? (n => `${n} rule${n === 1 ? '' : 's'} on`)(S.ai_rules.filter(r => r.active !== '0').length) : 'Rules in plain English'].filter(Boolean).join(' · ')],
     ['mealsHome', 'book', 'Meals', 'Dinner rules and the instructions for importing recipes']].concat(SETTINGS)
-  .map(([k, icon, l, sub]) => k === 'mealsHome' ? hrow('mealsHome', '', icon, l, sub) : hrow('homeOpen', k, icon, l, sub)).join(''));
+  .map(([k, icon, l, sub]) => k === 'mealsHome' ? hrow('mealsHome', '', icon, l, sub) : hrow('homeOpen', k, icon, l, sub)).join('')); d._settings = true; };
 // ---------- Notes: a shared scratch pad at the bottom of Home, visible to everyone ----------
 const notesHTML = () => { const ns = S.notes.filter(n => n.text).sort((a, b) => (b.time || '').localeCompare(a.time || ''));
   return `<div class="sect row" style="justify-content:space-between;align-items:center;padding-right:16px"><span>Notes</span><button class="lnk" style="text-transform:none;letter-spacing:0" data-a="noteEdit" aria-label="Add a note">${ic('plus', 15)}Note</button></div>` +
@@ -2621,14 +2649,8 @@ const PAGES = {
     ${S.SchoolCal.filter(c => c.schoolId === s.id && (c.endDate || c.date) >= TODAY).sort((a, b) => a.date.localeCompare(b.date)).slice(0, 12).map(c => `<div class="row small" style="padding:5px 0 5px 12px" data-a="open" data-t="SchoolCal" data-id="${c.id}"><span>${fmtDay(c.date)} · ${esc(c.title)}</span><span class="muted">${c.kind === 'off' ? 'No school' : c.kind === 'half' ? 'Half day' : ''}</span></div>`).join('')}`).join('') +
     `<div class="actions"><button class="btn" data-a="add" data-v="SchoolCal">＋ Calendar item</button><button class="btn gray" data-a="add" data-v="Schools">＋ School</button></div><div class="small muted" style="margin-top:10px">You can also type or paste a whole school calendar into the SchoolCal tab of the Sheet.</div>`,
   Activities: () => '<h2>Activities</h2>' + (actGroups().map(g => rowLi('Activities', g[0].id, g[0].name, `${joinNames(list(g[0].kids))} · ${schedTxt(g)}`)).join('') || '<div class="empty">No activities yet.</div>') + addBtn('Activities', 'Add an activity'),
-  Caretakers: () => '<h2>Caretakers</h2>' + S.Caretakers.map(k => rowLi('Caretakers', k.id, k.name + (k.drive === '1' ? ' (drives)' : ''), [k.roster, k.unpaid === '1' ? 'Unpaid' : k.rate ? '$' + k.rate + '/hr' : '', k.phone].filter(Boolean).join(' · '))).join('') + addBtn('Caretakers', 'Add a caretaker'),
-  birthdays: () => '<h2>Birthdays</h2>' + (allBirthdays().sort((a, b) => a.name.localeCompare(b.name)).map(b => rowLi(b.t, b.id, b.name, parse('2024-' + b.md).toLocaleDateString('en-US', { month: 'long', day: 'numeric' }) + (b.year ? ` · turns ${ageOn(b, TODAY) + 1} next` : ''))).join('') || '<div class="empty">No birthdays yet.</div>') + addBtn('Birthdays', 'Add a birthday'),
   houses: () => '<h2>House</h2>' + ['Boston', 'Cape'].map(h => `<h3>${h === 'Cape' ? 'Cape house' : h}</h3>` + (S.HouseCards.filter(c => c.house === h).sort((a, b) => a.kind.localeCompare(b.kind)).map(c => rowLi('HouseCards', c.id, c.title, c.kind === 'upkeep' ? `Every ${c.everyMonths || '?'} months · next ${c.nextDue ? fmtDay(c.nextDue) : 'not set'}` : (c.body || '').slice(0, 50))).join('') || '<div class="small muted">Nothing here yet.</div>')).join('') +
     addBtn('HouseCards', 'Add info or upkeep') + '<h3>Locations (for weather)</h3>' + S.Houses.map(h => `<div class="li" style="padding:10px 0" data-a="editH" data-v="${h.id}"><div class="grow"><div class="ti">${esc(h.name)}</div><div class="small muted">${esc(h.lat)}, ${esc(h.lon)}</div></div><span class="chev">›</span></div>`).join(''),
-  WeatherRules: () => '<h2>Weather rules</h2>' + S.WeatherRules.map(r => rowLi('WeatherRules', r.id, r.message, `If ${r.metric} is ${r.op === '<' ? 'below' : 'above'} ${r.threshold} · ${r.when === 'night' ? 'evening before' : 'morning of'}${r.push === '1' ? ' · sends a notification' : ''}${r.enabled === '0' ? ' · off' : ''}`)).join('') + S.ai_rules.filter(r => r.area === 'weather').map(aiRuleRow).join('') +
-    `<div class="actions"><button class="btn" data-a="add" data-v="WeatherRules">${ic('plus', 16)}Basic rule</button>${aiAskBtn('weather')}</div>`,
-  Groceries: () => '<h2>Grocery library</h2>' + (S.Groceries.slice().sort((a, b) => a.name.localeCompare(b.name)).map(g => rowLi('Groceries', g.id, g.name, [g.category, g.details, +g.recurDays ? 'every ' + g.recurDays + ' days' : ''].filter(Boolean).join(' · '))).join('') || '<div class="empty">Empty so far.</div>') + addBtn('Groceries', 'Add a grocery card'),
-  TodoTypes: () => '<h2>To-do types</h2>' + S.TodoTypes.map(t => rowLi('TodoTypes', t.id, t.name, `Goes to ${t.assignee || 'either of us'}${t.builtin === '1' ? ' · built in' : ''}`)).join('') + addBtn('TodoTypes', 'Add a type'),
   memories: () => `<h2>Quotes and memories</h2><div class="kv">${S.Quotes.length} wedding quote${S.Quotes.length === 1 ? '' : 's'} and ${S.Memories.length} "this day" memor${S.Memories.length === 1 ? 'y' : 'ies'} saved.</div><div class="kv muted small">Add them in the Sheet: the Quotes tab (quote, author) and the Memories tab (date, note, and an optional link to a photo in Google Drive). On a day with a quote or memory, a splash screen shows the first time each of you opens the app.</div>
     <div class="actions"><button class="btn gray" data-a="splashAgain">Show today's splash again</button></div>`,
   ai: () => { const rules = `<h3>Rules</h3><div class="small muted">Rules in plain English. Each time the assistant runs it checks them all and posts a note only when one applies, to the people that rule names.</div>` +
@@ -2655,7 +2677,7 @@ const PAGES = {
 ` +
       (API_URL ? '' : `<h3>Connection</h3><label>Backend URL</label><input id="sUrl" value="${esc(store.get('url'))}"><div class="actions"><button class="btn gray" data-a="connect">Save and reconnect</button></div>`); }
 };
-A.homeOpen = k => { if (!ME && k !== 'settings') return; if (HH_TITLES[k]) return goHH(k); sheet(() => PAGES[k]()); };
+A.homeOpen = k => { if (!ME && k !== 'settings') return; if (HH_TITLES[k]) { HH_FROM = sheets.some(d => d._settings) ? 'settings' : ''; return goHH(k); } sheet(() => PAGES[k]()); };
 A.settings = () => sheet(ME ? () => PAGES.settings() : `<h2>Connect</h2><label>Backend URL (Apps Script web app)</label><input id="sUrl" value="${esc(store.get('url'))}" placeholder="https://script.google.com/macros/s/.../exec"><div class="actions"><button class="btn" data-a="connect">Connect</button></div>`);
 A.editH = id => editForm('Houses', byId('Houses', id));
 A.setFlag = (v, el) => setSt(el.dataset.k, v === '1' ? '1' : '0'); A.setVal = (v, el) => setSt(el.dataset.k, v);
