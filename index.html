@@ -97,12 +97,13 @@
   .llmtxt { white-space:pre-wrap; font-size:12px; line-height:1.45; background:var(--soft); border-radius:12px; padding:12px; max-height:50vh; overflow:auto; }
   .rcard.dim .ti, .rcard.dim .small { opacity:.5; }
   .rcard .ti { font-weight:700; font-size:16px; }
-  .nights { display:grid; grid-template-columns:repeat(4, minmax(0, 1fr)); gap:6px; padding:10px 14px 12px; } .nights .nhint, .nights .wklbl { grid-column:1 / -1; }
-  .night { border:0; font:inherit; border-radius:10px; background:var(--soft); color:var(--text); padding:8px 8px; text-align:left; min-width:0; touch-action:manipulation; } .night:active { transform:scale(.97); }
+  .nights { display:flex; gap:8px; overflow-x:auto; padding:6px 16px 12px; scrollbar-width:none; -webkit-overflow-scrolling:touch; overscroll-behavior-x:contain; touch-action:pan-x; scroll-snap-type:x proximity; } .nights::-webkit-scrollbar { display:none; }
+  .nhint { padding:10px 16px 0; }
+  .night { flex:0 0 auto; border:0; font:inherit; border-radius:12px; background:var(--soft); color:var(--text); padding:8px 10px; text-align:left; min-width:96px; scroll-snap-align:start; } .night:active { transform:scale(.97); }
   .night.free { background:color-mix(in srgb, var(--green) 10%, var(--card)); box-shadow:inset 0 0 0 1px color-mix(in srgb, var(--green) 30%, transparent); }
-  .night b { display:block; font-size:13px; } .night span { display:block; font-size:11.5px; color:var(--muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .night b { display:block; font-size:13px; } .night span { display:block; font-size:12px; color:var(--muted); max-width:130px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .night.cur { outline:2px solid var(--accent); }
-  .wklbl { margin-top:4px; font-size:11px; font-weight:800; color:var(--muted); text-transform:uppercase; letter-spacing:.4px; }
+  .wklbl { flex:0 0 auto; align-self:center; font-size:11px; font-weight:800; color:var(--muted); text-transform:uppercase; letter-spacing:.4px; }
   .rstars { color:var(--accent); letter-spacing:1px; }
   /* sheets */
   dialog { border:0; margin:auto 0 0; width:100%; max-width:100%; max-height:90vh; overflow:auto; padding:22px 18px calc(22px + env(safe-area-inset-bottom)); border-radius:22px 22px 0 0; background:var(--card); color:var(--text); }
@@ -322,7 +323,7 @@
 // Momnie Family app v6.0
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'], DAYN = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'], ADULTS = ['Paul', 'Shana'];
 // Shown at the bottom of Home. Bump it together with VERSION in sw.js on every release.
-const APP_VERSION = '10.8 · Nov 18, 2026';
+const APP_VERSION = '10.9 · Nov 18, 2026';
 const TABLES = ['People', 'Schools', 'SchoolCal', 'Activities', 'Overrides', 'Events', 'Caretakers', 'Childcare', 'Birthdays', 'Todos', 'TodoTypes', 'Recipes', 'DinnerRules', 'Weeks', 'Menus',
   'Groceries', 'GroceryList', 'HouseCards', 'Houses', 'WeatherRules', 'Quotes', 'Memories', 'Updates', 'Messages', 'Activity', 'Comments', 'Reactions', 'Links', 'Settings', 'Photos', 'gifts', 'daily_items', 'daily_completions'];
 const CAT = { School: '#3f6fb5', Kids: '#4f7cc2', Work: '#64748b', Family: '#5b6fa8', Dinner: '#b08a4f', Caretaker: '#3e9aa6', Shared: '#94a3b8', Birthday: '#c9806a' }, SCHOOL_C = ['#5a72b8', '#7a8597', '#4a6fb0'];
@@ -1830,12 +1831,12 @@ function nightsHTML(rid) {
   const cur = mondayOf(TODAY), end = addDays(cur, 13), out = []; let last = '';
   for (let d = TODAY; d <= end; d = addDays(d, 1)) {
     const wk = mondayOf(d), m = S.Menus.find(x => x.date === d);
-    if (wk !== last) { out.push(`<div class="wklbl">${wk === cur ? 'This week' : 'Next week'}</div>`); last = wk; }
+    if (wk !== last) { out.push(`<span class="wklbl">${wk === cur ? 'This week' : 'Next week'}</span>`); last = wk; }
     const now = m && m.skipped === '1' ? 'Skipped' : (m && dish(m)) || 'Open';
     const open = !m || !dish(m) || m.skipped === '1';
     out.push(`<button class="night ${m && m.recipeId === rid ? 'cur' : ''} ${open ? 'free' : ''}" data-a="recPlace" data-v="${rid}|${d}"><b>${d === TODAY ? 'Tonight' : DAYS[dowIdx(d)] + ' ' + +d.slice(8)}</b><span>${esc(now)}</span></button>`);
   }
-  return `<div class="nights"><div class="small muted nhint">Tap a night to put it there.</div>${out.join('')}</div>`;
+  return `<div class="small muted nhint">Scroll sideways, then tap a night.</div><div class="nights">${out.join('')}</div>`;
 }
 function vRecFeed() {
   const q = RFQ.toLowerCase(), live = S.Recipes.filter(r => r.name && (RARCH && !PFOR ? r.status === 'archived' : r.status !== 'archived'));
