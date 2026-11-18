@@ -353,7 +353,7 @@
 // Momnie Family app v6.0
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'], DAYN = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'], ADULTS = ['Paul', 'Shana'];
 // Shown at the bottom of Home. Bump it together with VERSION in sw.js on every release.
-const APP_VERSION = '14.4 · Nov 18, 2026';
+const APP_VERSION = '14.5 · Nov 18, 2026';
 const TABLES = ['People', 'Schools', 'SchoolCal', 'Activities', 'Overrides', 'Events', 'Caretakers', 'Childcare', 'Birthdays', 'Todos', 'TodoTypes', 'Recipes', 'DinnerRules', 'Weeks', 'Menus',
   'Groceries', 'GroceryList', 'HouseCards', 'Houses', 'WeatherRules', 'Quotes', 'Memories', 'Updates', 'Messages', 'Activity', 'Comments', 'Reactions', 'Links', 'Settings', 'Photos', 'gifts', 'ai_rules', 'ai_requests', 'notes', 'daily_items', 'daily_completions'];
 const CAT = { School: '#3f6fb5', Kids: '#4f7cc2', Work: '#64748b', Family: '#5b6fa8', Dinner: '#b08a4f', Caretaker: '#3e9aa6', Shared: '#94a3b8', Birthday: '#c9806a' }, SCHOOL_C = ['#5a72b8', '#7a8597', '#4a6fb0'];
@@ -727,11 +727,13 @@ const WEEK = DAYS.slice(0, 5);
 const schoolWeek = sch => { const h = schoolHours(sch); return WEEK.map(day => { const w = h[day];
   return { day, start: w ? w[0] || '' : sch.start || '', end: w ? w[1] || '' : sch.end || '', ext: w && w.length > 2 ? w[2] || '' : sch.extEnd || '' }; }); };
 // Each kid's own pickup and extended-day times, kept in Settings as kid|<id>|schedule = {"Wed":{"e":"15:00","x":"17:30"}}.
+// {"Mon":{"off":"1"}} means the kid doesn't go that day: no school block, no drop-off or pickup, no "who?" alerts.
 // A blank time means "use the school's". Kids saved before this have no row, so their old extended-day days still work.
 function kidSchedRaw(kid) { const r = byId('Settings', 'kid|' + kid.id + '|schedule'); if (!r) return null; try { const o = JSON.parse(r.value || '{}'); return o && typeof o === 'object' ? o : {}; } catch (e) { return {}; } }
 function kidWeekRows(kid, sch) {
   const sc = schoolWeek(sch || {}), sched = kid ? kidSchedRaw(kid) : null;
   return sc.map(w => { const k = sched ? (sched[w.day] || {}) : {}, legacy = !sched && kid && list(kid.extDays).includes(w.day) && w.start ? w.ext : '';
+    if (k.off) return { day: w.day, s: '', e: '', x: '', off: true };
     return { day: w.day, s: w.start, e: k.e || w.end, x: k.x || legacy || '' }; });
 }
 // ----- School drop-off and pickup -----
@@ -1133,8 +1135,10 @@ const FORMS = {
     F('payDay', 'Pay day', 'sel', DAYS.map((d, i) => [d, DAYN[i]]), { show: x => x.pay === 'weekly' }),
     F('weekly', 'Usual weekly amount (optional; else hours × rate)', 'num', null, { show: x => x.pay === 'weekly' }),
     F('rate', 'Hourly rate', 'num', null, { show: x => x.pay !== 'unpaid' }), F('notes', 'Notes', 'area')]; },
-  People: [F('name', 'Name'), F('kind', 'Adult or kid', 'sel', [['adult', 'Adult'], ['kid', 'Kid']], { re: 1 }), F('schoolId', 'School', 'sel', () => [['', 'None']].concat(S.Schools.map(s => [s.id, s.name])), { show: x => x.kind === 'kid', re: 1, on: x => { delete x._sched; } }),
-    F('_sched', 'School day for this kid', 'rows', null, { fixed: 1, noDur: 1, copy: 1, step: 5, show: x => x.kind === 'kid' && !!x.schoolId,
+  People: [F('name', 'Name'), F('kind', 'Adult or kid', 'sel', [['adult', 'Adult'], ['kid', 'Kid']], { re: 1 }), F('schoolId', 'School', 'sel', () => [['', 'None']].concat(S.Schools.map(s => [s.id, s.name])), { show: x => x.kind === 'kid', re: 1, on: x => { delete x._sched; x._days = schoolWeek(byId('Schools', x.schoolId) || {}).filter(w => w.start).map(w => w.day).join(', '); } }),
+    F('_days', 'Days at school', 'multi', x => schoolWeek(byId('Schools', x.schoolId) || {}).filter(w => w.start).map(w => w.day), { show: x => x.kind === 'kid' && !!x.schoolId, re: 1,
+      hint: 'Untick a day the kid doesn\'t go. That day gets no drop-off, pickup or "who\'s picking up?" reminders.' }),
+    F('_sched', 'School day for this kid', 'rows', null, { fixed: 1, noDur: 1, copy: 1, step: 5, show: x => x.kind === 'kid' && !!x.schoolId, rowShow: (r, x) => x._days === undefined || list(x._days).includes(r.day),
       hint: 'Starts from the school. Change a pickup only if it differs. Set an extended-day pickup for days they stay late. Extended day shows as its own Planner event. After-school classes go under Home → Activities.',
       init: x => { const sc = schoolWeek(byId('Schools', x.schoolId) || {}), raw = x.id && kidSchedRaw(x),
         saved = raw || Object.fromEntries(sc.filter(w => w.start && w.ext && list(x.extDays).includes(w.day)).map(w => [w.day, { x: w.ext }]));
@@ -1195,14 +1199,19 @@ const SAVE = {
     return write({ t: 'Caretakers', row: Object.assign({}, v, { id: v.id || nid(), unpaid: v.pay === 'unpaid' ? '1' : '', payDay: v.pay === 'weekly' ? v.payDay || 'Fri' : '', weekly: v.pay === 'weekly' ? v.weekly || '' : '' }) }); },
   People(v) { need(v.name && v.name.trim(), 'Name is required.');
     const row = Object.assign({}, v, { id: v.id || nid() }), ops = [{ t: 'People', row }];
-    delete row._sched; delete row.extDays; delete row._wfh; delete row._hours;
+    delete row._sched; delete row.extDays; delete row._wfh; delete row._hours; delete row._days;
     if (row.kind !== 'kid' && v._hours) { const days = list(row.workDays), hrs = {};
       v._hours.forEach(r => { if (days.includes(r.day) && r.s) { need(!r.e || r.e > r.s, `${r.day}: work should end after it starts.`); hrs[r.day] = { s: r.s, e: r.e || '' }; } });
       const first = DAYS.find(d => hrs[d]); if (first) { row.workStart = hrs[first].s; row.workEnd = hrs[first].e; }
       ops.push({ t: 'Settings', row: { id: 'person|' + row.id + '|hours', value: Object.keys(hrs).length ? JSON.stringify(hrs) : '' } }); }
     if (row.workDays) row.workDays = DAYS.filter(d => list(row.workDays).includes(d)).join(', ');
     if (row.kind !== 'kid' && v._wfh !== undefined) { const w = v.id ? wfhOf(byId('People', v.id) || row) : { days: [], dates: {} }; w.days = list(v._wfh).filter(d => list(row.workDays).includes(d)); ops.push(wfhSave(row, w)); }
-    if (row.kind === 'kid' && v._sched) { v._sched.forEach(r => need(!r.x || !r.e || r.x > r.e, 'The extended-day pickup must be after the pickup.')); const sch = {}; v._sched.forEach(r => { if (r.e || r.x) sch[r.day] = { e: r.e || '', x: r.x || '' }; });
+    if (row.kind === 'kid' && (v._sched || v._days !== undefined)) {
+      // Days the kid doesn't go are saved as off; the school's other days keep any pickup or extended-day times.
+      const open = schoolWeek(byId('Schools', row.schoolId) || {}).filter(w => w.start).map(w => w.day), going = v._days === undefined ? open : list(v._days).filter(d => open.includes(d));
+      need(!open.length || going.length, 'Pick at least one day at school.');
+      const rowsIn = (v._sched || []).filter(r => going.includes(r.day)); rowsIn.forEach(r => need(!r.x || !r.e || r.x > r.e, 'The extended-day pickup must be after the pickup.'));
+      const sch = {}; rowsIn.forEach(r => { if (r.e || r.x) sch[r.day] = { e: r.e || '', x: r.x || '' }; }); open.filter(d => !going.includes(d)).forEach(d => { sch[d] = { off: '1' }; });
       ops.push({ t: 'Settings', row: { id: 'kid|' + row.id + '|schedule', value: Object.keys(sch).length ? JSON.stringify(sch) : '' } }); }
     return write(ops); },
   gifts(v) { need(v.name && v.name.trim(), 'Name the gift.'); need(v.recipient, 'Who is it for?');
@@ -1611,7 +1620,7 @@ function hhProfile() {
 }
 A.hhEdit = v => { const [t, id] = v.split('|'), r = byId(t, id); if (r) editForm(t, r); };
 A.hhAddHouse = h => editForm('HouseCards', null, { house: h });
-A.personEdit = id => { const p = byId('People', id); if (p) editForm('People', p, p.kind === 'kid' ? null : { _wfh: wfhOf(p).days.join(', ') }); };
+A.personEdit = id => { const p = byId('People', id); if (p) editForm('People', p, p.kind === 'kid' ? { _days: kidWeekRows(p, byId('Schools', p.schoolId) || {}).filter(r => r.s).map(r => r.day).join(', ') } : { _wfh: wfhOf(p).days.join(', ') }); };
 A.personEvent = (name, el) => editForm('Events', null, Object.assign({ people: name }, el && el.dataset && el.dataset.d ? { date: el.dataset.d } : {}));
 A.personTodo = name => { const p = personOf(name); editForm('Todos', null, p && p.kind === 'kid' ? { kid: name } : { assignee: name }); };
 function cardHTML(t, id, date) {

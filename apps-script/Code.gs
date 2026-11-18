@@ -1,6 +1,7 @@
 /**
  * Momnie Family app backend
- * Version 3.25 (2026-11-18)
+ * Version 3.26 (2026-11-18)
+ *   3.26: A kid can have days they don't go to school (kid|<id>|schedule {"Mon":{"off":"1"}}): no runs or ride reminders those days.
  *   3.25: Work hours can differ by day (Settings person|<id>|hours); the morning summary uses them.
  *   3.24: The assistant tidies up after itself. Each review it checks its own recent notes and open questions
  *         against the current plan and clears the ones that are outdated (the question was answered somewhere
@@ -879,6 +880,7 @@ function schoolRuns_(date) {
     var cal = rows_('SchoolCal').filter(function (c) { return c.schoolId === sch.id && c.date && date >= c.date && date <= (c.endDate || c.date) && (c.kind === 'off' || c.kind === 'half'); })[0];
     if (cal && cal.kind === 'off') return;
     var schedRow = get_('Settings', 'kid|' + k.id + '|schedule'), sched = schedRow ? jsonSafe_(schedRow.value)[day] || {} : {};
+    if (sched.off) return;   // this kid doesn't go to school on this weekday
     var legacyX = !schedRow && list_(k.extDays).indexOf(day) >= 0 ? h.ext : '';
     var e = sched.e || h.end, x = sched.x || legacyX, ext = !!x && !cal;
     var pick = cal ? (cal.end || '12:00') : ext ? x : e;
