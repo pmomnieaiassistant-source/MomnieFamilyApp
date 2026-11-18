@@ -307,10 +307,10 @@
 // Momnie Family app v6.0
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'], DAYN = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'], ADULTS = ['Paul', 'Shana'];
 // Shown at the bottom of Home. Bump it together with VERSION in sw.js on every release.
-const APP_VERSION = '9.5 · Nov 18, 2026';
+const APP_VERSION = '9.6 · Nov 18, 2026';
 const TABLES = ['People', 'Schools', 'SchoolCal', 'Activities', 'Overrides', 'Events', 'Caretakers', 'Childcare', 'Birthdays', 'Todos', 'TodoTypes', 'Recipes', 'DinnerRules', 'Weeks', 'Menus',
   'Groceries', 'GroceryList', 'HouseCards', 'Houses', 'WeatherRules', 'Quotes', 'Memories', 'Updates', 'Messages', 'Activity', 'Comments', 'Reactions', 'Links', 'Settings', 'Photos', 'gifts', 'daily_items', 'daily_completions'];
-const CAT = { Kids: '#4f7cc2', Work: '#64748b', Family: '#5b6fa8', Dinner: '#b08a4f', Caretaker: '#3e9aa6', Shared: '#94a3b8', Birthday: '#c9806a' }, SCHOOL_C = ['#5a72b8', '#7a8597', '#4a6fb0'];
+const CAT = { School: '#3f6fb5', Kids: '#4f7cc2', Work: '#64748b', Family: '#5b6fa8', Dinner: '#b08a4f', Caretaker: '#3e9aa6', Shared: '#94a3b8', Birthday: '#c9806a' }, SCHOOL_C = ['#5a72b8', '#7a8597', '#4a6fb0'];
 // Muted person colors (Outlook-style): Clara pink, Conrad green, Charlie blue, Shana purple, Paul grey.
 const PCOL = { Clara: '#c8578f', Conrad: '#3d9a62', Charlie: '#3a7fd5', Shana: '#8b62c7', Paul: '#6b7280' }, PCOL_X = ['#b07a3c', '#3e9aa6', '#a65f5f'];
 const pcol = n => PCOL[n] || PCOL[String(n || '').split(' ')[0]] || PCOL_X[(String(n || '').length) % 3];
@@ -867,7 +867,7 @@ const FORMS = {
     F('link', 'Link', 'text', null, { show: () => fl.includes('link') }), F('assignee', 'For', 'sel', [['', 'Either of us'], 'Paul', 'Shana']),
     F('due', 'Due date (blank = a week from now)', 'date'), F('repeat', 'Repeats', 'sel', [['', 'Does not repeat'], ['daily', 'Every day'], ['weekly', 'Every week'], ['monthly', 'Every month'], ['yearly', 'Every year']]),
     F('house', 'House', 'sel', [['', 'N/A'], ['Boston', 'Boston'], ['Cape', 'Cape']]), F('notes', 'Notes', 'area'), F('_notify', 'Notify the other person now', 'chk')]; },
-  Events: v => [F('title', 'What is it?'), F('category', 'Category', 'sel', ['Family', 'Kids', 'Work'], { re: 1 }), F('date', 'Date', 'date'), F('allDay', 'All day', 'chk', null, { re: 1 }),
+  Events: v => [F('title', 'What is it?'), F('category', 'Type', 'sel', ['School', 'Work', 'Kids', 'Family'], { re: 1 }), F('date', 'Date', 'date'), F('allDay', 'All day', 'chk', null, { re: 1 }),
     F('endDate', 'Last day (only if it runs several days)', 'date', null, { show: x => x.allDay === '1' }), F('start', 'Starts', 'time', null, { show: x => x.allDay !== '1' }), F('end', 'Ends', 'time', null, { show: x => x.allDay !== '1', dur: 'start' }),
     F('people', 'Who is involved', 'multi', S.People.map(p => p.name)), F('location', 'Where'), F('house', 'House', 'sel', HOUSE_O),
     F('dropoff', 'Drop-off', 'sel', rideO, { show: x => x.category === 'Kids' && x.allDay !== '1' }), F('pickup', 'Pickup', 'sel', rideO, { show: x => x.category === 'Kids' && x.allDay !== '1' }),
@@ -1067,7 +1067,7 @@ const CARD = {
       (['childcare', 'findcare'].includes(src[0]) && byId('Childcare', src[1]) ? `<div class="actions"><button class="btn gray sm" data-a="open" data-t="Childcare" data-id="${src[1]}">${ic('care', 16)}Open the caretaker card</button></div>` : '') +
       `<div class="actions"><button class="btn ${done ? 'gray' : 'dark'}" data-a="todoDone" data-v="${r.id}">${done ? 'Reopen' : r.type === 'bill' || r.type === 'paycare' ? 'Mark paid' : 'Mark done'}</button>${r.type === 'appt' && !done ? '<button class="btn gray" data-a="toEvent">' + ic('planner', 16) + 'Add to Planner</button>' : ''}</div>` + std(); },
   Events(r, d) { const all = r.allDay === '1' || !r.start;
-    return `<h2>${esc(r.title)}</h2>` + kv('When', fmtDay(r.date) + (r.endDate && r.endDate > r.date ? ' – ' + fmtDay(r.endDate) : '') + (all ? ' · all day' : ` · ${fmtT(r.start)}${r.end ? '–' + fmtT(r.end) : ''}`)) + kv('Category', r.category) + kv('Who', r.people) + kv('Where', r.location) + kv('House', r.house) + kv('Notes', r.notes) +
+    return `<h2>${esc(r.title)}</h2>` + kv('When', fmtDay(r.date) + (r.endDate && r.endDate > r.date ? ' – ' + fmtDay(r.endDate) : '') + (all ? ' · all day' : ` · ${fmtT(r.start)}${r.end ? '–' + fmtT(r.end) : ''}`)) + kv('Type', r.category) + kv('Who', r.people) + kv('Where', r.location) + kv('House', r.house) + kv('Notes', r.notes) +
       kv('Calendar', r.gcalId ? 'Copied to the shared calendar; change it here, not in Google Calendar' : '') + (r.category === 'Kids' && !all ? rideBox('Rides', r.dropoff, r.pickup) : '') + std({ care: 1 }); },
   GCal(r) { return `<h2>${esc(r.title)}</h2>` + kv('When', r.allDay ? fmtDay(r.start) + (addDays(r.end, -1) > r.start ? ' – ' + fmtDay(addDays(r.end, -1)) : '') + ' · all day' : `${fmtDay(r.start)} · ${fmtT(r.start.slice(11))}–${fmtT(r.end.slice(11))}`) + kv('Where', r.location) + kv('From', 'Shared calendar') +
       `<div class="kv muted small">${r.recurring ? 'A repeating entry from the shared calendar. Import it as an app activity to manage it here, with rides and the kids it is for.' : 'From the shared calendar. Import it to add who it is for, rides and caretakers, and edit it here.'}</div>` +
@@ -1331,7 +1331,7 @@ A.convert = (v, el) => { const r = CAL.find(x => x.id === ctx(el).id); if (!r) r
   const opt = (k, icon, t, sub) => `<div class="li" style="padding:12px 0" data-a="convertAs" data-v="${k}" data-id="${esc(r.id)}"><div class="hicon">${ic(icon)}</div><div class="grow"><div class="ti">${t}</div><div class="small muted">${sub}</div></div><span class="chev">›</span></div>`;
   sheet(() => `<h2>Import into the app</h2><div class="small muted" style="margin-bottom:8px">“${esc(r.title)}” comes into the app as ${r.recurring ? 'an activity' : 'an event'}. The calendar entry stays where it is, just managed by the app now, so it shows once. Edit it in the app from now on. What is it?</div>` +
     (r.recurring ? opt('activity', 'activity', 'Repeating activity', 'Swimming, lessons, practice, a standing meeting. Weekly, with rides and who it is for.')
-      : opt('Kids', 'users', 'Kids event', 'Appointment, party, game. With rides and caretakers.') + opt('Work', 'building', 'Work event', 'Shows on your page and in Right now.') + opt('Family', 'house', 'Family or social event', 'Plans for the family or just the two of you.'))); };
+      : opt('School', 'school', 'School event', 'Conference, concert, early dismissal, school function.') + opt('Work', 'building', 'Work event', 'Shows on your page and in Right now.') + opt('Kids', 'users', 'Kids event', 'Appointment, party, game. With rides and caretakers.') + opt('Family', 'house', 'Family or social event', 'Plans for the family or just the two of you.'))); };
 A.convertAs = (k, el) => { const r = CAL.find(x => x.id === el.dataset.id); if (!r) return; A.close(null, el);
   const who = S.People.filter(p => new RegExp('(^|[^A-Za-z])' + p.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '(?![A-Za-z])', 'i').test(r.title)).map(p => p.name).join(', ');
   if (k === 'activity') {
