@@ -168,6 +168,10 @@
   .av { background:none !important; padding:0; width:40px; height:40px; } .av i { border:0; font-size:14px; } .av i .ic { vertical-align:0; }
   .check.on { background:var(--accent); color:var(--onacc); }
   .dayhead.today b { background:none; color:var(--accent); -webkit-text-fill-color:currentColor; }
+  .dayhead.today { margin:10px 10px 0; padding:10px 10px 8px 12px; border-radius:14px 14px 0 0; background:var(--accsoft); }
+  .pad.todaypad { margin:0 10px 6px; padding:6px 8px 10px; border-radius:0 0 14px 14px; background:var(--accsoft); }
+  .tbadge { display:inline-block; margin-right:8px; padding:2px 8px; border-radius:6px; background:var(--accent); color:var(--onacc); font-size:11px; font-weight:800; letter-spacing:.5px; text-transform:uppercase; vertical-align:2px; }
+  .dayhead.past, .pad.pastpad { opacity:.55; }
   .pc { background:color-mix(in srgb, var(--c) 12%, var(--card)); } .pci { color:var(--c); display:flex; }
   dialog { background:var(--card); }
   /* Today card */
@@ -211,7 +215,7 @@
   .wseg button { border:0; background:none; font:inherit; font-size:13px; font-weight:700; color:var(--muted); padding:5px 12px; border-radius:8px; display:inline-flex; align-items:center; gap:4px; }
   .wseg button.on { background:var(--card); color:var(--accent); box-shadow:0 1px 3px rgba(0,0,0,.12); } .small.wfh { color:var(--accent); font-weight:600; }
   dialog:not(.splash)::before { content:''; display:block; width:40px; height:5px; border-radius:3px; background:var(--line); margin:-12px auto 8px; }
-  .dcard { transition:transform .15s; } .dcard.clearing { box-shadow:inset 0 0 0 2px #e5484d; } .dcard.clearing::after { content:'Release to clear'; position:absolute; right:14px; top:12px; font-size:12px; font-weight:700; color:#e5484d; }
+  .dcard.clearing { box-shadow:inset 0 0 0 2px #e5484d; } .dcard.clearing::after { content:'Release to clear'; position:absolute; right:14px; top:12px; font-size:12px; font-weight:700; color:#e5484d; }
   input.fk { flex:0 0 38% !important; font-weight:600; } .pbox .li.plain:last-child { border-bottom:0; } .psec .lbl { margin:0 0 4px; } .li.plain { padding:10px 0; border-bottom:1px solid var(--line); }
   a.mention { color:var(--accent); font-weight:700; } .plink { cursor:pointer; }
   .msugg { display:flex; flex-wrap:wrap; gap:6px; margin-top:6px; }
@@ -303,7 +307,7 @@
 // Momnie Family app v6.0
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'], DAYN = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'], ADULTS = ['Paul', 'Shana'];
 // Shown at the bottom of Home. Bump it together with VERSION in sw.js on every release.
-const APP_VERSION = '9.4 · Nov 18, 2026';
+const APP_VERSION = '9.5 · Nov 18, 2026';
 const TABLES = ['People', 'Schools', 'SchoolCal', 'Activities', 'Overrides', 'Events', 'Caretakers', 'Childcare', 'Birthdays', 'Todos', 'TodoTypes', 'Recipes', 'DinnerRules', 'Weeks', 'Menus',
   'Groceries', 'GroceryList', 'HouseCards', 'Houses', 'WeatherRules', 'Quotes', 'Memories', 'Updates', 'Messages', 'Activity', 'Comments', 'Reactions', 'Links', 'Settings', 'Photos', 'gifts', 'daily_items', 'daily_completions'];
 const CAT = { Kids: '#4f7cc2', Work: '#64748b', Family: '#5b6fa8', Dinner: '#b08a4f', Caretaker: '#3e9aa6', Shared: '#94a3b8', Birthday: '#c9806a' }, SCHOOL_C = ['#5a72b8', '#7a8597', '#4a6fb0'];
@@ -1360,7 +1364,11 @@ function render() {
   $('view').innerHTML = ({ feed: vFeed, planner: vPlanner, meals: vDinner, todo: vTodo, home: vHome, person: vPerson })[view]();
   if (view === 'person') document.documentElement.style.setProperty('--hdrh', document.querySelector('header').offsetHeight + 'px');
 }
-A.nav = v => { if (v === 'dailyGo') { view = 'todo'; render(); window.scrollTo(0, 0); return A.dailyOpen(); } view = v; render(); window.scrollTo(0, 0); };
+A.nav = v => { if (v === 'dailyGo') { view = 'todo'; render(); window.scrollTo(0, 0); return A.dailyOpen(); }
+  if (v === 'planner') { PW = mondayOf(TODAY); view = v; render(); return plannerToToday(); }
+  view = v; render(); window.scrollTo(0, 0); };
+/** Puts today at the top of the screen (earlier days stay above, a scroll away). */
+function plannerToToday() { const el = $('day-' + TODAY); if (!el) return window.scrollTo(0, 0); window.scrollTo(0, Math.max(0, el.getBoundingClientRect().top + window.scrollY - document.querySelector('header').offsetHeight - 6)); }
 function pcard(i) {
   const n = cmts(i.t, i.id).filter(c => c.system !== '1').length;
   const sub = [i.sub && esc(i.sub), i.ride && rideHTML(i)].filter(Boolean).join(' · ');
@@ -1539,7 +1547,7 @@ function vPlanner() {
       <div class="small muted" style="margin-top:10px">Kept on this phone.</div></div>` : ''}
     ${off.length ? `<div class="small muted rapplied" style="padding:2px 8px 0">Hiding ${esc(off.join(', '))} · <a data-a="pfAll">Show everything</a></div>` : ''}</div>`;
   for (let n = 0; n < 7; n++) { const d = addDays(PW, n), it = itemsFor(d).filter(pass), all = it.filter(i => !i.start && i.src !== 'dinner'), timed = it.filter(i => i.start || i.src === 'dinner');
-    html += `<div class="dayhead ${d === TODAY ? 'today' : ''}" id="day-${d}"><span><b>${DAYN[n]}</b> <span class="muted">${fmtDate(d)}</span></span><button class="chip" data-a="dayAdd" data-v="${d}">＋ Add</button></div><div class="pad">
+    html += `<div class="dayhead ${d === TODAY ? 'today' : d < TODAY ? 'past' : ''}" id="day-${d}"><span>${d === TODAY ? '<span class="tbadge">Today</span>' : ''}<b>${DAYN[n]}</b> <span class="muted">${fmtDate(d)}</span></span><button class="chip" data-a="dayAdd" data-v="${d}">＋ Add</button></div><div class="pad ${d === TODAY ? 'todaypad' : d < TODAY ? 'pastpad' : ''}">
       ${all.length ? `<div class="allday">${all.map(pcard).join('')}</div>` : ''}${timed.map(pcard).join('')}${it.length ? '' : '<div class="muted small" style="padding:4px 0 8px">Nothing planned</div>'}</div>`; }
   return html + `<div class="chips" style="padding-top:16px;flex-wrap:wrap">${[...S.People.map(p => [p.name === 'Paul' ? 'Dad (Paul)' : p.name, pcol(p.name)]), ['Family', CAT.Family], ...S.Schools.map((s, i) => [s.short || s.name, SCHOOL_C[i % 3]]), ['Dinner', CAT.Dinner], ['Caretaker', CAT.Caretaker], ['Shared calendar', CAT.Shared], ['Birthdays', CAT.Birthday]].map(([l, c]) => `<span class="small muted" style="white-space:nowrap"><span class="dot" style="background:${c}"></span>${l}</span>`).join('')}<span class="small muted" style="white-space:nowrap">${ic('up', 13)}drops off ${ic('down', 13)}picks up</span></div>`;
 }
@@ -2014,18 +2022,19 @@ document.addEventListener('visibilitychange', () => {
   if (ME && Date.now() - lastLoad > 60000 && !sheets.length) load().catch(() => {}); });
 // swipe an upcoming dinner: right = change it (Random or Select), left = clear it (no meal set)
 (function () { let x0 = null, y0 = 0, el = null;
-  const reset = () => { if (el) { el.style.transform = ''; el.classList.remove('clearing'); } };
-  document.addEventListener('touchstart', e => { el = e.target.closest('.dcard[data-swipe]'); if (el) { x0 = e.touches[0].clientX; y0 = e.touches[0].clientY; } }, { passive: true });
-  document.addEventListener('touchmove', e => { if (!el || x0 === null) return; const dx = e.touches[0].clientX - x0; if (Math.abs(e.touches[0].clientY - y0) > 30) { reset(); el = null; return; }
-    el.style.transform = `translateX(${Math.max(-140, Math.min(140, dx * 0.6))}px)`; el.classList.toggle('clearing', dx < -70); }, { passive: true });
+  // While the finger moves the card follows it directly (no transition); it eases back on release.
+  const reset = () => { if (el) { const e = el; e.style.transition = 'transform .18s ease-out'; e.style.transform = ''; e.classList.remove('clearing'); setTimeout(() => { e.style.transition = ''; e.style.willChange = ''; }, 200); } };
+  let raf = 0, lastDx = 0;
+  document.addEventListener('touchstart', e => { el = e.target.closest('.dcard[data-swipe]'); if (el) { x0 = e.touches[0].clientX; y0 = e.touches[0].clientY; el.style.transition = 'none'; el.style.willChange = 'transform'; } }, { passive: true });
+  document.addEventListener('touchmove', e => { if (!el || x0 === null) return; lastDx = e.touches[0].clientX - x0; if (Math.abs(e.touches[0].clientY - y0) > 30) { reset(); el = null; return; }
+    if (!raf) raf = requestAnimationFrame(() => { raf = 0; if (!el) return; el.style.transform = `translateX(${Math.max(-140, Math.min(140, lastDx * 0.6))}px)`; const c = lastDx < -70; if (c !== el.classList.contains('clearing')) el.classList.toggle('clearing', c); }); }, { passive: true });
   document.addEventListener('touchend', e => { if (!el || x0 === null) return; const dx = e.changedTouches[0].clientX - x0, id = el.dataset.menu; reset(); el = null; x0 = null;
     if (Math.abs(dx) <= 70) return;
     const stop = ev => { ev.stopPropagation(); ev.preventDefault(); }; document.addEventListener('click', stop, { capture: true, once: true }); setTimeout(() => document.removeEventListener('click', stop, { capture: true }), 400);
     if (dx > 0) { MCHG = id; render(); } else A.dinClear(id); }); })();
 A.dinClear = id => { const m = byId('Menus', id); if (!m) return; if (!m.recipeId && !m.note) { toast('Nothing planned for ' + fmtDay(m.date) + ' yet'); return; }
-  const prev = { id, recipeId: m.recipeId || '', note: m.note || '', kept: m.kept || '', skipped: m.skipped || '' };
   write({ t: 'Menus', row: { id, recipeId: '', note: '', kept: '1', skipped: '' }, log: menuLog(m, 'menu_set', `cleared dinner for ${fmtDay(m.date)}`) });
-  undoToast('Cleared dinner for ' + fmtDay(m.date), () => write({ t: 'Menus', row: prev, log: menuLog(m, 'menu_set', `put back dinner for ${fmtDay(m.date)}`) })); };
+  toast('Cleared dinner for ' + fmtDay(m.date)); };
 // swipe on a recipe in Meals > Recipes: right = pick a night, left = skip for now
 (function () { let x0 = null, y0 = 0, el = null, inn = null, moved = false;
   document.addEventListener('touchstart', e => { el = e.target.closest('.rcard[data-rid]'); inn = el && el.querySelector('.rin'); moved = false; if (el) { x0 = e.touches[0].clientX; y0 = e.touches[0].clientY; } }, { passive: true });
