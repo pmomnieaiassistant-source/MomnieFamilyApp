@@ -324,7 +324,7 @@
 // Momnie Family app v6.0
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'], DAYN = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'], ADULTS = ['Paul', 'Shana'];
 // Shown at the bottom of Home. Bump it together with VERSION in sw.js on every release.
-const APP_VERSION = '11.9 · Nov 18, 2026';
+const APP_VERSION = '12.0 · Nov 18, 2026';
 const TABLES = ['People', 'Schools', 'SchoolCal', 'Activities', 'Overrides', 'Events', 'Caretakers', 'Childcare', 'Birthdays', 'Todos', 'TodoTypes', 'Recipes', 'DinnerRules', 'Weeks', 'Menus',
   'Groceries', 'GroceryList', 'HouseCards', 'Houses', 'WeatherRules', 'Quotes', 'Memories', 'Updates', 'Messages', 'Activity', 'Comments', 'Reactions', 'Links', 'Settings', 'Photos', 'gifts', 'daily_items', 'daily_completions'];
 const CAT = { School: '#3f6fb5', Kids: '#4f7cc2', Work: '#64748b', Family: '#5b6fa8', Dinner: '#b08a4f', Caretaker: '#3e9aa6', Shared: '#94a3b8', Birthday: '#c9806a' }, SCHOOL_C = ['#5a72b8', '#7a8597', '#4a6fb0'];
@@ -2274,7 +2274,7 @@ function splash(force) {
   if (dly && (force || st('splashHidden', '') !== TODAY)) q.push({ a: dly });
   if (force && !dly) toast('Nothing to show today.');
   const next = () => { const x = q.shift(); if (!x) return;
-    const d = sheet(x.u ? `<div class="small muted b">WHAT'S NEW${x.u.date ? ' · ' + fmtDate(x.u.date) : ''}</div><h2 style="margin-top:6px">${esc(x.u.title)}</h2><div style="text-align:left">${md(x.u.message)}</div>` : `<div class="small muted b">${fmtLong(TODAY).toUpperCase()}</div><div style="margin-top:10px">${dailyHTML(x.a)}</div>`, 'splash');
+    const d = sheet(x.u ? `<div class="small muted b">${x.u.label ? esc(String(x.u.label).toUpperCase()) : "WHAT'S NEW"}${x.u.date ? ' · ' + fmtDate(x.u.date) : ''}</div><h2 style="margin-top:6px">${esc(x.u.title)}</h2><div style="text-align:left">${md(x.u.message)}</div>` : `<div class="small muted b">${fmtLong(TODAY).toUpperCase()}</div><div style="margin-top:10px">${dailyHTML(x.a)}</div>`, 'splash');
     d.insertAdjacentHTML('beforeend', '<div class="actions"><button class="btn gray" style="flex:1" data-a="close">Close</button><button class="btn dark" data-a="splashHide">Hide</button></div>');
     d._hide = () => x.u ? write({ t: 'Updates', row: { id: x.u.id, hiddenFrom: list(x.u.hiddenFrom).concat(ME).join(', ') } }) : setSt('splashHidden', TODAY);
     d.addEventListener('close', () => setTimeout(next, 150)); };
