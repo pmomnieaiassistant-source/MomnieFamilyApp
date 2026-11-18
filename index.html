@@ -186,7 +186,13 @@
   /* person pages and @mentions */
   .phead { display:flex; gap:12px; align-items:center; margin-right:44px; } .phead .av { width:52px; height:52px; } .phead .av i { font-size:20px; }
   .hfoot { text-align:center; padding:28px 24px 36px; font-size:13px; color:var(--muted); line-height:1.6; } .hfoot a { color:var(--accent); font-weight:600; cursor:pointer; } .hfoot .ver { font-size:12px; font-weight:600; letter-spacing:.3px; margin-bottom:6px; opacity:.8; }
-  .psec { margin-top:16px; } .psec .lbl { margin:0 0 4px; } .li.plain { padding:10px 0; border-bottom:1px solid var(--line); }
+  .psec { margin-top:16px; }
+  .pbox { padding:14px 16px; } .pbox .boxh { padding:0 0 6px; } .pbox .boxh.row { justify-content:space-between; align-items:center; }
+  .pbox .phead { margin-right:0; } .pname { font-size:26px; font-weight:800; letter-spacing:-.3px; line-height:1.1; }
+  .pnow { margin-top:14px; padding-top:12px; border-top:1px solid var(--line); } .pnow .lbl { margin:0 0 2px; }
+  .pday { font-size:12px; font-weight:700; color:var(--muted); margin:10px 0 4px; text-transform:uppercase; letter-spacing:.5px; } .pday:first-child { margin-top:2px; }
+  .lnk { background:none; border:0; padding:4px 0; color:var(--accent); font:inherit; font-size:14px; font-weight:700; display:inline-flex; align-items:center; gap:4px; cursor:pointer; }
+  .lnk.back { padding-top:10px; font-size:15px; } .pbox .li.plain:last-child { border-bottom:0; } .psec .lbl { margin:0 0 4px; } .li.plain { padding:10px 0; border-bottom:1px solid var(--line); }
   a.mention { color:var(--accent); font-weight:700; } .plink { cursor:pointer; }
   .msugg { display:flex; flex-wrap:wrap; gap:6px; margin-top:6px; }
   .irl { align-self:center; font-weight:700; font-size:15px; }
@@ -277,7 +283,7 @@
 // Momnie Family app v6.0
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'], DAYN = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'], ADULTS = ['Paul', 'Shana'];
 // Shown at the bottom of Home. Bump it together with VERSION in sw.js on every release.
-const APP_VERSION = '8.6 · Nov 17, 2026';
+const APP_VERSION = '8.7 · Nov 18, 2026';
 const TABLES = ['People', 'Schools', 'SchoolCal', 'Activities', 'Overrides', 'Events', 'Caretakers', 'Childcare', 'Birthdays', 'Todos', 'TodoTypes', 'Recipes', 'DinnerRules', 'Weeks', 'Menus',
   'Groceries', 'GroceryList', 'HouseCards', 'Houses', 'WeatherRules', 'Quotes', 'Memories', 'Updates', 'Messages', 'Activity', 'Comments', 'Reactions', 'Links', 'Settings', 'Photos', 'gifts', 'daily_items', 'daily_completions'];
 const CAT = { Kids: '#4f7cc2', Work: '#64748b', Family: '#5b6fa8', Dinner: '#b08a4f', Caretaker: '#3e9aa6', Shared: '#94a3b8', Birthday: '#c9806a' }, SCHOOL_C = ['#5a72b8', '#7a8597', '#4a6fb0'];
@@ -407,6 +413,7 @@ const ICONS = {
   gear: '<path d="M4 6h9M17 6h3M4 12h3M11 12h9M4 18h11M19 18h1"/><circle cx="15" cy="6" r="2"/><circle cx="9" cy="12" r="2"/><circle cx="17" cy="18" r="2"/>',
   key: '<circle cx="8" cy="15" r="4"/><path d="m11 12 9-9M17 6l3 3M15 8l2 2"/>',
   plus: '<path d="M12 5v14M5 12h14"/>',
+  left: '<path d="m15 5-7 7 7 7"/>',
   pen: '<path d="M4 20h4L19 9l-4-4L4 16z"/>',
   users: '<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.5-3.5 3.2-5.5 6.5-5.5s6 2 6.5 5.5M16 4.8a3.5 3.5 0 0 1 0 6.4M18 14.8c2 .7 3.2 2.5 3.5 5.2"/>',
   school: '<path d="m2 9 10-5 10 5-10 5z"/><path d="M6 11v5c0 1.5 2.7 3 6 3s6-1.5 6-3v-5M22 9v6"/>',
@@ -812,7 +819,7 @@ const FORMS = {
       if (x.type === '_daily') { const title = x.title || ''; setTimeout(() => { const d = sheets[sheets.length - 1]; if (d) d.close(); A.dlAdd(null, null, { title }); }, 0); return; }
       x.assignee = (byId('TodoTypes', x.type) || {}).assignee || ''; } }),
     F('title', v.type === 'bill' ? 'Who is it from?' : 'What needs doing?'), F('amount', 'Amount', 'num', null, { show: () => fl.includes('amount') }),
-    F('where', 'Where to pay (link, address or account)', 'text', null, { show: () => fl.includes('where') }), F('kid', 'Which kid', 'sel', [['', 'None']].concat(kidN()), { show: () => fl.includes('kid') }),
+    F('where', 'Where to pay (link, address or account)', 'text', null, { show: () => fl.includes('where') }), F('kid', 'Which kid', 'sel', [['', 'None']].concat(kidN()), { show: x => fl.includes('kid') || !!(x && x.kid) }),
     F('link', 'Link', 'text', null, { show: () => fl.includes('link') }), F('assignee', 'For', 'sel', [['', 'Either of us'], 'Paul', 'Shana']),
     F('due', 'Due date (blank = a week from now)', 'date'), F('repeat', 'Repeats', 'sel', [['', 'Does not repeat'], ['daily', 'Every day'], ['weekly', 'Every week'], ['monthly', 'Every month'], ['yearly', 'Every year']]),
     F('house', 'House', 'sel', [['', 'N/A'], ['Boston', 'Boston'], ['Cape', 'Cape']]), F('notes', 'Notes', 'area'), F('_notify', 'Notify the other person now', 'chk')]; },
@@ -1051,25 +1058,7 @@ const CARD = {
     return `<div class="row" style="justify-content:flex-start">${avatar(m.from)}<div>${nameLink(m.from)} <span class="muted small">· ${ago(m.time)}</span>${m.urgent === '1' ? ' <span class="chip bad">Urgent</span>' : ''}${res ? ' <span class="chip ok">Resolved</span>' : ''}</div></div><div class="ptext msg">${withMentions(m.text)}</div>` +
       kv('Tagged', m.tags) + kv('Who can see it', m.visibility === 'adults' ? 'Paul and Shana only' : 'Everyone') + (m.pinUntil ? kv('Pinned until', fmtDay(m.pinUntil)) : '') +
       `<div class="actions"><button class="btn ${res ? 'gray' : 'dark'} sm" data-a="resolve">${res ? 'Reopen' : '✓ Resolve'}</button><button class="btn gray sm" data-a="msgTodo">${ic('plus', 16)}Add as to-do</button><button class="btn gray sm" data-a="msgEvent">${ic('planner', 16)}Add as event</button></div>` + std(); },
-  People(p) {
-    const kid = p.kind === 'kid', s = byId('Schools', p.schoolId), up = [], st = statusOf(p);
-    for (let i = 0; i < 7; i++) itemsFor(addDays(TODAY, i)).forEach(x => { if (x.people.includes(p.name) || x.dropoff === p.name || x.pickup === p.name) up.push(x); });
-    const acts = actGroups().filter(g => list(g[0].kids).includes(p.name)), daily = S.daily_items.filter(it => it.for_person === p.name && it.active !== '0' && dailySeen(it));
-    const todos = S.Todos.filter(t => t.status !== 'Done' && (kid ? t.kid === p.name : t.assignee === p.name)).sort((a, b) => (a.due || '9').localeCompare(b.due || '9'));
-    const gifts = giftsFor(p.name), ment = personMentions(p.name), age = p.birthday && p.birthday.length >= 10 ? ageOn({ year: +p.birthday.slice(0, 4), md: p.birthday.slice(5) }, TODAY) : null;
-    const sec = (title, body) => body ? `<div class="psec"><div class="lbl">${title}</div>${body}</div>` : '';
-    return `<div class="phead">${avatar(p.name)}<div><h2 style="margin:0">${esc(p.name)}</h2><div class="small muted">${kid ? 'Kid' : 'Parent'}${age !== null ? ' · ' + age + ' years old' : ''}${p.birthday ? ' · birthday ' + fmtDate(p.birthday) : ''}${seenTxt(p.name) ? ' · ' + seenTxt(p.name) : ''}</div></div></div>` +
-      sec('Right now', `<div style="font-size:16px;font-weight:600">${esc(st.now)}</div>${st.next ? `<div class="small muted">Next: ${esc(st.next)}</div>` : ''}`) +
-      (kid && s ? sec('School', `<div class="li plain" data-a="open" data-t="Schools" data-id="${s.id}"><div class="grow"><div class="ti">${esc(s.name)}</div><div class="small muted">Pickup ${esc(kidWeekTxt(p, s) || 'not set')}${kidExtTxt(p, s) ? ' · extended day ' + esc(kidExtTxt(p, s)) : ''}</div></div><span class="chev">›</span></div>`) : '') +
-      (!kid && p.workDays ? sec('Work', `<div>${esc(p.workDays)}${p.workStart ? ` · ${fmtT(p.workStart)}–${fmtT(p.workEnd)}` : ''}</div>`) : '') +
-      sec('Activities', acts.map(g => `<div class="li plain" data-a="open" data-t="Activities" data-id="${g[0].id}"><div class="grow"><div class="ti">${esc(g[0].name)}</div><div class="small muted">${esc(schedTxt(g))}</div></div><span class="chev">›</span></div>`).join('')) +
-      sec('Next 7 days', up.map(pcard).join('') || '<div class="small muted">Nothing on the Planner.</div>') +
-      sec('Daily checklist', daily.map(it => `<div class="small" style="padding:3px 0">${esc(it.title)} <span class="muted">· ${esc(list(it.days).length === 7 ? 'every day' : it.days)} · ${esc(it.time_of_day)}</span></div>`).join('')) +
-      sec(kid ? 'To-dos about ' + esc(p.name) : 'To-dos', todos.slice(0, 6).map(t => `<div class="li plain" data-a="open" data-t="Todos" data-id="${t.id}"><div class="grow"><div class="ti">${esc(t.title)}</div><div class="small muted">${t.due ? (t.due < TODAY ? 'Overdue · ' : 'Due ') + fmtDay(t.due) : 'No due date'}</div></div><span class="chev">›</span></div>`).join('') + (todos.length > 6 ? `<div class="small muted">+${todos.length - 6} more</div>` : '')) +
-      sec(p.name === ME ? 'Your wish list' : 'Gift ideas', `<div class="li plain" data-a="giftList" data-v="${esc(p.name)}"><div class="grow"><div class="ti">${gifts.length ? gifts.length + (p.name === ME ? ' you added' : ' idea' + (gifts.length === 1 ? '' : 's')) : p.name === ME ? 'Add things you would like' : 'No ideas yet'}</div>${p.name !== ME && gifts.length ? `<div class="small muted">${gifts.filter(g => g.assigned_to).length} being bought</div>` : ''}</div><span class="chev">›</span></div>`) +
-      sec('Mentions', ment.map(x => `<div class="li plain" data-a="open" data-t="${x.open[0]}" data-id="${esc(x.open[1])}">${avatar(x.who)}<div class="grow"><div class="small muted">${esc(x.who)} · ${x.kind} · ${ago(x.time)}</div><div>${withMentions(x.text)}</div></div></div>`).join('') || '<div class="small muted">No one has tagged ' + (p.name === ME ? 'you' : esc(p.name)) + ' yet. Type @' + esc(p.name) + ' in a post or comment.</div>') +
-      kv('Notes', p.notes) +
-      `<div class="actions"><button class="btn gray sm" data-a="edit">${ic('pen')}Edit${kid ? ' (school, notes)' : ' (schedule, notes)'}</button>${kid ? '' : `<button class="btn gray sm" data-a="add" data-v="Events">${ic('plus', 16)}Work or social event</button>`}</div>`; },
+  People(p) { return personPage(p); },
   Caretakers(k, d, t) { const jobs = S.Childcare.filter(c => c.confirmedId === k.id).sort((a, b) => b.date.localeCompare(a.date)), b = k.birthday && k.birthday.length >= 10 ? ageOn({ year: +k.birthday.slice(0, 4), md: k.birthday.slice(5) }, TODAY) : null;
     return `<h2>${esc(k.name)}</h2>` + kv('Relationship', k.relationship) + kvh('Phone', k.phone && `<a href="tel:${esc(k.phone.replace(/[^\d+]/g, ''))}">${esc(k.phone)}</a> · <a href="sms:${esc(k.phone.replace(/[^\d+]/g, ''))}">Text</a>`) + kv('Roster', k.roster) +
       (k.birthday ? kv('Birthday', fmtDate(k.birthday) + (b !== null ? ` · ${b} years old` : '')) : '') + kv('Cleared to drive', k.drive === '1' ? 'Yes' : 'No') + kv('Pay', k.unpaid === '1' ? 'Unpaid' : k.rate ? `$${k.rate}/hour` : 'Rate not set') + kv('Notes', k.notes) +
@@ -1102,13 +1091,53 @@ function socialHTML(t, id) {
     <div style="margin-top:10px">${cs.map(c => c.system === '1' ? `<div class="cm sys">${esc(c.who)} ${esc(c.text)} · ${ago(c.time)}</div>` : `<div class="cm">${nameLink(c.who)} ${withMentions(c.text)} <span class="muted small">· ${ago(c.time)}</span></div>`).join('')}</div>
     <div class="row" style="margin-top:8px"><input class="cin" placeholder="Add a comment"><button class="btn sm" data-a="comment">Send</button></div><label class="check-row small" style="margin-top:8px"><input type="checkbox" class="cnotify"> Notify the other person</label>`;
 }
+// ----- Person pages: a full screen for each family member -----
+let PERSON = '', prevView = 'home', prevY = 0;
+function personPage(p) {
+  const kid = p.kind === 'kid', me = p.name === ME, s = byId('Schools', p.schoolId), up = [], st = statusOf(p);
+  for (let i = 0; i < 7; i++) itemsFor(addDays(TODAY, i)).forEach(x => { if (x.people.includes(p.name) || x.dropoff === p.name || x.pickup === p.name) up.push(Object.assign({ day: i }, x)); });
+  const acts = actGroups().filter(g => list(g[0].kids).includes(p.name)), daily = S.daily_items.filter(it => it.for_person === p.name && it.active !== '0' && dailySeen(it));
+  const todos = S.Todos.filter(t => t.status !== 'Done' && (kid ? t.kid === p.name : t.assignee === p.name)).sort((a, b) => (a.due || '9').localeCompare(b.due || '9'));
+  const gifts = giftsFor(p.name), ment = personMentions(p.name), age = p.birthday && p.birthday.length >= 10 ? ageOn({ year: +p.birthday.slice(0, 4), md: p.birthday.slice(5) }, TODAY) : null;
+  const box = (title, body, more) => body ? `<div class="box pbox"><div class="boxh row"><span>${title}</span>${more || ''}</div>${body}</div>` : '';
+  const link = (a, v, l) => `<button class="lnk" data-a="${a}" data-v="${esc(v)}">${l}</button>`;
+  const days = [...new Set(up.map(x => x.day))];
+  return `<div class="pad"><button class="lnk back" data-a="personBack">${ic('left', 18)}Back</button></div>` +
+    `<div class="box pbox"><div class="phead">${avatar(p.name)}<div class="grow"><div class="pname">${esc(p.name)}</div><div class="small muted">${kid ? 'Kid' : 'Parent'}${age !== null ? ' · ' + age + ' years old' : ''}${p.birthday ? ' · birthday ' + fmtDate(p.birthday) : ''}${!me && seenTxt(p.name) ? ' · ' + seenTxt(p.name) : ''}</div></div></div>
+      <div class="pnow"><div class="lbl">Right now</div><div style="font-size:16px;font-weight:600">${esc(st.now)}</div>${st.next ? `<div class="small muted">${ic('clock', 13)} Next: ${esc(st.next)}</div>` : ''}</div></div>` +
+    box('Schedule', (kid && s ? `<div class="li plain" data-a="open" data-t="Schools" data-id="${s.id}"><div class="grow"><div class="ti">${esc(s.name)}</div><div class="small muted">Pickup ${esc(kidWeekTxt(p, s) || 'not set')}${kidExtTxt(p, s) ? ' · extended day ' + esc(kidExtTxt(p, s)) : ''}</div></div><span class="chev">›</span></div>` : '') +
+      (!kid && p.workDays ? `<div class="li plain"><div class="grow"><div class="ti">Work</div><div class="small muted">${esc(p.workDays)}${p.workStart ? ` · ${fmtT(p.workStart)}–${fmtT(p.workEnd)}` : ''}</div></div></div>` : '') +
+      acts.map(g => `<div class="li plain" data-a="open" data-t="Activities" data-id="${g[0].id}"><div class="grow"><div class="ti">${esc(g[0].name)}</div><div class="small muted">${esc(schedTxt(g))}</div></div><span class="chev">›</span></div>`).join('') ||
+      `<div class="small muted">No school, work or activities set. ${kid ? 'Tap Edit to add a school.' : 'Tap Edit to add a work schedule.'}</div>`) +
+    box('Next 7 days', days.map(i => `<div class="pday">${i === 0 ? 'Today' : i === 1 ? 'Tomorrow' : fmtDay(addDays(TODAY, i))}</div>` + up.filter(x => x.day === i).map(pcard).join('')).join('') || '<div class="small muted">Nothing on the Planner.</div>', kid ? '' : link('personEvent', p.name, ic('plus', 15) + 'Event')) +
+    box(kid ? 'To-dos about ' + esc(p.name) : me ? 'Your to-dos' : esc(p.name) + "'s to-dos", todos.slice(0, 8).map(todoRow).join('') + (todos.length > 8 ? `<div class="small muted" style="padding-top:6px">+${todos.length - 8} more on the To-Do tab</div>` : '') || '<div class="small muted">Nothing open.</div>', link('personTodo', p.name, ic('plus', 15) + 'To-do')) +
+    box('Daily checklist', daily.map(it => `<div class="li plain" data-a="dlEdit" data-v="${it.id}"><div class="grow"><div class="ti">${esc(it.title)}</div><div class="small muted">${esc(list(it.days).length === 7 ? 'Every day' : it.days)} · ${esc(it.time_of_day)}</div></div><span class="chev">›</span></div>`).join('')) +
+    box(me ? 'Your wish list' : 'Gift ideas for ' + esc(p.name), gifts.slice(0, 5).map(g => `<div class="li plain" data-a="giftList" data-v="${esc(p.name)}">${ic('gift', 18)}<div class="grow"><div class="ti">${esc(g.name)}</div>${!me && g.assigned_to ? `<div class="small muted">${esc(g.assigned_to)} is buying it</div>` : ''}</div><span class="chev">›</span></div>`).join('') +
+      (gifts.length > 5 ? `<div class="small muted" style="padding-top:6px">+${gifts.length - 5} more</div>` : '') || `<div class="small muted">${me ? 'Add things you would like. Only you see what you add here.' : 'No ideas yet.'}</div>`, link('giftList', p.name, gifts.length ? 'See all' : ic('plus', 15) + 'Add')) +
+    box('Mentions', ment.map(x => `<div class="li plain" data-a="open" data-t="${x.open[0]}" data-id="${esc(x.open[1])}">${avatar(x.who)}<div class="grow"><div class="small muted">${esc(x.who)} · ${x.kind} · ${ago(x.time)}</div><div>${withMentions(x.text)}</div></div></div>`).join('') || '<div class="small muted">No one has tagged ' + (me ? 'you' : esc(p.name)) + ' yet. Type @' + esc(p.name) + ' in a post or comment.</div>') +
+    box('Notes', p.notes ? `<div style="white-space:pre-wrap">${esc(p.notes)}</div>` : '<div class="small muted">Sizes, doctors, anything worth remembering.</div>', link('personEdit', p.id, ic('pen', 15) + 'Edit')) +
+    `<div class="pad actions" style="padding-bottom:24px"><button class="btn gray" data-a="personEdit" data-v="${p.id}">${ic('pen')}Edit ${esc(p.name)}${kid ? ' (school, notes)' : ' (work schedule, notes)'}</button></div>`;
+}
+function vPerson() { const p = byId('People', PERSON); return p ? personPage(p) : '<div class="empty">That person is gone.</div>'; }
+function goPerson(id) {
+  if (!byId('People', id)) return;
+  sheets.slice().forEach(d => d.close());
+  if (view !== 'person') { prevView = view; prevY = window.scrollY; try { history.pushState({ person: id }, ''); } catch (e) {} }
+  PERSON = id; view = 'person'; render(); window.scrollTo(0, 0);
+}
+function leavePerson() { if (view !== 'person') return; view = prevView || 'home'; render(); window.scrollTo(0, prevY); }
+A.personBack = () => { if (history.state && history.state.person) history.back(); else leavePerson(); };
+window.addEventListener('popstate', () => { if (view === 'person') leavePerson(); });
+A.personEdit = id => { const p = byId('People', id); if (p) editForm('People', p); };
+A.personEvent = name => editForm('Events', null, { people: name });
+A.personTodo = name => { const p = personOf(name); editForm('Todos', null, p && p.kind === 'kid' ? { kid: name } : { assignee: name }); };
 function cardHTML(t, id, date) {
   const r = t === 'GCal' ? CAL.find(c => c.id === id) : S[t] && byId(t, id);
   if (!r) return null;
   return (CARD[t] ? CARD[t](r, date, t) : genericCard(r, date, t) + std()) + (t === 'gifts' ? photosHTML(t, id) : socialHTML(t, id));
 }
 function openCard(t, id, date) { if (cardHTML(t, id, date) === null) { toast('That item is gone.'); return null; } const d = sheet(() => cardHTML(t, id, date)); d._ctx = { t, id, date }; return d; }
-A.open = (v, el) => openCard(el.dataset.t, el.dataset.id, el.dataset.d || '');
+A.open = (v, el) => el.dataset.t === 'People' ? goPerson(el.dataset.id) : openCard(el.dataset.t, el.dataset.id, el.dataset.d || '');
 A.soon = () => toast('Feature coming soon');
 // ---------- photos ----------
 let photoFor = null;
@@ -1196,7 +1225,7 @@ A.resolve = (v, el) => { const m = byId('Messages', ctx(el).id), res = m.resolve
 A.msgTodo = (v, el) => { const m = byId('Messages', ctx(el).id); editForm('Todos', null, { title: m.text.slice(0, 120), _link: ['Messages', m.id] }); };
 A.msgEvent = (v, el) => { const m = byId('Messages', ctx(el).id); editForm('Events', null, { title: m.text.slice(0, 80), _link: ['Messages', m.id] }); };
 A.newMsg = () => editForm('Messages', null);
-A.person = name => { const p = personOf(name); if (p) openCard('People', p.id); };
+A.person = name => { const p = personOf(name); if (p) goPerson(p.id); };
 A.rate = (n, el) => { const r = byId('Recipes', ctx(el).id); let o = {}; try { o = JSON.parse(r.ratings || '{}'); } catch (e) {} o[ME] = +n; write({ t: 'Recipes', row: { id: r.id, ratings: JSON.stringify(o) } }); };
 A.pause = (v, el) => { const r = byId('Recipes', ctx(el).id); if (r.pausedUntil && r.pausedUntil >= TODAY) return write({ t: 'Recipes', row: { id: r.id, pausedUntil: '' } });
   const n = prompt("Don't suggest this for how many days?", '30'); if (n === null || !(+n > 0)) return; write({ t: 'Recipes', row: { id: r.id, pausedUntil: addDays(TODAY, +n) } }); };
@@ -1204,11 +1233,13 @@ A.archive = (v, el) => { const r = byId('Recipes', ctx(el).id); write({ t: 'Reci
 // ---------- views ----------
 const TITLES = { feed: 'Feed', planner: 'Planner', meals: 'Meals', todo: 'To-Do', home: 'Home' };
 function render() {
-  $('title').textContent = TITLES[view];
+  const pv = view === 'person' && byId('People', PERSON);
+  if (view === 'person' && !pv) view = prevView || 'home';
+  $('title').textContent = pv ? (pv.name === ME ? 'Me' : pv.name) : TITLES[view];
   document.querySelectorAll('nav.bottom button').forEach(b => b.className = b.dataset.v === view ? 'on' : '');
   if (!ME) return;
   $('hdrGear').style.display = view === 'home' ? '' : 'none';
-  $('view').innerHTML = ({ feed: vFeed, planner: vPlanner, meals: vDinner, todo: vTodo, home: vHome })[view]();
+  $('view').innerHTML = ({ feed: vFeed, planner: vPlanner, meals: vDinner, todo: vTodo, home: vHome, person: vPerson })[view]();
 }
 A.nav = v => { if (v === 'dailyGo') { view = 'todo'; render(); window.scrollTo(0, 0); return A.dailyOpen(); } view = v; render(); window.scrollTo(0, 0); };
 function pcard(i) {
