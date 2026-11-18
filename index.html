@@ -307,7 +307,7 @@
 // Momnie Family app v6.0
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'], DAYN = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'], ADULTS = ['Paul', 'Shana'];
 // Shown at the bottom of Home. Bump it together with VERSION in sw.js on every release.
-const APP_VERSION = '9.6 · Nov 18, 2026';
+const APP_VERSION = '9.7 · Nov 18, 2026';
 const TABLES = ['People', 'Schools', 'SchoolCal', 'Activities', 'Overrides', 'Events', 'Caretakers', 'Childcare', 'Birthdays', 'Todos', 'TodoTypes', 'Recipes', 'DinnerRules', 'Weeks', 'Menus',
   'Groceries', 'GroceryList', 'HouseCards', 'Houses', 'WeatherRules', 'Quotes', 'Memories', 'Updates', 'Messages', 'Activity', 'Comments', 'Reactions', 'Links', 'Settings', 'Photos', 'gifts', 'daily_items', 'daily_completions'];
 const CAT = { School: '#3f6fb5', Kids: '#4f7cc2', Work: '#64748b', Family: '#5b6fa8', Dinner: '#b08a4f', Caretaker: '#3e9aa6', Shared: '#94a3b8', Birthday: '#c9806a' }, SCHOOL_C = ['#5a72b8', '#7a8597', '#4a6fb0'];
@@ -1959,9 +1959,26 @@ A.pushOn = async (v, el) => { el.disabled = true;
     await saveToken(await fbToken()); toast('Push is on for this phone'); } catch (e) { toast(e.message || 'Could not turn on push'); }
   el.disabled = false; refresh(); };
 A.pushOff = async () => { try { if (self.firebase) await firebase.messaging().deleteToken(); } catch (e) {} await saveToken(store.get('pushTok'), true); toast('Push is off for this phone'); refresh(); };
+// ----- Getting new versions onto the phone quickly -----
+// A Home Screen app can sit in the background for days without reloading. So: check for a new version whenever the app
+// comes back to the front (and every 30 minutes while open). When a new version has installed, reload once, waiting
+// until no pop-up is open and nothing is still saving, so nothing you're doing gets lost.
+const hadSW = !!(navigator.serviceWorker && navigator.serviceWorker.controller);
+let updWait = 0, updLast = 0;
+function watchForUpdates() {
+  if (watchForUpdates.on || !swReg) return; watchForUpdates.on = true;
+  const check = () => { if (Date.now() - updLast < 60000) return; updLast = Date.now(); swReg.update().catch(() => {}); };
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) check(); });
+  setInterval(() => { if (!document.hidden) check(); }, 30 * 60000);
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (!hadSW || updWait) return;   // first install: nothing to refresh
+    const go = () => { if (sheets.length || outbox.length || busy) return; clearInterval(updWait); toast('Updating to the new version…'); setTimeout(() => location.reload(), 600); };
+    updWait = setInterval(go, 1500); go(); });
+}
 async function pushInit() {
   if (!('serviceWorker' in navigator)) return;
-  try { swReg = await navigator.serviceWorker.register('sw.js'); } catch (e) { return; }
+  try { swReg = await navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' }); } catch (e) { return; }
+  watchForUpdates();
   if (pushReady() && store.get('pushOn') === '1' && self.Notification && Notification.permission === 'granted') { try { const t = await fbToken(); if (t !== store.get('pushTok') || !myTokens().includes(t)) await saveToken(t); } catch (e) {} }
 }
 
