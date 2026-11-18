@@ -105,3 +105,15 @@ To see detailed errors: in Apps Script open **Executions** in the left sidebar a
 
 - The daily notes, the AI Today card, and reading conversations only call Claude when there is something to do.
 - You can lower cost in the Console with a monthly spend limit, or by setting `AI_MODEL` to a smaller model.
+
+## How often the assistant runs
+
+- **Every two hours** from the start hour you choose (default 6 AM) until 10 PM, it reviews the plans, checks your
+  rules, refreshes the AI Today cards and reads recent conversations. It posts at most 3 general notes a day, and
+  rule notes as they apply.
+- **Right after** anyone uses the Assistant button, answers a question, or uses Fill it in, it does a quick extra
+  review (several requests close together share one).
+- **By hand** any time: Home → Settings → Assistant → Run the assistant now, or Family app → Run the assistant now
+  in the Sheet.
+
+It only talks to Claude when the assistant is on, and it reads conversations only when something new was said.
