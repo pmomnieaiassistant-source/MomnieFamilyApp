@@ -351,7 +351,7 @@
 // Momnie Family app v6.0
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'], DAYN = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'], ADULTS = ['Paul', 'Shana'];
 // Shown at the bottom of Home. Bump it together with VERSION in sw.js on every release.
-const APP_VERSION = '13.8 · Nov 18, 2026';
+const APP_VERSION = '13.9 · Nov 18, 2026';
 const TABLES = ['People', 'Schools', 'SchoolCal', 'Activities', 'Overrides', 'Events', 'Caretakers', 'Childcare', 'Birthdays', 'Todos', 'TodoTypes', 'Recipes', 'DinnerRules', 'Weeks', 'Menus',
   'Groceries', 'GroceryList', 'HouseCards', 'Houses', 'WeatherRules', 'Quotes', 'Memories', 'Updates', 'Messages', 'Activity', 'Comments', 'Reactions', 'Links', 'Settings', 'Photos', 'gifts', 'ai_rules', 'ai_requests', 'notes', 'daily_items', 'daily_completions'];
 const CAT = { School: '#3f6fb5', Kids: '#4f7cc2', Work: '#64748b', Family: '#5b6fa8', Dinner: '#b08a4f', Caretaker: '#3e9aa6', Shared: '#94a3b8', Birthday: '#c9806a' }, SCHOOL_C = ['#5a72b8', '#7a8597', '#4a6fb0'];
@@ -2494,9 +2494,8 @@ function vHome() {
 A.feedback = () => form('Constructive feedback', [F('idea', 'What would make the app better?', 'area', null, { ph: 'Ideas, annoyances, anything' })], {}, async v => {
   need(v.idea && v.idea.trim(), 'Write your idea first.');
   const ok = await write({ t: 'ideas', row: { id: nid(), text: v.idea.trim() } }); if (ok) toast('Thank you! Paul will see it.'); return ok; });
-A.openSettings = () => sheet(() => '<h2>Settings</h2><div style="clear:both"></div>' + (ME === 'Paul' ? [['ai', 'spark', 'Assistant', `Daily notes in the Feed · seen by ${joinNames(aiWho())}`]] : [])
-  .concat([['mealsHome', 'book', 'Meals', 'Dinner rules and the instructions for importing recipes'],
-    ['airules', 'spark', 'Assistant rules', S.ai_rules.length ? `${S.ai_rules.filter(r => r.active !== '0').length} rules in plain English` : 'Tell the assistant what to watch for, in plain English']], SETTINGS)
+A.openSettings = () => sheet(() => '<h2>Settings</h2><div style="clear:both"></div>' + [['ai', 'spark', 'Assistant', [ME === 'Paul' ? (aiOn() ? 'On' : 'Off') : '', S.ai_rules.length ? (n => `${n} rule${n === 1 ? '' : 's'} on`)(S.ai_rules.filter(r => r.active !== '0').length) : 'Rules in plain English'].filter(Boolean).join(' · ')],
+    ['mealsHome', 'book', 'Meals', 'Dinner rules and the instructions for importing recipes']].concat(SETTINGS)
   .map(([k, icon, l, sub]) => k === 'mealsHome' ? hrow('mealsHome', '', icon, l, sub) : hrow('homeOpen', k, icon, l, sub)).join(''));
 // ---------- Notes: a shared scratch pad at the bottom of Home, visible to everyone ----------
 const notesHTML = () => { const ns = S.notes.filter(n => n.text).sort((a, b) => (b.time || '').localeCompare(a.time || ''));
@@ -2535,11 +2534,9 @@ const PAGES = {
   TodoTypes: () => '<h2>To-do types</h2>' + S.TodoTypes.map(t => rowLi('TodoTypes', t.id, t.name, `Goes to ${t.assignee || 'either of us'}${t.builtin === '1' ? ' · built in' : ''}`)).join('') + addBtn('TodoTypes', 'Add a type'),
   memories: () => `<h2>Quotes and memories</h2><div class="kv">${S.Quotes.length} wedding quote${S.Quotes.length === 1 ? '' : 's'} and ${S.Memories.length} "this day" memor${S.Memories.length === 1 ? 'y' : 'ies'} saved.</div><div class="kv muted small">Add them in the Sheet: the Quotes tab (quote, author) and the Memories tab (date, note, and an optional link to a photo in Google Drive). On a day with a quote or memory, a splash screen shows the first time each of you opens the app.</div>
     <div class="actions"><button class="btn gray" data-a="splashAgain">Show today's splash again</button></div>`,
-  airules: () => { const on = (byId('Settings', 'app|ai.on') || {}).value === '1';
-    return '<h2>Assistant rules</h2><div class="small muted">Rules in plain English. Each time the assistant runs it checks them all and posts a note only when one applies, to the people that rule names.</div>' +
-      (on ? '' : '<div class="alert amber" style="margin-top:10px">The assistant is off, so these rules are not being checked yet. Paul can turn it on in Settings, Assistant.</div>') +
-      (S.ai_rules.map(aiRuleRow).join('') || '<div class="empty">No rules yet.</div>') + `<div class="actions">${aiAskBtn('general')}</div>`; },
-  ai: () => { if (ME !== 'Paul') return '<h2>Assistant</h2><div class="small muted">Only Paul can change these settings.</div>';
+  ai: () => { const rules = `<h3>Rules</h3><div class="small muted">Rules in plain English. Each time the assistant runs it checks them all and posts a note only when one applies, to the people that rule names.</div>` +
+      (S.ai_rules.map(aiRuleRow).join('') || '<div class="empty">No rules yet.</div>') + `<div class="actions">${aiAskBtn('general')}</div>`;
+    if (ME !== 'Paul') return '<h2>Assistant</h2>' + (aiOn() ? '' : '<div class="alert amber" style="margin-top:10px">The assistant is off, so rules are not being checked yet. Paul can turn it on here.</div>') + rules + '<div class="small muted" style="margin-top:12px">Only Paul can change the other assistant settings.</div>';
     const on = (byId('Settings', 'app|ai.on') || {}).value === '1', last = (byId('Settings', 'app|ai.last') || {}).value, topics = list((byId('Settings', 'app|ai.topics') || {}).value || AI_TOPICS.map(x => x[0]).join(', '));
     const hour = (byId('Settings', 'app|ai.hour') || {}).value || '7';
     return `<h2>Assistant</h2><div class="small muted">Once a day Claude reads a summary of the family's plans and posts 0 to 3 short notes to the Feed: gaps to fill, ideas, heads-ups. It is never sent what the gift ideas are.</div>
@@ -2550,9 +2547,8 @@ const PAGES = {
       <div class="kv"><span>Conversations</span>${((byId('Settings', 'app|ai.convo') || {}).value || '1') === '1' ? 'Turns settled plans into app items' : 'Off'}</div>
       <div class="kv"><span>Assistant button</span>${esc(joinNames(aiUseFor()) || 'No one')}</div>
       <div class="kv"><span>AI Today card</span>${esc(joinNames(aiCardFor()) || 'No one')}</div>
-      <div class="kv"><span>Assistant rules</span>${S.ai_rules.filter(r => r.active !== '0').length} on · <a data-a="homeOpen" data-v="airules">See and add rules</a></div>
       <div class="actions"><button class="btn" data-a="aiEdit">${ic('pen', 16)}Change</button><button class="btn gray" data-a="aiRun">${ic('refresh', 16)}Run the assistant now</button></div>
-      <div class="small muted" style="margin-top:12px">Needs an Anthropic API key in Apps Script: Project Settings, Script properties, ANTHROPIC_API_KEY. Each person can mute its notifications under Notifications and Feed.</div>`; },
+      <div class="small muted" style="margin-top:12px">Needs an Anthropic API key in Apps Script: Project Settings, Script properties, ANTHROPIC_API_KEY. Each person can mute its notifications under Notifications and Feed.</div>` + rules; },
   settings: () => { const q = k => st(k, ''), chk = (c, k, def, l) => `<label class="check-row"><input type="checkbox" data-c="${c}" data-k="${k}" ${st(k, def) === '1' ? 'checked' : ''}> ${l}</label>`;
     return `<h2>Notifications and Feed</h2><h3>Push on this phone</h3>${pushHTML()}<h3>Notifications for ${esc(ME)}</h3>` + Object.keys(NCATS).map(c => chk('setFlag', 'n.' + c, c === 'dinner' ? '0' : '1', NCATS[c])).join('') +
       `<h3>Bundling</h3><div class="small muted">When several things happen close together, you get one notification that sums them up instead of a string of buzzes. Urgent alerts always come right away.</div><label>Bundle alerts that arrive within</label><select data-c="setVal" data-k="bundleMin">${[['0', 'Off (send each one)'], ['5', '5 minutes'], ['15', '15 minutes'], ['30', '30 minutes'], ['60', '1 hour']].map(([v, l]) => `<option value="${v}" ${st('bundleMin', '5') === v ? 'selected' : ''}>${l}</option>`).join('')}</select>` +
