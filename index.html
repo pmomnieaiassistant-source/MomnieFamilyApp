@@ -351,7 +351,7 @@
 // Momnie Family app v6.0
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'], DAYN = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'], ADULTS = ['Paul', 'Shana'];
 // Shown at the bottom of Home. Bump it together with VERSION in sw.js on every release.
-const APP_VERSION = '13.9 · Nov 18, 2026';
+const APP_VERSION = '14.0 · Nov 18, 2026';
 const TABLES = ['People', 'Schools', 'SchoolCal', 'Activities', 'Overrides', 'Events', 'Caretakers', 'Childcare', 'Birthdays', 'Todos', 'TodoTypes', 'Recipes', 'DinnerRules', 'Weeks', 'Menus',
   'Groceries', 'GroceryList', 'HouseCards', 'Houses', 'WeatherRules', 'Quotes', 'Memories', 'Updates', 'Messages', 'Activity', 'Comments', 'Reactions', 'Links', 'Settings', 'Photos', 'gifts', 'ai_rules', 'ai_requests', 'notes', 'daily_items', 'daily_completions'];
 const CAT = { School: '#3f6fb5', Kids: '#4f7cc2', Work: '#64748b', Family: '#5b6fa8', Dinner: '#b08a4f', Caretaker: '#3e9aa6', Shared: '#94a3b8', Birthday: '#c9806a' }, SCHOOL_C = ['#5a72b8', '#7a8597', '#4a6fb0'];
@@ -1516,27 +1516,85 @@ function goPerson(id) {
 }
 function leavePerson() { if (view !== 'person') return; view = prevView || 'home'; render(); window.scrollTo(0, prevY); }
 A.personBack = () => { if (history.state && history.state.person) history.back(); else leavePerson(); };
-window.addEventListener('popstate', () => { if (view === 'person') leavePerson(); else if (view === 'hh') leaveHH(); });
+window.addEventListener('popstate', () => { if (view === 'person') leavePerson(); else if (view === 'hh') { if (HH.includes(':')) { HH = hhParent(HH); render(); window.scrollTo(0, 0); } else leaveHH(); } });
 // ----- Household pages (Schools, Activities, House): full pages of cards; tap a card to open and edit it -----
 function goHH(k) { sheets.slice().forEach(d => d.close()); if (view !== 'hh') { prevView = view === 'person' ? 'home' : view; prevY = window.scrollY; try { history.pushState({ hh: k }, ''); } catch (e) {} }
   HH = k; view = 'hh'; render(); window.scrollTo(0, 0); }
 function leaveHH() { if (view !== 'hh') return; view = prevView || 'home'; render(); window.scrollTo(0, prevY); }
-A.hhBack = () => { if (history.state && history.state.hh) history.back(); else leaveHH(); };
-const hhCard = (t, id, title, lines, chip) => `<div class="box hcard" data-a="open" data-t="${t}" data-id="${esc(id)}"><div class="row" style="align-items:flex-start"><div class="grow"><div class="htitle">${esc(title)}${aiMk(t, id)}</div>${lines.filter(Boolean).map(l => `<div class="small muted" style="margin-top:3px">${l}</div>`).join('')}</div>${chip ? `<span class="chip">${chip}</span>` : ''}</div></div>`;
+A.hhBack = () => { if (history.state && history.state.hh) history.back(); else if (HH.includes(':')) { HH = hhParent(HH); render(); } else leaveHH(); };
+const hhParent = k => ({ school: 'Schools', act: 'Activities', house: 'houses' })[k.split(':')[0]] || 'Schools';
+// Open a profile page for one school, activity or house.
+A.hhGo = k => { sheets.slice().forEach(d => d.close()); if (view !== 'hh') { prevView = view === 'person' ? 'home' : view; prevY = window.scrollY; }
+  try { history.pushState({ hh: k }, ''); } catch (e) {} HH = k; view = 'hh'; render(); window.scrollTo(0, 0); };
+const hhTitle = () => { const [k, id] = HH.split(':'); if (!id) return HH_TITLES[HH];
+  if (k === 'school') { const x = byId('Schools', id); return x ? x.short || x.name : 'School'; } if (k === 'act') { const x = byId('Activities', id); return x ? x.name : 'Activity'; } return id === 'Cape' ? 'Cape house' : id; };
+const hhCard = (t, id, title, lines, chip, go) => `<div class="box hcard" ${go ? `data-a="hhGo" data-v="${esc(go)}"` : `data-a="open" data-t="${t}" data-id="${esc(id)}"`}><div class="row" style="align-items:flex-start"><div class="grow"><div class="htitle">${esc(title)}${aiMk(t, id)}</div>${lines.filter(Boolean).map(l => `<div class="small muted" style="margin-top:3px">${l}</div>`).join('')}</div>${chip ? `<span class="chip">${chip}</span>` : ''}</div></div>`;
 function vHH() {
   const back = `<div class="pad"><button class="lnk back" data-a="hhBack">${ic('left', 18)}Back</button></div>`;
   if (HH === 'Schools') return back + (S.Schools.map(sc => { const up = S.SchoolCal.filter(c => c.schoolId === sc.id && (c.endDate || c.date) >= TODAY).sort((a, b) => a.date.localeCompare(b.date)).slice(0, 3);
-      return hhCard('Schools', sc.id, sc.name, [esc(schoolHoursTxt(sc) || ''), esc(kids().filter(k => k.schoolId === sc.id).map(k => k.name).join(', '))]) +
+      return hhCard('Schools', sc.id, sc.name, [esc(schoolHoursTxt(sc) || ''), esc(kids().filter(k => k.schoolId === sc.id).map(k => k.name).join(', '))], '', 'school:' + sc.id) +
         (up.length ? `<div class="hsub">${up.map(c => `<div class="li" data-a="open" data-t="SchoolCal" data-id="${c.id}"><div class="grow small">${fmtDay(c.date)} · ${esc(c.title)}${aiMk('SchoolCal', c.id)}</div><span class="small muted">${c.kind === 'off' ? 'No school' : c.kind === 'half' ? 'Half day' : ''}</span></div>`).join('')}</div>` : ''); }).join('') || '<div class="empty">No schools yet.</div>') +
       `<div class="pad small muted">You can also paste a whole school calendar into the SchoolCal tab of the Sheet. <a data-a="add" data-v="Schools">Add a school</a></div><div style="height:90px"></div><button class="fab" data-a="add" data-v="SchoolCal" aria-label="Add a school calendar item">${ic('plus', 20)}Calendar item</button>`;
   if (HH === 'Activities') return back + (actGroups().map(g => { const a = g[0];
-      return hhCard('Activities', a.id, a.name, [esc(joinNames(list(a.kids))), esc(schedTxt(g)), a.kids && (a.dropoff || a.pickup) ? rideHTML(a) : '', esc([a.location, a.until ? 'until ' + fmtDay(a.until) : ''].filter(Boolean).join(' · '))]); }).join('') || '<div class="empty">No activities yet.</div>') +
+      return hhCard('Activities', a.id, a.name, [esc(joinNames(list(a.kids))), esc(schedTxt(g)), a.kids && (a.dropoff || a.pickup) ? rideHTML(a) : '', esc([a.location, a.until ? 'until ' + fmtDay(a.until) : ''].filter(Boolean).join(' · '))], '', 'act:' + a.id); }).join('') || '<div class="empty">No activities yet.</div>') +
       `<div style="height:90px"></div><button class="fab" data-a="add" data-v="Activities" aria-label="Add an activity">${ic('plus', 20)}Activity</button>`;
-  return back + ['Boston', 'Cape'].map(h => `<div class="sect">${h === 'Cape' ? 'Cape house' : 'Boston'}</div>` + (S.HouseCards.filter(c => c.house === h).sort((a, b) => a.kind.localeCompare(b.kind) || (a.nextDue || '').localeCompare(b.nextDue || '')).map(c =>
-      hhCard('HouseCards', c.id, c.title, [c.kind === 'upkeep' ? `Every ${esc(c.everyMonths || '?')} months · next ${c.nextDue ? fmtDay(c.nextDue) : 'not set'}` : esc((c.body || '').slice(0, 90))], c.kind === 'upkeep' ? (c.nextDue && c.nextDue <= addDays(TODAY, 14) ? 'Due soon' : 'Upkeep') : 'Info')).join('') || '<div class="pad small muted">Nothing here yet.</div>')).join('') +
-    `<div class="sect">Locations (for weather)</div>` + S.Houses.map(h => `<div class="li" style="padding:10px 16px" data-a="editH" data-v="${h.id}"><div class="grow"><div class="ti">${esc(h.name)}</div><div class="small muted">${esc(h.lat)}, ${esc(h.lon)}</div></div><span class="chev">›</span></div>`).join('') +
+  if (HH === 'houses') return back + ['Boston', 'Cape'].map(h => { const cs = S.HouseCards.filter(c => c.house === h), due = cs.filter(c => c.kind === 'upkeep' && c.nextDue && c.nextDue <= addDays(TODAY, 30));
+      return hhCard('HouseCards', h, h === 'Cape' ? 'Cape house' : 'Boston', [`${cs.filter(c => c.kind === 'upkeep').length} upkeep · ${cs.filter(c => c.kind !== 'upkeep').length} info`, due.length ? `<span class="amb">${due.length} due in the next month</span>` : 'Nothing due this month'], '', 'house:' + h); }).join('') +
     `<div style="height:90px"></div><button class="fab" data-a="add" data-v="HouseCards" aria-label="Add house info or upkeep">${ic('plus', 20)}Add</button>`;
+  return hhProfile();
 }
+// ----- Profile pages for a school, an activity or a house: a header, summary tiles, what's coming up, then details -----
+const hbox = (title, body, more) => body ? `<div class="box pbox"><div class="boxh row"><span>${title}</span>${more || ''}</div>${body}</div>` : '';
+const htile = (n, l, sub, cls) => `<div class="ptile"><b class="${cls || ''}">${n}</b><span>${l}</span>${sub ? `<em>${sub}</em>` : ''}</div>`;
+const hrowP = (time, title, sub, tap) => `<div class="prow" ${tap || ''}><span>${time}</span><span><b>${title}</b>${sub ? ' · ' + sub : ''}</span></div>`;
+// Days ahead that have something for this page, as planner blocks.
+function hhDays(n, rowsFor, max) { const out = []; for (let i = 0; i < n && out.length < (max || 8); i++) { const d = addDays(TODAY, i), rows = rowsFor(d); if (rows.length) out.push(`<div class="box pbox pdaybox ${d === TODAY ? 'today' : ''}"><div class="boxh row"><span>${d === TODAY ? 'Today · ' : d === addDays(TODAY, 1) ? 'Tomorrow · ' : ''}${fmtDay(d)}</span></div>${rows.join('')}</div>`); }
+  return out.join('') || '<div class="pad small muted">Nothing coming up.</div>'; }
+function hhProfile() {
+  const [k, id] = HH.split(':'), back = `<div class="pad"><button class="lnk back" data-a="hhBack">${ic('left', 18)}Back</button></div>`;
+  const hero = (icon, color, name, sub, edit) => `<div class="box pbox phero"><div class="phead"><div class="hicon" style="--hc:${color};width:52px;height:52px">${ic(icon, 26)}</div><div class="grow"><div class="pname">${esc(name)}</div><div class="small muted">${sub}</div></div>${edit}</div></div>`;
+  if (k === 'school') { const sc = byId('Schools', id); if (!sc) return back + '<div class="empty">That school is gone.</div>';
+    const ks = kids().filter(x => x.schoolId === id), today = ks.map(x => schoolDay(sc, TODAY, x)).find(x => x && x.s);
+    const cal = S.SchoolCal.filter(c => c.schoolId === id && (c.endDate || c.date) >= TODAY).sort((a, b) => a.date.localeCompare(b.date)), off = cal.find(c => c.kind === 'off');
+    const kidSet = new Set(ks.map(x => x.name));
+    const rowsFor = d => schoolRuns(d).filter(r => r.sid === id).sort((a, b) => a.time.localeCompare(b.time)).map(r => hrowP(fmtT(r.time), RIDE_WORD[r.kind][0].toUpperCase() + RIDE_WORD[r.kind].slice(1), `${esc(kidNames(r.kids))} ${rideTag(r)}${rideAI(r.sid, d, r.kind)}`, `data-a="schoolRide" data-v="${r.sid}|${d}|${r.kind}"`))
+      .concat(cal.filter(c => d >= c.date && d <= (c.endDate || c.date)).map(c => hrowP(c.kind === 'off' ? 'No school' : c.kind === 'half' ? 'Half day' : c.start ? fmtT(c.start) : 'All day', esc(c.title) + aiMk('SchoolCal', c.id), c.kind === 'half' && c.end ? 'out ' + fmtT(c.end) : '', `data-a="open" data-t="SchoolCal" data-id="${c.id}"`)))
+      .concat(S.Events.filter(e => e.date === d && e.category === 'School' && (!e.people || list(e.people).some(n => kidSet.has(n)))).map(e => hrowP(e.allDay === '1' || !e.start ? 'All day' : fmtT(e.start), esc(e.title) + aiMk('Events', e.id), esc(e.people || ''), `data-a="open" data-t="Events" data-id="${e.id}" data-d="${d}"`)));
+    return back + hero('school', HC.school || 'var(--accent)', sc.name, esc([sc.short && sc.short !== sc.name ? sc.short : '', schoolHoursTxt(sc)].filter(Boolean).join(' · ')), `<button class="icon-btn" data-a="hhEdit" data-v="Schools|${id}" aria-label="Edit school">${ic('pen', 19)}</button>`) +
+      `<div class="ptiles">${htile(ks.length, ks.length === 1 ? 'Kid' : 'Kids', esc(ks.map(x => x.name).join(', ')) || 'none yet')}${htile(today ? fmtT(today.s).replace(/ (AM|PM)/, '') : '—', 'Today', today ? 'until ' + fmtT(today.e) : 'no school')}
+        ${htile(off ? fmtDate(off.date) : '—', 'Next day off', off ? esc(off.title) : 'none on the calendar')}${htile(cal.length, 'Calendar', 'coming up')}</div>` +
+      `<div class="sect">Coming up</div>` + hhDays(21, rowsFor, 8) +
+      hbox('School calendar', cal.slice(0, 12).map(c => `<div class="li plain" data-a="open" data-t="SchoolCal" data-id="${c.id}"><div class="grow"><div class="ti">${esc(c.title)}${aiMk('SchoolCal', c.id)}</div><div class="small muted">${fmtDay(c.date)}${c.endDate && c.endDate !== c.date ? ' – ' + fmtDay(c.endDate) : ''}</div></div><span class="small muted">${c.kind === 'off' ? 'No school' : c.kind === 'half' ? 'Half day' : ''}</span></div>`).join('') || '<div class="small muted">Nothing on the calendar.</div>', `<button class="lnk" data-a="add" data-v="SchoolCal">${ic('plus', 15)}</button>`) +
+      hbox('Usual rides', `<div class="small muted">Who does each drop-off and pickup on a normal week.</div><div class="actions"><button class="btn gray sm" data-a="schoolRidesEdit" data-v="${id}">${ic('car', 16)}Set usual rides</button><button class="btn gray sm" data-a="schoolRidesWeek" data-v="${id}">${ic('planner', 16)}This week</button></div>`) +
+      hbox('Contacts and notes', [sc.contacts, sc.notes].filter(Boolean).map(x => `<div style="white-space:pre-wrap">${esc(x)}</div>`).join('<div style="height:8px"></div>')) +
+      `<div style="height:90px"></div><button class="fab" data-a="add" data-v="SchoolCal" aria-label="Add a school calendar item">${ic('plus', 20)}Calendar item</button>`; }
+  if (k === 'act') { const a = byId('Activities', id); if (!a) return back + '<div class="empty">That activity is gone.</div>';
+    const g = actGroup(a), ids = new Set(g.map(x => x.id)), occ = d => itemsFor(d).filter(i => i.t === 'Activities' && ids.has(i.id));
+    let next = null; for (let i = 0; i < 60 && !next; i++) { const d = addDays(TODAY, i), o = occ(d).find(x => d > TODAY || (x.end || x.start) >= nowHM()); if (o) next = { d, o }; }
+    const rowsFor = d => occ(d).map(o => hrowP(fmtT(o.start), esc(a.name), (o.ride ? rideHTML(o) : esc(o.sub || '')) + (o.ride && (!o.dropoff || !o.pickup) ? ' <span class="red">rides not set</span>' : ''), `data-a="open" data-t="Activities" data-id="${o.id}" data-d="${d}"`));
+    return back + hero('activity', HC.activity || 'var(--accent)', a.name, esc([joinNames(list(a.kids)), schedTxt(g)].filter(Boolean).join(' · ')), `<button class="icon-btn" data-a="hhEdit" data-v="Activities|${id}" aria-label="Edit activity">${ic('pen', 19)}</button>`) +
+      `<div class="ptiles">${htile(list(a.kids).length, list(a.kids).length === 1 ? 'Person' : 'People', esc(joinNames(list(a.kids))))}${htile(next ? (next.d === TODAY ? 'Today' : next.d === addDays(TODAY, 1) ? 'Tmrw' : fmtDate(next.d)) : '—', 'Next', next ? fmtT(next.o.start) : 'nothing scheduled')}
+        ${htile(a.dropoff || a.pickup ? ic('car', 22) : '—', 'Usual rides', a.dropoff || a.pickup ? rideHTML(a) : 'decided each week')}${htile(a.until ? fmtDate(a.until) : '∞', 'Season', a.until ? 'last day' : 'ongoing')}</div>` +
+      `<div class="sect">Coming up</div>` + hhDays(35, rowsFor, 6) +
+      hbox('Details', [kv('Where', a.location), kv('Teacher or contact', a.teacher), kv('First day', a.from ? fmtDay(a.from) : ''), kv('Last day', a.until ? fmtDay(a.until) : ''), a.notes ? `<div style="white-space:pre-wrap;margin-top:6px">${esc(a.notes)}</div>` : ''].join('') || '<div class="small muted">No details yet.</div>') +
+      `<div style="height:60px"></div>`; }
+  const h = id === 'Cape' ? 'Cape' : 'Boston', cs = S.HouseCards.filter(c => c.house === h), up = cs.filter(c => c.kind === 'upkeep').sort((a, b) => (a.nextDue || '9').localeCompare(b.nextDue || '9')), info = cs.filter(c => c.kind !== 'upkeep');
+  const due = up.filter(c => c.nextDue && c.nextDue <= addDays(TODAY, 30)), loc = S.Houses.find(x => norm(x.name) === norm(h) || x.id === h.toLowerCase());
+  const evs = d => S.Events.filter(e => e.house === h && e.date === d), care = d => S.Childcare.filter(c => c.roster === h && c.date === d);
+  const rowsFor = d => up.filter(c => c.nextDue === d || (d === TODAY && c.nextDue && c.nextDue < TODAY)).map(c => hrowP(c.nextDue < TODAY ? '<span class="red">Overdue</span>' : 'Due', esc(c.title) + aiMk('HouseCards', c.id), 'every ' + esc(c.everyMonths || '?') + ' months', `data-a="open" data-t="HouseCards" data-id="${c.id}"`))
+    .concat(evs(d).map(e => hrowP(e.allDay === '1' || !e.start ? 'All day' : fmtT(e.start), esc(e.title) + aiMk('Events', e.id), esc(e.people || ''), `data-a="open" data-t="Events" data-id="${e.id}" data-d="${d}"`)))
+    .concat(care(d).map(c => hrowP(fmtT(c.start), esc(careTitle(c)), c.confirmedId ? esc(careName(c.confirmedId)) : '<span class="red">not confirmed</span>', `data-a="open" data-t="Childcare" data-id="${c.id}"`)));
+  const n30 = Array.from({ length: 30 }, (_, i) => addDays(TODAY, i)).reduce((n, d) => n + evs(d).length + care(d).length, 0);
+  return back + hero('house', HC.house || 'var(--accent)', h === 'Cape' ? 'Cape house' : 'Boston', loc ? 'Weather location set' : 'No weather location yet', `<button class="icon-btn" data-a="hhAddHouse" data-v="${h}" aria-label="Add to ${h}">${ic('plus', 19)}</button>`) +
+    `<div class="ptiles">${htile(due.length, 'Upkeep due', 'in the next month', due.length ? 'red' : '')}${htile(up.length, 'Upkeep', 'repeating jobs')}${htile(info.length, 'Info cards', 'codes, contacts, how-tos')}${htile(n30, 'Plans here', 'next 30 days')}</div>` +
+    `<div class="sect">Coming up</div>` + hhDays(90, rowsFor, 8) +
+    hbox('Upkeep', up.map(c => `<div class="li plain" data-a="open" data-t="HouseCards" data-id="${c.id}"><div class="grow"><div class="ti">${esc(c.title)}${aiMk('HouseCards', c.id)}</div><div class="small muted">Every ${esc(c.everyMonths || '?')} months · next ${c.nextDue ? fmtDay(c.nextDue) : 'not set'}</div></div><span class="chev">›</span></div>`).join('') || '<div class="small muted">No upkeep yet.</div>') +
+    hbox('Info', info.map(c => `<div class="li plain" data-a="open" data-t="HouseCards" data-id="${c.id}"><div class="grow"><div class="ti">${esc(c.title)}${aiMk('HouseCards', c.id)}</div><div class="small muted">${esc((c.body || '').slice(0, 90))}</div></div><span class="chev">›</span></div>`).join('') || '<div class="small muted">No info cards yet.</div>') +
+    (loc ? hbox('Weather location', `<div class="li plain" data-a="editH" data-v="${loc.id}"><div class="grow"><div class="ti">${esc(loc.name)}</div><div class="small muted">${esc(loc.lat)}, ${esc(loc.lon)}</div></div><span class="chev">›</span></div>`) : '') +
+    `<div style="height:90px"></div><button class="fab" data-a="hhAddHouse" data-v="${h}" aria-label="Add info or upkeep">${ic('plus', 20)}Add</button>`;
+}
+A.hhEdit = v => { const [t, id] = v.split('|'), r = byId(t, id); if (r) editForm(t, r); };
+A.hhAddHouse = h => editForm('HouseCards', null, { house: h });
 A.personEdit = id => { const p = byId('People', id); if (p) editForm('People', p, p.kind === 'kid' ? null : { _wfh: wfhOf(p).days.join(', ') }); };
 A.personEvent = (name, el) => editForm('Events', null, Object.assign({ people: name }, el && el.dataset && el.dataset.d ? { date: el.dataset.d } : {}));
 A.personTodo = name => { const p = personOf(name); editForm('Todos', null, p && p.kind === 'kid' ? { kid: name } : { assignee: name }); };
@@ -1669,7 +1727,7 @@ let HH = '';
 function render() {
   const pv = view === 'person' && byId('People', PERSON);
   if (view === 'person' && !pv) view = prevView || 'home';
-  $('title').textContent = pv ? (pv.name === ME ? 'Me' : pv.name) : view === 'hh' ? HH_TITLES[HH] : TITLES[view];
+  $('title').textContent = pv ? (pv.name === ME ? 'Me' : pv.name) : view === 'hh' ? hhTitle() : TITLES[view];
   document.querySelectorAll('nav.bottom button').forEach(b => b.className = b.dataset.v === view ? 'on' : '');
   if (!ME) return;
   $('hdrAsk').style.display = aiCanUse() ? '' : 'none';
