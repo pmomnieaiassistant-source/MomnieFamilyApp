@@ -1,6 +1,8 @@
 /**
  * Momnie Family app backend
- * Version 3.9 (2026-11-18)
+ * Version 3.10 (2026-11-18)
+ *   3.10: school drop-off and pickup in the reminders. The 8 PM message lists tomorrow's school runs and who is doing
+ *        each (changes and runs with no one set are called out), and the morning summary lists today's.
  *   3.9: new weeks start with no dinner planned (the weekly draft no longer picks random recipes). Who usually cooks
  *        and who is usually out still fill in. Random on a single night still follows the dinner rules.
  *   3.8: "Make it an app item" on a shared-calendar entry: the app takes over the existing calendar event (or repeating
@@ -761,12 +763,50 @@ function monthCard_(t) {
   if (up.length) L.push('**Upkeep due:** ' + up.map(function (h) { return h.title; }).join(', '));
   if (L.length) log_('App', { type: 'summary_month', text: L.join('\n'), cat: 'summary', ref: t });
 }
+// ---------- school runs (the same rules the app uses) ----------
+function jsonSafe_(s) { try { var o = JSON.parse(s || '{}'); return o && typeof o === 'object' ? o : {}; } catch (e) { return {}; } }
+/** A school's hours for a weekday: { start, end, ext } (hours JSON {"Mon":[start, pickup, extEnd]}, else the single times). */
+function schoolHoursFor_(sch, day) { var w = jsonSafe_(sch.hours)[day];
+  return { start: w ? w[0] || '' : sch.start || '', end: w ? w[1] || '' : sch.end || '', ext: w && w.length > 2 ? w[2] || '' : sch.extEnd || '' }; }
+/** Drop-off, pickup and extended-day pickup on a date, grouped by school and time, with the kids and who is doing each run. */
+function schoolRuns_(date) {
+  var day = DAYS[dow_(date)], out = {}, order = [];
+  if (dow_(date) > 4) return [];
+  rows_('People').forEach(function (k) {
+    if (k.kind !== 'kid' || !k.schoolId) return;
+    var sch = get_('Schools', k.schoolId); if (!sch) return;
+    var h = schoolHoursFor_(sch, day); if (!h.start) return;
+    var cal = rows_('SchoolCal').filter(function (c) { return c.schoolId === sch.id && c.date && date >= c.date && date <= (c.endDate || c.date) && (c.kind === 'off' || c.kind === 'half'); })[0];
+    if (cal && cal.kind === 'off') return;
+    var schedRow = get_('Settings', 'kid|' + k.id + '|schedule'), sched = schedRow ? jsonSafe_(schedRow.value)[day] || {} : {};
+    var legacyX = !schedRow && list_(k.extDays).indexOf(day) >= 0 ? h.ext : '';
+    var e = sched.e || h.end, x = sched.x || legacyX, ext = !!x && !cal;
+    var pick = cal ? (cal.end || '12:00') : ext ? x : e;
+    [['d', h.start], [ext ? 'x' : 'p', pick]].forEach(function (r) {
+      var key = sch.id + '|' + r[0] + '|' + r[1];
+      if (!out[key]) { out[key] = { sid: sch.id, name: sch.short || sch.name, kind: r[0], time: r[1], kids: [] }; order.push(key); }
+      out[key].kids.push(k.name);
+    });
+  });
+  return order.map(function (key) {
+    var r = out[key], usual = (jsonSafe_(setting_('school|' + r.sid + '|rides', '{}'))[day] || {})[r.kind] || '';
+    var o = rows_('Overrides').filter(function (x) { return x.ref === 'school:' + r.sid + '|' + r.kind && x.date === date; })[0];
+    r.who = o ? o.pickup || '' : usual; r.usual = usual; r.changed = !!o; return r;
+  }).sort(function (a, b) { return a.time < b.time ? -1 : a.time > b.time ? 1 : 0; });
+}
+var RUN_WORD_ = { d: 'drop-off', p: 'pickup', x: 'extended day pickup' };
+function kidList_(a) { return a.length < 2 ? a.join('') : a.slice(0, -1).join(', ') + ' and ' + a[a.length - 1]; }
+/** "3 PM CHS pickup (Clara and Conrad): Shana, changed from Lina" */
+function runLine_(r) { return t12_(r.time) + ' ' + r.name + ' ' + RUN_WORD_[r.kind] + ' (' + kidList_(r.kids) + '): ' +
+  (r.who ? r.who + (r.changed ? ', changed' + (r.usual ? ' from ' + r.usual : '') : '') : 'NO ONE SET'); }
+
 function digest_(t) {
   ADULTS.forEach(function (p) {
     if (!pref_(p, 'summary')) return;
     var L = [], m = get_('Menus', monday_(t) + '-' + DAYS[dow_(t)]), dish = dishName_(m);
     if (dish) L.push('Tonight: ' + dish + (m.cook ? ' (' + m.cook + ' cooking)' : '') + (m.away ? ' (' + m.away + ' not home)' : ''));
     rows_('Childcare').forEach(function (c) { if (c.date === t) { var ct = get_('Caretakers', c.confirmedId); L.push('Caretaker: ' + (ct ? ct.name : 'NOT CONFIRMED') + ', ' + t12_(c.start) + '–' + t12_(c.end)); } });
+    schoolRuns_(t).forEach(function (r) { L.push(runLine_(r)); });
     kidOcc_(t).forEach(function (o) { L.push(t12_(o.start) + ' ' + o.title + (!o.dropoff || !o.pickup ? ' (ride not set)' : '')); });
     var mine = rows_('Todos').filter(function (x) { return x.status !== 'Done' && (x.assignee === p || !x.assignee); });
     var over = mine.filter(function (x) { return x.due && x.due < t; }), due = mine.filter(function (x) { return x.due === t; });
@@ -777,11 +817,15 @@ function digest_(t) {
   });
 }
 function gaps_(t) {
-  var tm = addDays_(t, 1), L = [];
+  var tm = addDays_(t, 1), L = [], runs = schoolRuns_(tm), missing = runs.filter(function (r) { return !r.who; });
+  missing.forEach(function (r) { L.push(r.name + ' ' + RUN_WORD_[r.kind] + ' ' + t12_(r.time) + ': no one set'); });
   kidOcc_(tm).forEach(function (o) { if (!o.dropoff || !o.pickup) L.push(o.title + ' ' + t12_(o.start) + ': ' + (!o.dropoff && !o.pickup ? 'drop-off and pickup' : !o.dropoff ? 'drop-off' : 'pickup') + ' not set'); });
   rows_('Childcare').forEach(function (c) { if (c.date === tm && !c.confirmedId) L.push('Caretaker for ' + t12_(c.start) + '–' + t12_(c.end) + ' is not confirmed'); });
-  if (!L.length) return;
-  ADULTS.forEach(function (p) { if (pref_(p, 'planning')) notify_(p, 'Tomorrow needs a plan', L.join('\n')); });
+  // One message a school night: tomorrow's school runs (who is doing each), plus anything that still needs a plan.
+  var body = (runs.length ? ['School runs tomorrow:'].concat(runs.map(runLine_)) : []).concat(L.length ? (runs.length ? [''] : []).concat(['Needs a plan:'], L) : []);
+  if (!body.length) return;
+  var title = L.length ? 'Tomorrow needs a plan' : 'Tomorrow\'s school runs';
+  ADULTS.forEach(function (p) { if (pref_(p, 'planning')) notify_(p, title, body.join('\n')); });
 }
 function wxAlerts_(offset, when) {
   ADULTS.forEach(function (p) {
