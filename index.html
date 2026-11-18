@@ -192,6 +192,13 @@
   .plan .ph a { display:inline-flex; align-items:center; font-size:13px; letter-spacing:0; text-transform:none; }
   .prow { display:grid; grid-template-columns:62px minmax(0,1fr); gap:10px; font-size:14px; line-height:1.35; padding:4px 0; } .prow > span:first-child { font-weight:800; color:var(--muted); }
   .prow.past { opacity:.5; }
+  .aihead { margin-top:10px; font-size:17px; line-height:1.4; font-weight:600; letter-spacing:-.2px; }
+  .wxline { display:flex; align-items:center; gap:8px; margin-top:12px; font-size:14px; } .wxline b { font-size:17px; }
+  .wxsay { margin-top:4px; font-size:14px; color:var(--muted); }
+  details.plan > summary { list-style:none; cursor:pointer; } details.plan > summary::-webkit-details-marker { display:none; }
+  details.plan > summary .chev { display:inline-flex; transition:transform .15s; } details.plan[open] > summary .chev { transform:rotate(90deg); }
+  .aifoot { display:flex; align-items:center; gap:6px; margin-top:12px; font-size:12px; color:var(--muted); } .aifoot .grow { flex:1; }
+  .aifoot button { display:inline-flex; align-items:center; gap:4px; border:0; background:none; color:var(--accent); font:inherit; font-weight:700; padding:4px 0; }
   /* person pages and @mentions */
   .phead { display:flex; gap:12px; align-items:center; margin-right:44px; } .phead .av { width:52px; height:52px; } .phead .av i { font-size:20px; }
   .hfoot { text-align:center; padding:28px 24px 36px; font-size:13px; color:var(--muted); line-height:1.6; } .hfoot a { color:var(--accent); font-weight:600; cursor:pointer; } .hfoot .ver { font-size:12px; font-weight:600; letter-spacing:.3px; margin-bottom:6px; opacity:.8; }
@@ -324,7 +331,7 @@
 // Momnie Family app v6.0
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'], DAYN = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'], ADULTS = ['Paul', 'Shana'];
 // Shown at the bottom of Home. Bump it together with VERSION in sw.js on every release.
-const APP_VERSION = '12.3 · Nov 18, 2026';
+const APP_VERSION = '12.4 · Nov 18, 2026';
 const TABLES = ['People', 'Schools', 'SchoolCal', 'Activities', 'Overrides', 'Events', 'Caretakers', 'Childcare', 'Birthdays', 'Todos', 'TodoTypes', 'Recipes', 'DinnerRules', 'Weeks', 'Menus',
   'Groceries', 'GroceryList', 'HouseCards', 'Houses', 'WeatherRules', 'Quotes', 'Memories', 'Updates', 'Messages', 'Activity', 'Comments', 'Reactions', 'Links', 'Settings', 'Photos', 'gifts', 'ai_rules', 'daily_items', 'daily_completions'];
 const CAT = { School: '#3f6fb5', Kids: '#4f7cc2', Work: '#64748b', Family: '#5b6fa8', Dinner: '#b08a4f', Caretaker: '#3e9aa6', Shared: '#94a3b8', Birthday: '#c9806a' }, SCHOOL_C = ['#5a72b8', '#7a8597', '#4a6fb0'];
@@ -1606,6 +1613,44 @@ function planRows(d, after) {
   return rows.filter(r => !after || !r.s || (r.e || r.s) >= after)
     .sort((a, b) => (a.dinner ? 2 : a.s ? 1 : 0) - (b.dinner ? 2 : b.s ? 1 : 0) || a.s.localeCompare(b.s));
 }
+// AI Today card: when the assistant is on and this person turned it on, the assistant writes their card
+// (headline, a weather sentence, the few things that matter most). Anything missing or stale shows the classic card.
+let BRIEFING = false;
+function aiCard(sd, night) {
+  const on = (byId('Settings', 'app|ai.on') || {}).value === '1' && st('ai.card', '') === '1';
+  if (!on) return { on: false };
+  let b = null; try { b = JSON.parse(st('ai.brief', '') || 'null'); } catch (e) {}
+  return { on, brief: b && b.for === sd && b.mode === (night ? 'night' : 'day') && b.headline ? b : null };
+}
+const REF_ICON = { Todos: 'todo', Events: 'planner', Activities: 'activity', Childcare: 'care', Menus: 'meals', HouseCards: 'house', People: 'building', run: 'car' };
+function aiHero(b, o) {
+  const items = (b.items || []).filter(i => { const [t, id] = i.ref.split(':'); if (t !== 'Todos') return true; const x = byId('Todos', id); return x && x.status !== 'Done'; });
+  // Rule-based alerts (rides not set, caretaker not confirmed, conflicts, posts tagging you) always show. When the
+  // assistant wrote about the same thing, its wording is kept and takes the alert's color.
+  const akey = a => a.sride ? 'run:' + a.sride : a.open ? a.open[0] + ':' + a.open[1] : '', refs = new Set(items.map(i => i.ref).filter(Boolean));
+  const lvlOf = new Map(o.al.filter(a => refs.has(akey(a)) && a.lvl).map(a => [akey(a), a.lvl])), reds = o.al.filter(a => !refs.has(akey(a)));
+  const item = i => { const [t, ...rest] = i.ref.split(':'), id = rest.join(':'), lvl = lvlOf.get(i.ref) || (i.level === 'heads-up' ? 'amber' : 'plain');
+    const tap = !i.ref ? '' : t === 'run' ? `data-a="schoolRide" data-v="${esc(id)}"` : byId(t, id) || t === 'Menus' ? `data-a="open" data-t="${t}" data-id="${esc(id)}" data-d="${o.sd}"` : '';
+    return `<div class="alert ${lvl}" ${tap}>${ic(REF_ICON[t] || 'spark', 16)}<span class="grow">${esc(i.text)}</span>${tap ? ic('chev', 16) : ''}</div>`; };
+  const wxl = o.wd ? `<div class="wxline">${WXI(o.code, 22)}<b>${o.night || WX.now === null ? o.wd.high : WX.now}°</b><span class="muted">H ${o.wd.high}° · L ${o.wd.low}° · rain ${o.wd.rain}%${WX.place ? ' · ' + esc(WX.place) : ''}</span></div>` : '';
+  const wsay = b.weather ? `<div class="wxsay">${esc(b.weather)}</div>` : o.wx.length ? `<div class="stack">${o.wx.map(w => `<div class="alert amber">${ic(w.icon, 16)}<span>${esc(w.text)}</span></div>`).join('')}</div>` : '';
+  const t = b.time ? fmtT(b.time.slice(11, 16)) : '';
+  return `<div class="hero"><div class="small muted b">${new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}</div>
+      <div style="font-size:22px;font-weight:800;letter-spacing:-.5px">Good ${o.h < 12 ? 'morning' : o.h < 17 ? 'afternoon' : 'evening'}, ${esc(ME)}</div>
+      <div class="aihead">${esc(b.headline)}</div>${wxl}${wsay}
+      ${reds.length ? `<div class="stack" style="margin-top:12px">${reds.map(a => o.remHTML({ lvl: a.lvl || 'plain', icon: a.icon, text: a.text, open: a.open, sride: a.sride })).join('')}</div>` : ''}
+      ${items.length ? `<div class="lbl">${o.night ? 'For tomorrow' : 'What matters'}</div><div class="stack">${items.map(item).join('')}</div>` : ''}
+      <details class="plan"><summary class="ph"><span>${o.night ? "Tomorrow's plan" : 'Full plan'} · ${o.pl.length}</span><span class="chev">${ic('chev', 16)}</span></summary>
+        ${o.pl.length ? o.pl.map(o.prow).join('') : `<div class="small muted" style="padding-top:6px">Nothing planned.</div>`}
+        <div class="actions" style="margin-top:6px"><button class="btn gray sm" data-a="planDay" data-v="${o.sd}">${ic('planner', 16)}Open in Planner</button></div></details>
+      <div class="aifoot">${ic('spark', 13)}<span class="grow">${BRIEFING ? 'Rewriting…' : `Written by your assistant${t ? ' at ' + t : ''}`}</span>${BRIEFING ? '' : `<button data-a="aiBrief" aria-label="Rewrite my card">${ic('refresh', 14)}Refresh</button>`}</div></div>`;
+}
+A.aiBrief = async () => { if (BRIEFING) return; const night = new Date().getHours() >= 19, sd = night ? addDays(TODAY, 1) : TODAY; BRIEFING = true; render();
+  try { const r = await api('ai_brief', { date: sd, mode: night ? 'night' : 'day' });
+    if (r.brief && r.brief.error) toast(r.brief.error);
+    else if (r.brief) { const id = ME + '|ai.brief', row = byId('Settings', id), v = JSON.stringify(r.brief); if (row) row.value = v; else S.Settings.push({ id, value: v }); saveCache(); } }
+  catch (e) { toast(e.message); }
+  BRIEFING = false; render(); };
 function vFeed() {
   // The Today card changes with the time of day: the morning shows today, the afternoon shows the rest of today,
   // and from 7 PM it switches to tomorrow (weather for tomorrow's clothes, tomorrow's to-dos and plan).
@@ -1634,6 +1679,9 @@ function vFeed() {
     ${rem.length ? `<div class="lbl">Reminders</div><div class="stack">${rem.map(remHTML).join('')}</div>` : ''}
     <div class="plan" data-a="planDay" data-v="${sd}"><div class="ph"><span>${night ? "Tomorrow's plan" : h >= 12 ? 'Rest of today' : "Today's plan"}</span><a>Planner${ic('chev', 16)}</a></div>
       ${pl.length ? pl.slice(0, 10).map(prow).join('') + (pl.length > 10 ? `<div class="small muted" style="padding-top:4px">+${pl.length - 10} more</div>` : '') : `<div class="small muted" style="padding-top:6px">Nothing planned${night ? ' for tomorrow' : ''}.</div>`}</div></div>`;
+  const ai = aiCard(sd, night);
+  if (ai.brief) html = aiHero(ai.brief, { sd, night, h, al, wd, code, wx, pl, prow, remHTML });
+  else if (ai.on) html = html.replace(/<\/div>$/, `<div class="aifoot">${ic('spark', 13)}<span class="grow">${BRIEFING ? 'Writing your card…' : 'Your assistant card is written each morning and at 7 PM.'}</span>${BRIEFING ? '' : '<button data-a="aiBrief">Write it now</button>'}</div></div>`);
   const hide = c => c && st('f.' + c, '1') === '0';
   const gone = feedHidden();
   const kindHidden = a => a.table === 'Photos' ? !fOn('photos') : a.type === 'daily' ? !fOn('daily') : hide(a.cat);
@@ -1880,7 +1928,7 @@ const AI_EXAMPLES = { general: 'e.g. If we both have evening plans and no careta
   meals: 'e.g. If no dinner is planned for tomorrow by 8 PM, suggest something we haven\'t had in a while.', todos: 'e.g. If a bill has been unpaid for two weeks, tell Paul privately to do it today.',
   rides: 'e.g. If the person picking up from school has a work event that day, ask who is covering.', house: 'e.g. Remind us a week before any house upkeep is due.', family: 'e.g. Two weeks before a kid\'s birthday, tell us if fewer than 3 gift ideas are saved.' };
 function aiRuleForm(rule, area) { const r = rule || {}, a = r.area || area || 'general';
-  form(rule ? 'Assistant rule' : '✨ Ask assistant', v => [F('text', 'What should the assistant watch for?', 'area', null, { ph: AI_EXAMPLES[v.area] || AI_EXAMPLES.general }),
+  form(rule ? 'Assistant rule' : 'Ask assistant', v => [F('text', 'What should the assistant watch for?', 'area', null, { ph: AI_EXAMPLES[v.area] || AI_EXAMPLES.general }),
       F('audience', 'Who should hear about it', 'multi', ADULTS, { hint: 'Just one person makes it a private note. Each time it runs, the assistant checks this rule and posts only when it applies.' }),
       F('area', 'About', 'sel', AI_AREAS, { re: 1 }), F('active', 'On', 'chk')],
     { id: r.id || '', text: r.text || '', audience: r.audience || ME, area: a, active: rule ? (r.active === '0' ? '' : '1') : '1' },
@@ -1890,8 +1938,8 @@ function aiRuleForm(rule, area) { const r = rule || {}, a = r.area || area || 'g
     rule ? [['Save', ''], ['Delete', 'del']] : [['Save', '']]); }
 A.aiRuleNew = area => aiRuleForm(null, area || 'general');
 A.aiRuleEdit = id => { const r = byId('ai_rules', id); if (r) aiRuleForm(r); };
-const aiRuleRow = r => `<div class="li" style="padding:12px 0" data-a="aiRuleEdit" data-v="${r.id}"><div class="hicon">${ic('spark')}</div><div class="grow"><div class="ti" style="font-weight:600">${esc(r.text)}</div>
-  <div class="small muted">${esc((AI_AREAS.find(x => x[0] === r.area) || AI_AREAS[0])[1])} · tells ${esc(joinNames(list(r.audience)) || 'everyone')}${list(r.audience).length === 1 ? ' (private)' : ''}${r.active === '0' ? ' · off' : ''}${r.created_by ? ' · added by ' + esc(r.created_by) : ''}</div></div><span class="chev">›</span></div>`;
+const aiRuleRow = r => `<div class="li" style="padding:12px 0" data-a="aiRuleEdit" data-v="${r.id}"><div class="grow"><div class="ti">${esc(r.text)}</div>
+  <div class="small muted">${ic('spark', 13)} Assistant · ${esc((AI_AREAS.find(x => x[0] === r.area) || AI_AREAS[0])[1])} · tells ${esc(joinNames(list(r.audience)) || 'everyone')}${list(r.audience).length === 1 ? ' (private)' : ''}${r.active === '0' ? ' · off' : ''}${r.created_by ? ' · added by ' + esc(r.created_by) : ''}</div></div><span class="chev">›</span></div>`;
 const aiAskBtn = area => `<button class="btn gray" data-a="aiRuleNew" data-v="${area}">${ic('spark', 16)}Ask assistant</button>`;
 const AI_TOPICS = [['meals', 'Meals and recipes'], ['birthdays', 'Birthdays and gift-idea counts'], ['todos', 'To-dos and bills'], ['rides', 'Rides and caretakers'], ['week', 'The week ahead'], ['house', 'House upkeep']];
 A.aiEdit = (v, el) => { if (ME !== 'Paul') return; const g = k => (byId('Settings', 'app|ai.' + k) || {}).value;
@@ -2230,7 +2278,7 @@ const PAGES = {
   houses: () => '<h2>House</h2>' + ['Boston', 'Cape'].map(h => `<h3>${h === 'Cape' ? 'Cape house' : h}</h3>` + (S.HouseCards.filter(c => c.house === h).sort((a, b) => a.kind.localeCompare(b.kind)).map(c => rowLi('HouseCards', c.id, c.title, c.kind === 'upkeep' ? `Every ${c.everyMonths || '?'} months · next ${c.nextDue ? fmtDay(c.nextDue) : 'not set'}` : (c.body || '').slice(0, 50))).join('') || '<div class="small muted">Nothing here yet.</div>')).join('') +
     addBtn('HouseCards', 'Add info or upkeep') + '<h3>Locations (for weather)</h3>' + S.Houses.map(h => `<div class="li" style="padding:10px 0" data-a="editH" data-v="${h.id}"><div class="grow"><div class="ti">${esc(h.name)}</div><div class="small muted">${esc(h.lat)}, ${esc(h.lon)}</div></div><span class="chev">›</span></div>`).join(''),
   WeatherRules: () => '<h2>Weather rules</h2>' + S.WeatherRules.map(r => rowLi('WeatherRules', r.id, r.message, `If ${r.metric} is ${r.op === '<' ? 'below' : 'above'} ${r.threshold} · ${r.when === 'night' ? 'evening before' : 'morning of'}${r.push === '1' ? ' · sends a notification' : ''}${r.enabled === '0' ? ' · off' : ''}`)).join('') + S.ai_rules.filter(r => r.area === 'weather').map(aiRuleRow).join('') +
-    `<div class="actions"><button class="btn" data-a="add" data-v="WeatherRules">＋ Basic rule</button>${aiAskBtn('weather')}</div>`,
+    `<div class="actions"><button class="btn" data-a="add" data-v="WeatherRules">${ic('plus', 16)}Basic rule</button>${aiAskBtn('weather')}</div>`,
   Groceries: () => '<h2>Grocery library</h2>' + (S.Groceries.slice().sort((a, b) => a.name.localeCompare(b.name)).map(g => rowLi('Groceries', g.id, g.name, [g.category, g.details, +g.recurDays ? 'every ' + g.recurDays + ' days' : ''].filter(Boolean).join(' · '))).join('') || '<div class="empty">Empty so far.</div>') + addBtn('Groceries', 'Add a grocery card'),
   TodoTypes: () => '<h2>To-do types</h2>' + S.TodoTypes.map(t => rowLi('TodoTypes', t.id, t.name, `Goes to ${t.assignee || 'either of us'}${t.builtin === '1' ? ' · built in' : ''}`)).join('') + addBtn('TodoTypes', 'Add a type'),
   memories: () => `<h2>Quotes and memories</h2><div class="kv">${S.Quotes.length} wedding quote${S.Quotes.length === 1 ? '' : 's'} and ${S.Memories.length} "this day" memor${S.Memories.length === 1 ? 'y' : 'ies'} saved.</div><div class="kv muted small">Add them in the Sheet: the Quotes tab (quote, author) and the Memories tab (date, note, and an optional link to a photo in Google Drive). On a day with a quote or memory, a splash screen shows the first time each of you opens the app.</div>
@@ -2247,6 +2295,7 @@ const PAGES = {
       <div class="kv"><span>Seen by</span>${esc(joinNames(aiWho()))}</div>
       <div class="kv"><span>Topics</span>${esc(AI_TOPICS.filter(x => topics.includes(x[0])).map(x => x[1]).join(', ') || 'None')}</div>
       ${last ? `<div class="kv"><span>Last run</span>${esc(last.replace('T', ' '))}</div>` : ''}
+      <div class="kv"><span>Today card</span>${esc(joinNames(ADULTS.filter(a => (byId('Settings', a + '|ai.card') || {}).value === '1')) || 'No one yet')} · each person turns it on in Settings, Notifications and Feed</div>
       <div class="kv"><span>Assistant rules</span>${S.ai_rules.filter(r => r.active !== '0').length} on · <a data-a="homeOpen" data-v="airules">See and add rules</a></div>
       <div class="actions"><button class="btn" data-a="aiEdit">${ic('pen', 16)}Change</button><button class="btn gray" data-a="aiRun">${ic('spark', 16)}Post now</button></div>
       <div class="small muted" style="margin-top:12px">Needs an Anthropic API key in Apps Script: Project Settings, Script properties, ANTHROPIC_API_KEY. Each person can mute its notifications under Notifications and Feed.</div>`; },
@@ -2255,6 +2304,8 @@ const PAGES = {
       `<h3>Bundling</h3><div class="small muted">When several things happen close together, you get one notification that sums them up instead of a string of buzzes. Urgent alerts always come right away.</div><label>Bundle alerts that arrive within</label><select data-c="setVal" data-k="bundleMin">${[['0', 'Off (send each one)'], ['5', '5 minutes'], ['15', '15 minutes'], ['30', '30 minutes'], ['60', '1 hour']].map(([v, l]) => `<option value="${v}" ${st('bundleMin', '5') === v ? 'selected' : ''}>${l}</option>`).join('')}</select>` +
       `<div class="two"><div><label>Quiet hours start</label>${timeSelect('data-c="setVal" data-k="quietStart"', q('quietStart'), 'Off')}</div><div><label>Quiet hours end</label>${timeSelect('data-c="setVal" data-k="quietEnd"', q('quietEnd'), 'Off')}</div></div>
       <div class="actions"><button class="btn gray sm" data-a="ntest">Send me a test</button></div><h3>Show in my Feed</h3>` + FKINDS().map(([k, l]) => chk('setFlag', 'f.' + k, '1', l)).join('') +
+      ((byId('Settings', 'app|ai.on') || {}).value === '1' ? `<h3>Today card</h3>` + chk('setFlag', 'ai.card', '0', 'Let the AI assistant write my Today card') +
+        `<div class="small muted">Each morning, and at 7 PM for tomorrow, the assistant rewrites the card at the top of your Feed: a short summary of your day, what to wear and the few things that matter most for you. Urgent alerts always still show. Turn it off to go back to the usual card.</div>` : '') +
       `<h3>Weather</h3><div class="small muted">Weather follows this phone: near Boston or the Cape shows that house, anywhere else shows local weather.</div><div class="actions"><button class="btn gray sm" data-a="geoOn">${store.get('geo') === '1' ? '✓ Using my location' : 'Use my location'}</button></div>
 ` +
       (API_URL ? '' : `<h3>Connection</h3><label>Backend URL</label><input id="sUrl" value="${esc(store.get('url'))}"><div class="actions"><button class="btn gray" data-a="connect">Save and reconnect</button></div>`); }
