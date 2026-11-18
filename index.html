@@ -323,7 +323,7 @@
 // Momnie Family app v6.0
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'], DAYN = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'], ADULTS = ['Paul', 'Shana'];
 // Shown at the bottom of Home. Bump it together with VERSION in sw.js on every release.
-const APP_VERSION = '11.1 · Nov 18, 2026';
+const APP_VERSION = '11.2 · Nov 18, 2026';
 const TABLES = ['People', 'Schools', 'SchoolCal', 'Activities', 'Overrides', 'Events', 'Caretakers', 'Childcare', 'Birthdays', 'Todos', 'TodoTypes', 'Recipes', 'DinnerRules', 'Weeks', 'Menus',
   'Groceries', 'GroceryList', 'HouseCards', 'Houses', 'WeatherRules', 'Quotes', 'Memories', 'Updates', 'Messages', 'Activity', 'Comments', 'Reactions', 'Links', 'Settings', 'Photos', 'gifts', 'daily_items', 'daily_completions'];
 const CAT = { School: '#3f6fb5', Kids: '#4f7cc2', Work: '#64748b', Family: '#5b6fa8', Dinner: '#b08a4f', Caretaker: '#3e9aa6', Shared: '#94a3b8', Birthday: '#c9806a' }, SCHOOL_C = ['#5a72b8', '#7a8597', '#4a6fb0'];
@@ -1734,7 +1734,7 @@ function vMenu() {
           ${MCHG === m.id ? `<div class="dchg" data-a="mChgClose"><button class="btn" data-a="mRandom" data-v="${m.id}">${ic('shuffle', 18)}Random</button><button class="btn" data-a="mSelect" data-v="${m.id}">${ic('list', 18)}Select</button></div>` : ''}</div>`; }).join('') +
       `${w.id > cur ? `<div class="actions pad" style="margin-bottom:6px"><button class="btn danger sm" data-a="weekDel" data-v="${w.id}">Delete this week's plan</button></div>` : ''}`; }
   html += (future.length ? `<div class="sect">Future weeks</div>` : '') + future.map(x => `<div class="li" data-a="mgo" data-v="${x.id}"><div class="hicon">${ic('planner')}</div><div class="grow"><div class="ti">${weekName(x.id, cur)}</div><div class="small muted">${fmtDate(x.id)} – ${fmtDate(addDays(x.id, 6))} · ${S.Menus.filter(m => m.week === x.id && dish(m)).length} nights planned</div></div><span class="chev">›</span></div>`).join('') +
-    `    <div class="actions pad" style="margin-bottom:16px"><button class="btn gray sm" data-a="rules">${ic('gear', 16)}Dinner rules</button><button class="btn gray sm" data-a="ingredients">${ic('cart', 16)}Ingredients for planned meals</button></div>`;
+    '<div style="height:16px"></div>';
   return html;
 }
 A.mweek = n => { const cur = mondayOf(TODAY); MW = +n === 0 ? cur : addDays(MW || cur, +n); if (MW < cur) MW = cur; render(); };
