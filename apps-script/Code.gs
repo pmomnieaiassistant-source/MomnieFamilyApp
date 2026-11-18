@@ -1,6 +1,8 @@
 /**
  * Momnie Family app backend
- * Version 3.12 (2026-11-18)
+ * Version 3.13 (2026-11-18)
+ *   3.13: assistant rules. Plain-English rules (new ai_rules tab) that the AI assistant checks every run, posting to the
+ *        people each rule names (one person = a private note). Activity gets an audience column for these notes.
  *   3.12: AI assistant. Once a day (after the hour set in the app) Claude reads a summary of the Sheet and posts 0 to 3
  *        short notes to the Feed as "AI assistant". Turn it on and choose who sees it in the app: Home, Settings, AI
  *        assistant (Paul only). Needs the Script property ANTHROPIC_API_KEY. Optional: AI_MODEL (default claude-opus-5-5).
@@ -58,7 +60,7 @@ var T = {
   Memories: 'id,date,note,photo',
   Updates: 'id,date,title,message,hiddenFrom,label',   // label: optional heading over a splash screen, e.g. "A bit from Paul"
   Messages: 'id,time,from,text,tags,visibility,pinUntil,urgent,resolved,resolvedBy',
-  Activity: 'id,time,who,type,text,amount,table,ref,cat',
+  Activity: 'id,time,who,type,text,amount,table,ref,cat,audience',   // audience: who sees an AI assistant note
   Comments: 'id,time,who,table,ref,text,system',
   Reactions: 'id,time,who,table,ref,emoji',
   Links: 'id,aTable,aRef,bTable,bRef,by',
@@ -66,6 +68,7 @@ var T = {
   Settings: 'id,value',
   NeedsReview: 'id,recipe,ingredient,closest,action',
   gifts: 'id,recipient,added_by,name,description,url,photo,assigned_to,created_at',
+  ai_rules: 'id,text,audience,area,active,created_by,created_at',   // plain-English rules the AI assistant follows
   daily_items: 'id,title,days,time_of_day,for_person,visible_to,created_by,active',
   daily_completions: 'id,item_id,date,completed_by,completed_at',   // id = item_id|date, so each item is checked once per day
   ideas: 'id,time,who,text'   // feedback sent from the Home screen; read it in the Sheet
@@ -334,7 +337,7 @@ function write_(b, me) {
 
 function log_(who, log, t, ref) {
   put_('Activity', { time: log.time || now_(), who: who, type: log.type || '', text: log.text || '', amount: log.amount === undefined ? '' : log.amount,
-    table: log.table || t || '', ref: log.ref || ref || '', cat: log.cat || '' });
+    table: log.table || t || '', ref: log.ref || ref || '', cat: log.cat || '', audience: log.audience || '' });
   if (who !== 'App' && who !== 'AI assistant') _logs.push(log);   // AI notes notify only their chosen audience (aiPosts_)
 }
 
@@ -827,11 +830,14 @@ function runLine_(r) { return t12_(r.time) + ' ' + r.name + ' ' + RUN_WORD_[r.ki
   (r.who ? r.who + (r.changed ? ', changed' + (r.usual ? ' from ' + r.usual : '') : '') : 'NO ONE SET'); }
 
 // ---------- AI assistant ----------
+function aiRules_() { return rows_('ai_rules').filter(function (r) { return r.text && r.active !== '0'; }); }
 var AI_TOPICS_ = { meals: 'Meals and recipes', birthdays: 'Birthdays and gift ideas (counts only)', todos: 'To-dos and bills', rides: 'School runs, activity rides and caretakers', week: 'The week ahead', house: 'House upkeep' };
 function aiSafe_(t) { try { aiPosts_(t, false); } catch (e) { console.error(e); put_('Settings', { id: 'app|ai.last', value: now_() + ' · error: ' + String(e && e.message || e).slice(0, 200) }); } }
 /** A compact, plain summary of what's coming up, limited to the chosen topics. Gift ideas themselves are never included. */
 function aiContext_(t) {
-  var topics = list_(setting_('app|ai.topics', Object.keys(AI_TOPICS_).join(', '))), on = function (k) { return topics.indexOf(k) >= 0; }, c = { today: nice_(t), topics: topics };
+  var topics = list_(setting_('app|ai.topics', Object.keys(AI_TOPICS_).join(', '))), rules = aiRules_(),
+      on = function (k) { return rules.length || topics.indexOf(k) >= 0; }, c = { today: nice_(t), topics: topics };   // rules can be about anything, so they see everything
+  if (rules.length) c.rules = rules.map(function (r) { return { id: r.id, rule: r.text, tellOnly: r.audience || 'everyone who sees AI notes' }; });
   var people = rows_('People'), kids = people.filter(function (p) { return p.kind === 'kid'; }).map(function (p) { return p.name; });
   c.family = people.map(function (p) { return p.name + (p.kind === 'kid' ? ' (kid)' : ''); });
   if (on('meals') || on('week')) {
@@ -870,11 +876,13 @@ function aiPosts_(t, manual) {
   var system = 'You are the AI assistant inside a family\'s shared home app (parents Paul and Shana, and their kids). Each morning you read a summary of the family\'s plans and write 0 to 3 short notes for the app\'s Feed.\n' +
     'Write only notes that help: something to act on, a gap in the plan, a timely idea or a useful heads-up. If nothing is worth saying, return no notes; that is often the right answer.\n' +
     'Each note: one or two plain sentences, under 220 characters, warm and practical, first names only, no emoji, no greeting, no sign-off. Use dates like "Thu" or "Nov 20".\n' +
-    'Do not repeat or rephrase anything in recentNotes. Stay within the listed topics. Never name or describe gift ideas; at most say how many are saved. Do not invent facts that are not in the summary.';
+    'Do not repeat or rephrase anything in recentNotes. Never name or describe gift ideas; at most say how many are saved. Do not invent facts that are not in the summary.\n' +
+    'The family may give you standing rules (in "rules"). Check every rule against the summary. When a rule applies, write one note for it, set rule_id to that rule\'s id, and word it for the people in tellOnly (use @Name to tag someone). A rule note does not count toward the 3-note limit, and a rule that does not apply gets no note. ' +
+    'Notes not tied to a rule must stay within the listed topics and set rule_id to "".';
   var body = { model: PropertiesService.getScriptProperties().getProperty('AI_MODEL') || 'claude-opus-5-5', max_tokens: 4000,
     output_config: { effort: 'medium', format: { type: 'json_schema', schema: { type: 'object', additionalProperties: false, required: ['notes'],
-      properties: { notes: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['text', 'topic'],
-        properties: { text: { type: 'string' }, topic: { type: 'string', enum: Object.keys(AI_TOPICS_) } } } } } } } },
+      properties: { notes: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['text', 'topic', 'rule_id'],
+        properties: { text: { type: 'string' }, topic: { type: 'string', enum: Object.keys(AI_TOPICS_).concat('rule') }, rule_id: { type: 'string' } } } } } } } },
     fallbacks: 'default',
     system: system,
     messages: [{ role: 'user', content: 'Family summary (JSON):\n' + JSON.stringify(ctx) + '\n\nWrite today\'s notes.' }] };
@@ -885,11 +893,14 @@ function aiPosts_(t, manual) {
   if (code !== 200) { var msg = 'Claude API error ' + code + (j.error && j.error.message ? ': ' + j.error.message : ''); put_('Settings', { id: 'app|ai.last', value: now_() + ' · ' + msg.slice(0, 200) }); return { error: msg }; }
   if (j.stop_reason === 'refusal') { put_('Settings', { id: 'app|ai.last', value: now_() + ' · declined' }); return { notes: [] }; }
   var text = (j.content || []).filter(function (b) { return b.type === 'text'; }).map(function (b) { return b.text; }).join('');
-  var notes = []; try { notes = (JSON.parse(text).notes || []).filter(function (n) { return n && n.text; }).slice(0, 3); } catch (e) { notes = []; }
+  var notes = [], rulesById = {}; aiRules_().forEach(function (r) { rulesById[r.id] = r; });
+  try { var all = (JSON.parse(text).notes || []).filter(function (n) { return n && n.text; }), free = 0;
+    notes = all.filter(function (n) { return rulesById[n.rule_id] || free++ < 3; }); } catch (e) { notes = []; }
   var who = list_(setting_('app|ai.who', 'Paul'));
   notes.forEach(function (n) {
-    log_('AI assistant', { type: 'ai', text: String(n.text).slice(0, 400), cat: 'ai', ref: n.topic });
-    who.forEach(function (p) { if (pref_(p, 'ai')) notify_(p, 'AI assistant', String(n.text).slice(0, 400)); });
+    var rule = rulesById[n.rule_id], aud = rule && rule.audience ? list_(rule.audience) : who;   // a rule's note goes only to the people it names
+    log_('AI assistant', { type: 'ai', text: String(n.text).slice(0, 400), cat: 'ai', ref: rule ? 'rule:' + rule.id : n.topic, audience: aud.join(', ') });
+    aud.forEach(function (p) { if (pref_(p, 'ai')) notify_(p, 'AI assistant', String(n.text).slice(0, 400)); });
   });
   put_('Settings', { id: 'app|ai.last', value: now_() + ' · ' + notes.length + ' note' + (notes.length === 1 ? '' : 's') + (manual ? ' (Post now)' : '') });
   return { notes: notes };
