@@ -323,7 +323,7 @@
 // Momnie Family app v6.0
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'], DAYN = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'], ADULTS = ['Paul', 'Shana'];
 // Shown at the bottom of Home. Bump it together with VERSION in sw.js on every release.
-const APP_VERSION = '10.9 · Nov 18, 2026';
+const APP_VERSION = '11.0 · Nov 18, 2026';
 const TABLES = ['People', 'Schools', 'SchoolCal', 'Activities', 'Overrides', 'Events', 'Caretakers', 'Childcare', 'Birthdays', 'Todos', 'TodoTypes', 'Recipes', 'DinnerRules', 'Weeks', 'Menus',
   'Groceries', 'GroceryList', 'HouseCards', 'Houses', 'WeatherRules', 'Quotes', 'Memories', 'Updates', 'Messages', 'Activity', 'Comments', 'Reactions', 'Links', 'Settings', 'Photos', 'gifts', 'daily_items', 'daily_completions'];
 const CAT = { School: '#3f6fb5', Kids: '#4f7cc2', Work: '#64748b', Family: '#5b6fa8', Dinner: '#b08a4f', Caretaker: '#3e9aa6', Shared: '#94a3b8', Birthday: '#c9806a' }, SCHOOL_C = ['#5a72b8', '#7a8597', '#4a6fb0'];
@@ -363,6 +363,12 @@ const ymd = d => d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.get
 const parse = s => { const [y, m, d] = s.split('-').map(Number); return new Date(y, m - 1, d); };
 const addDays = (s, n) => { const d = parse(s); d.setDate(d.getDate() + n); return ymd(d); };
 const addMonths = (s, n) => { const d = parse(s); d.setMonth(d.getMonth() + n); return ymd(d); };
+// Repeating to-dos: stored as "N unit" ("6 months", "2 weeks"). Older rows say daily / weekly / monthly / yearly.
+const REP_OLD = { daily: '1 day', weekly: '1 week', monthly: '1 month', yearly: '1 year' };
+const repParse = r => { const m = String(REP_OLD[r] || r || '').trim().toLowerCase().match(/^(\d+)\s*(day|week|month|year)s?$/); return m && +m[1] > 0 ? { n: +m[1], u: m[2] } : null; };
+const repNext = (d, r) => { const p = repParse(r); if (!p) return ''; return p.u === 'day' ? addDays(d, p.n) : p.u === 'week' ? addDays(d, 7 * p.n) : addMonths(d, p.u === 'month' ? p.n : 12 * p.n); };
+const repTxt = r => { const p = repParse(r); if (!p) return ''; return p.n === 1 ? { day: 'Every day', week: 'Every week', month: 'Every month', year: 'Every year' }[p.u] : `Every ${p.n} ${p.u}s`; };
+const REP_PRESETS = ['1 day', '1 week', '2 weeks', '1 month', '3 months', '6 months', '1 year'];
 const dowIdx = s => (parse(s).getDay() + 6) % 7;
 const mondayOf = s => addDays(s, -dowIdx(s));
 const fmtDate = s => s ? parse(s.slice(0, 10)).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '';
@@ -551,7 +557,8 @@ function applyOps(ops) {
   (ops || []).forEach(o => { if (!o || !o.t) return; const tb = S[o.t] || (S[o.t] = []);
     if (o.del) { S[o.t] = tb.filter(x => x.id !== String(o.del)); return; }
     const r = o.row || {}, ex = tb.find(x => x.id === String(r.id));
-    if (ex) Object.assign(ex, r); else tb.push(Object.assign(NEWROW[o.t] ? NEWROW[o.t]() : {}, r)); });
+    // A new row starts with every column the tab has (blank), like rows from the Sheet, so code can rely on them.
+    if (ex) Object.assign(ex, r); else tb.push(Object.assign(tb[0] ? Object.fromEntries(Object.keys(tb[0]).map(k => [k, ''])) : {}, NEWROW[o.t] ? NEWROW[o.t]() : {}, r)); });
 }
 /** After fresh tables arrive: put back saves that are still on their way, and saves that finished after this request left. */
 function reapply(sent) {
@@ -997,14 +1004,20 @@ const FORMS = {
     F('time_of_day', 'Time of day', 'sel', [['Morning', 'Morning'], ['Day', 'Day'], ['Evening', 'Evening']]),
     F('for_person', "Who it's for", 'sel', () => [['', 'Anyone']].concat(S.People.map(p => [p.name, p.name]))),
     F('visible_to', 'Who can see it', 'multi', ADULTS)],
-  Todos: v => { const fl = list((byId('TodoTypes', v.type) || {}).fields); return [
+  Todos: v => { const fl = list((byId('TodoTypes', v.type) || {}).fields);
+    // Older or custom intervals open as Custom with the number and unit filled in.
+    if (v.repeat && v.repeat !== 'custom' && !REP_PRESETS.includes(REP_OLD[v.repeat] || v.repeat)) { const p = repParse(v.repeat); if (p) { v._rn = String(p.n); v._ru = p.u; v.repeat = 'custom'; } else v.repeat = ''; }
+    else if (REP_OLD[v.repeat]) v.repeat = REP_OLD[v.repeat];
+    if (v.repeat === 'custom' && !v._ru) v._ru = 'month';
+    return [
     F('type', 'Type', 'sel', S.TodoTypes.filter(t => t.id !== 'paycare' || v.type === 'paycare').map(t => [t.id, t.name]).concat(v.id ? [] : [['_daily', 'Daily item (repeats on set days)']]), { re: 1, on: x => {
       if (x.type === '_daily') { const title = x.title || ''; setTimeout(() => { const d = sheets[sheets.length - 1]; if (d) d.close(); A.dlAdd(null, null, { title }); }, 0); return; }
       x.assignee = (byId('TodoTypes', x.type) || {}).assignee || ''; } }),
     F('title', v.type === 'bill' ? 'Who is it from?' : 'What needs doing?'), F('amount', 'Amount', 'num', null, { show: () => fl.includes('amount') }),
     F('where', 'Where to pay (link, address or account)', 'text', null, { show: () => fl.includes('where') }), F('kid', 'Which kid', 'sel', [['', 'None']].concat(kidN()), { show: x => fl.includes('kid') || !!(x && x.kid) }),
     F('link', 'Link', 'text', null, { show: () => fl.includes('link') }), F('assignee', 'For', 'sel', [['', 'Either of us'], 'Paul', 'Shana']),
-    F('due', 'Due date (blank = a week from now)', 'date'), F('repeat', 'Repeats', 'sel', [['', 'Does not repeat'], ['daily', 'Every day'], ['weekly', 'Every week'], ['monthly', 'Every month'], ['yearly', 'Every year']]),
+    F('due', 'Due date (blank = a week from now)', 'date'), F('repeat', 'Repeats', 'sel', [['', 'Does not repeat']].concat(REP_PRESETS.map(x => [x, repTxt(x)]), [['custom', 'Custom…']]), { re: 1 }),
+    F('_rn', 'Every', 'num', null, { show: x => x.repeat === 'custom', ph: 'e.g. 6' }), F('_ru', 'Unit', 'sel', [['day', 'Days'], ['week', 'Weeks'], ['month', 'Months'], ['year', 'Years']], { show: x => x.repeat === 'custom' }),
     F('house', 'House', 'sel', [['', 'N/A'], ['Boston', 'Boston'], ['Cape', 'Cape']]), F('notes', 'Notes', 'area'), F('_notify', 'Notify the other person now', 'chk')]; },
   Events: v => [F('title', 'What is it?'), F('category', 'Type', 'sel', ['School', 'Work', 'Kids', 'Family'], { re: 1 }), F('date', 'Date', 'date'), F('allDay', 'All day', 'chk', null, { re: 1 }),
     F('endDate', 'Last day (only if it runs several days)', 'date', null, { show: x => x.allDay === '1' }), F('start', 'Starts', 'time', null, { show: x => x.allDay !== '1' }), F('end', 'Ends', 'time', null, { show: x => x.allDay !== '1', dur: 'start' }),
@@ -1089,6 +1102,8 @@ const SAVE = {
     delete row._week; delete row._ext; delete row._hours;
     return write({ t: 'Schools', row }); },
   async Todos(v) {
+    if (v.repeat === 'custom') { const n = parseInt(v._rn, 10); need(n > 0 && n < 1000, 'How often? Enter a number, like 6.'); v.repeat = n + ' ' + (v._ru || 'month') + (n === 1 ? '' : 's'); }
+    delete v._rn; delete v._ru;
     need(v.title && v.title.trim(), v.type === 'bill' ? 'Who is the bill from?' : 'What needs doing?'); if (v.type === 'bill') need(v.amount, 'Enter the amount.');
     const isNew = !v.id, row = Object.assign({}, v, { id: v.id || nid(), due: v.due || addDays(TODAY, 7), status: v.status || 'Open' }), ty = typeOf(row);
     const ops = [{ t: 'Todos', row, log: isNew ? L('todo_add', `added ${v.type === 'bill' ? 'a bill' : 'a to-do'}: ${v.title}${v.assignee ? ' (for ' + v.assignee + ')' : ''}`, 'bills', { amount: v.amount || '' }) : null }];
@@ -1195,9 +1210,9 @@ const CARD = {
       kv('Added', `${g.added_by === ME ? 'You' : g.added_by || ''}${g.created_at ? ' · ' + fmtDay(g.created_at) : ''}`) +
       `<div class="actions">${!own && !g.assigned_to ? `<button class="btn sm" data-a="giftMine" data-v="${g.id}">${ic('check', 16)}I'll get it</button>` : ''}<button class="btn gray sm" data-a="edit">${ic('pen')}Edit</button><button class="btn danger sm" data-a="del">${ic('trash')}Delete</button></div>`; },
   Schools(r, d, t) { return genericCard(r, d, t) + kv('Schedule', schoolHoursTxt(r)) + kv('Kids', kids().filter(k => k.schoolId === r.id).map(k => k.name + (kidExtTxt(k, r) ? ' (extended ' + kidExtTxt(k, r) + ')' : '')).join(', ')) + std(); },
-  Todos(r) { const ty = typeOf(r), done = r.status === 'Done', src = r.source.split(':');
+  Todos(r) { const ty = typeOf(r), done = r.status === 'Done', src = (r.source || '').split(':');
     return `<h2>${esc(r.title)}</h2>${r.amount ? `<div class="b" style="font-size:22px">${money(r.amount)}</div>` : ''}` + kv('Type', ty.name) + kvh('Due', `<span class="${!done && r.due < TODAY ? 'red' : ''}">${fmtDay(r.due)}${!done && r.due < TODAY ? ' (overdue)' : ''}</span>`) + kv('For', r.assignee || 'Either of us') +
-      kvh('Where to pay', r.where && linkOr(r.where)) + kv('Kid', r.kid) + kv('House', r.house) + kv('Repeats', r.repeat) + kvh('Link', r.link && linkOr(r.link)) + kv('Notes', r.notes) + kv('Added', `${r.addedBy} · ${fmtDay(r.created)}`) + (done ? kv(ty.id === 'bill' || ty.id === 'paycare' ? 'Paid' : 'Done', `${r.doneBy} · ${fmtDay(r.doneOn)}`) : '') +
+      kvh('Where to pay', r.where && linkOr(r.where)) + kv('Kid', r.kid) + kv('House', r.house) + kv('Repeats', repTxt(r.repeat)) + kvh('Link', r.link && linkOr(r.link)) + kv('Notes', r.notes) + kv('Added', `${r.addedBy} · ${fmtDay(r.created)}`) + (done ? kv(ty.id === 'bill' || ty.id === 'paycare' ? 'Paid' : 'Done', `${r.doneBy} · ${fmtDay(r.doneOn)}`) : '') +
       (src[0] === 'upkeep' && byId('HouseCards', src[1]) ? `<div class="actions"><button class="btn gray sm" data-a="open" data-t="HouseCards" data-id="${src[1]}">${ic('house', 16)}Open the upkeep card</button></div>` : '') +
       (['childcare', 'findcare'].includes(src[0]) && byId('Childcare', src[1]) ? `<div class="actions"><button class="btn gray sm" data-a="open" data-t="Childcare" data-id="${src[1]}">${ic('care', 16)}Open the caretaker card</button></div>` : '') +
       `<div class="actions"><button class="btn ${done ? 'gray' : 'dark'}" data-a="todoDone" data-v="${r.id}">${done ? 'Reopen' : r.type === 'bill' || r.type === 'paycare' ? 'Mark paid' : 'Mark done'}</button>${r.type === 'appt' && !done ? '<button class="btn gray" data-a="toEvent">' + ic('planner', 16) + 'Add to Planner</button>' : ''}</div>` + std(); },
@@ -1433,11 +1448,11 @@ A.careFor = (v, el) => { const c = ctx(el), r = c.t === 'GCal' ? CAL.find(x => x
   editForm('Childcare', null, { date, start: s || '08:00', end: e || '17:00', kids: r.kids || '', _link: [c.t, c.id] }); };
 A.todoDone = async id => {
   let r = byId('Todos', id); if (!r) return; const done = r.status !== 'Done', pay = r.type === 'bill' || r.type === 'paycare', row = { id, status: done ? 'Done' : 'Open', doneOn: done ? TODAY : '', doneBy: done ? ME : '' }, ops = [];
-  if (done && r.type === 'paycare') { const a = prompt('How much did you pay?', r.amount || ''); if (a === null) return; row.amount = a; const cid = r.source.split(':')[1]; if (byId('Childcare', cid)) ops.push({ t: 'Childcare', row: { id: cid, paidAmount: a, paidOn: TODAY } }); }
+  if (done && r.type === 'paycare') { const a = prompt('How much did you pay?', r.amount || ''); if (a === null) return; row.amount = a; const cid = (r.source || '').split(':')[1]; if (byId('Childcare', cid)) ops.push({ t: 'Childcare', row: { id: cid, paidAmount: a, paidOn: TODAY } }); }
   ops.push({ t: 'Todos', row, log: L(done ? 'todo_done' : 'todo_undo', `${done ? (pay ? 'paid' : 'checked off') : 'reopened'}: ${r.title}`, 'bills', { amount: pay ? row.amount || r.amount : '' }) });
-  if (done && r.repeat) { const n = { daily: () => addDays(r.due, 1), weekly: () => addDays(r.due, 7), monthly: () => addMonths(r.due, 1), yearly: () => addMonths(r.due, 12) }[r.repeat]; let due = n ? n() : ''; while (n && due <= TODAY && r.repeat !== 'yearly') { r = Object.assign({}, r, { due }); due = { daily: addDays(due, 1), weekly: addDays(due, 7), monthly: addMonths(due, 1) }[r.repeat]; }
+  if (done && r.repeat) { let due = repNext(r.due || TODAY, r.repeat), guard = 0; while (due && due <= TODAY && guard++ < 1000) due = repNext(due, r.repeat);
     if (due) ops.push({ t: 'Todos', row: Object.assign({}, r, { id: nid(), due, status: 'Open', doneOn: '', doneBy: '', created: '', addedBy: r.addedBy }) }); }
-  if (done && r.source.startsWith('upkeep:')) { const h = byId('HouseCards', r.source.slice(7)); if (h && +h.everyMonths) ops.push({ t: 'HouseCards', row: { id: h.id, nextDue: addMonths(h.nextDue && h.nextDue > TODAY ? h.nextDue : TODAY, +h.everyMonths) } }); }
+  if (done && (r.source || '').startsWith('upkeep:')) { const h = byId('HouseCards', r.source.slice(7)); if (h && +h.everyMonths) ops.push({ t: 'HouseCards', row: { id: h.id, nextDue: addMonths(h.nextDue && h.nextDue > TODAY ? h.nextDue : TODAY, +h.everyMonths) } }); }
   if (await write(ops)) toast(done ? (pay ? 'Marked paid' : 'Done ✓') : 'Reopened');
 };
 A.toEvent = (v, el) => { const r = byId('Todos', ctx(el).id); editForm('Events', null, { title: r.title, category: r.kid ? 'Kids' : 'Family', people: r.kid, _todoDone: r.id, _link: ['Todos', r.id] }); };
