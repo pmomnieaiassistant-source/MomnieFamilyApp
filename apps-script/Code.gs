@@ -52,7 +52,7 @@ var T = {
   WeatherRules: 'id,metric,op,threshold,message,when,push,urgent,enabled',
   Quotes: 'id,quote,author,lastShown',
   Memories: 'id,date,note,photo',
-  Updates: 'id,date,title,message,hiddenFrom',
+  Updates: 'id,date,title,message,hiddenFrom,label',   // label: optional heading over a splash screen, e.g. "A bit from Paul"
   Messages: 'id,time,from,text,tags,visibility,pinUntil,urgent,resolved,resolvedBy',
   Activity: 'id,time,who,type,text,amount,table,ref,cat',
   Comments: 'id,time,who,table,ref,text,system',
