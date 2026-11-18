@@ -298,7 +298,7 @@
 // Momnie Family app v6.0
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'], DAYN = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'], ADULTS = ['Paul', 'Shana'];
 // Shown at the bottom of Home. Bump it together with VERSION in sw.js on every release.
-const APP_VERSION = '8.8 · Nov 18, 2026';
+const APP_VERSION = '8.9 · Nov 18, 2026';
 const TABLES = ['People', 'Schools', 'SchoolCal', 'Activities', 'Overrides', 'Events', 'Caretakers', 'Childcare', 'Birthdays', 'Todos', 'TodoTypes', 'Recipes', 'DinnerRules', 'Weeks', 'Menus',
   'Groceries', 'GroceryList', 'HouseCards', 'Houses', 'WeatherRules', 'Quotes', 'Memories', 'Updates', 'Messages', 'Activity', 'Comments', 'Reactions', 'Links', 'Settings', 'Photos', 'gifts', 'daily_items', 'daily_completions'];
 const CAT = { Kids: '#4f7cc2', Work: '#64748b', Family: '#5b6fa8', Dinner: '#b08a4f', Caretaker: '#3e9aa6', Shared: '#94a3b8', Birthday: '#c9806a' }, SCHOOL_C = ['#5a72b8', '#7a8597', '#4a6fb0'];
@@ -1108,7 +1108,7 @@ function socialHTML(t, id) {
 }
 // ----- Person pages: a home screen for each family member, with its own tabs -----
 let PERSON = '', prevView = 'home', prevY = 0, PTAB = 'overview', PWK = 0;
-const PTABS = [['overview', 'Overview'], ['planner', 'Planner'], ['todos', 'To-dos'], ['gifts', 'Gifts'], ['about', 'About'], ['mentions', 'Mentions']];
+const PTABS = [['overview', 'Overview'], ['planner', 'Planner'], ['todos', 'To-dos'], ['about', 'About'], ['mentions', 'Mentions'], ['gifts', 'Gifts']];
 // Facts (sizes, doctors, allergies...) are kept in Settings as person|<id>|facts, so no new Sheet columns are needed.
 const FACTS_KID = ['Teacher', 'Doctor', 'Dentist', 'Allergies', 'Medications', 'Clothing size', 'Shoe size', 'Favorite foods', 'Favorite things'];
 const FACTS_ADULT = ['Phone', 'Email', 'Doctor', 'Dentist', 'Allergies', 'Medications', 'Shirt size', 'Pants size', 'Shoe size', 'Favorite things'];
@@ -1141,7 +1141,7 @@ function personPage(p) {
   if (PTAB === 'overview') {
     const daily = S.daily_items.filter(it => it.for_person === p.name && it.active !== '0' && dailySeen(it) && list(it.days).includes(DAYS[dowIdx(TODAY)]));
     body = `<div class="ptiles">${tile('planner', today.length, 'Today', today.length ? 'on the schedule' : 'nothing scheduled')}${tile('todos', open.length, 'To-dos', late.length ? late.length + ' overdue' : open.length ? 'open' : 'all clear', late.length)}
-        ${tile('gifts', gifts.length, me ? 'Wish list' : 'Gift ideas', me ? 'only you see these' : gifts.filter(g => g.assigned_to).length + ' being bought')}${tile('mentions', ment.length, 'Mentions', ment[0] ? 'latest ' + ago(ment[0].time) : 'none yet')}</div>` +
+        ${tile('mentions', ment.length, 'Mentions', ment[0] ? 'latest ' + ago(ment[0].time) : 'none yet')}${tile('gifts', gifts.length, me ? 'Wish list' : 'Gift ideas', me ? 'only you see these' : gifts.filter(g => g.assigned_to).length + ' being bought')}</div>` +
       box('Today', pDayHTML(p, TODAY) || '<div class="small muted">Nothing scheduled today.</div>', link('ptab', 'planner', 'Week ›')) +
       box('Tomorrow', pDayHTML(p, addDays(TODAY, 1)) || '<div class="small muted">Nothing scheduled.</div>') +
       box(me ? 'Your to-dos' : kid ? 'To-dos about ' + esc(p.name) : esc(p.name) + "'s to-dos", open.slice(0, 3).map(todoRow).join('') || '<div class="small muted">Nothing open.</div>', open.length > 3 ? link('ptab', 'todos', 'All ' + open.length + ' ›') : link('personTodo', p.name, ic('plus', 15) + 'To-do')) +
