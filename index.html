@@ -303,7 +303,7 @@
 // Momnie Family app v6.0
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'], DAYN = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'], ADULTS = ['Paul', 'Shana'];
 // Shown at the bottom of Home. Bump it together with VERSION in sw.js on every release.
-const APP_VERSION = '9.3 · Nov 18, 2026';
+const APP_VERSION = '9.4 · Nov 18, 2026';
 const TABLES = ['People', 'Schools', 'SchoolCal', 'Activities', 'Overrides', 'Events', 'Caretakers', 'Childcare', 'Birthdays', 'Todos', 'TodoTypes', 'Recipes', 'DinnerRules', 'Weeks', 'Menus',
   'Groceries', 'GroceryList', 'HouseCards', 'Houses', 'WeatherRules', 'Quotes', 'Memories', 'Updates', 'Messages', 'Activity', 'Comments', 'Reactions', 'Links', 'Settings', 'Photos', 'gifts', 'daily_items', 'daily_completions'];
 const CAT = { Kids: '#4f7cc2', Work: '#64748b', Family: '#5b6fa8', Dinner: '#b08a4f', Caretaker: '#3e9aa6', Shared: '#94a3b8', Birthday: '#c9806a' }, SCHOOL_C = ['#5a72b8', '#7a8597', '#4a6fb0'];
@@ -958,7 +958,7 @@ const SAVE = {
     if (v.category === 'Kids') { const dc = driveCheck([v.dropoff, v.pickup].filter(Boolean)); if (!dc) return false; ops.push(...dc); }
     if (isNew && !v.gcalId) { const k = norm(v.title), dup = itemsFor(v.date).find(i => ['GCal', 'Events', 'SchoolCal'].includes(i.t) && (norm(i.title) === k || norm(i.title).includes(k) || k.includes(norm(i.title))));
       if (dup && confirm(`This looks like a duplicate of “${dup.title}”. Merge them into one card?`)) { if (dup.t === 'GCal') row.gcalId = dup.id; else { openCard(dup.t, dup.id, v.date); return; } } }
-    ops.push({ t: 'Events', row, adopt: isNew && row.gcalId ? row.gcalId : undefined, log: L(isNew ? 'event_add' : 'event_edit', `${isNew ? (row.gcalId ? 'moved a calendar item into the app' : 'added plans') : 'updated'}: ${v.title} (${fmtDay(v.date)}${v.allDay !== '1' && v.start ? ', ' + fmtT(v.start) : ''})`, 'planner') });
+    ops.push({ t: 'Events', row, adopt: isNew && row.gcalId ? row.gcalId : undefined, log: L(isNew ? 'event_add' : 'event_edit', `${isNew ? (row.gcalId ? 'imported from the calendar' : 'added plans') : 'updated'}: ${v.title} (${fmtDay(v.date)}${v.allDay !== '1' && v.start ? ', ' + fmtT(v.start) : ''})`, 'planner') });
     if (v._link) ops.push({ t: 'Links', row: { id: nid(), aTable: v._link[0], aRef: v._link[1], bTable: 'Events', bRef: row.id } }, sys(v._link[0], v._link[1], `added a Planner event and linked this ${NAMES[v._link[0]] || 'card'}`));
     if (v._todoDone) ops.push({ t: 'Todos', row: { id: v._todoDone, status: 'Done', doneOn: TODAY, doneBy: ME } });
     ops.push(...dinnerAwayOps(row));
@@ -974,7 +974,7 @@ const SAVE = {
     const ids = v._grp || (v.id ? [v.id] : []), isNew = !ids.length, base = {};
     Object.keys(v).forEach(k => { if (k[0] !== '_' && !['id', 'days', 'start', 'end'].includes(k)) base[k] = v[k]; });
     const rows = groups.map((g, i) => Object.assign({}, base, { id: ids[i] || nid(), days: g.days.join(', '), start: g.start, end: g.end }, isNew && i === 0 && v._adopt ? { gcalId: v._adopt } : {}));
-    const ops = dc.concat(rows.map((r, i) => ({ t: 'Activities', row: r, adopt: isNew && i === 0 && v._adopt ? v._adopt : undefined, log: i ? null : L('activity', `${isNew ? (v._adopt ? 'moved a repeating calendar item into the app' : 'added an activity') : 'updated'}: ${v.name} (${schedTxt(rows)})`, 'planner') })), ids.slice(groups.length).map(id => ({ t: 'Activities', del: id })));
+    const ops = dc.concat(rows.map((r, i) => ({ t: 'Activities', row: r, adopt: isNew && i === 0 && v._adopt ? v._adopt : undefined, log: i ? null : L('activity', `${isNew ? (v._adopt ? 'imported a repeating activity from the calendar' : 'added an activity') : 'updated'}: ${v.name} (${schedTxt(rows)})`, 'planner') })), ids.slice(groups.length).map(id => ({ t: 'Activities', del: id })));
     const ok = await write(ops);
     if (ok && isNew) { const c = []; for (let i = 0; i < 14; i++) c.push(...conflictsFor(addDays(TODAY, i))); if (c.length) alert('Heads up, this creates a conflict:\n\n' + c.slice(0, 3).map(x => x.text).join('\n')); }
     return ok;
@@ -1066,8 +1066,8 @@ const CARD = {
     return `<h2>${esc(r.title)}</h2>` + kv('When', fmtDay(r.date) + (r.endDate && r.endDate > r.date ? ' – ' + fmtDay(r.endDate) : '') + (all ? ' · all day' : ` · ${fmtT(r.start)}${r.end ? '–' + fmtT(r.end) : ''}`)) + kv('Category', r.category) + kv('Who', r.people) + kv('Where', r.location) + kv('House', r.house) + kv('Notes', r.notes) +
       kv('Calendar', r.gcalId ? 'Copied to the shared calendar; change it here, not in Google Calendar' : '') + (r.category === 'Kids' && !all ? rideBox('Rides', r.dropoff, r.pickup) : '') + std({ care: 1 }); },
   GCal(r) { return `<h2>${esc(r.title)}</h2>` + kv('When', r.allDay ? fmtDay(r.start) + (addDays(r.end, -1) > r.start ? ' – ' + fmtDay(addDays(r.end, -1)) : '') + ' · all day' : `${fmtDay(r.start)} · ${fmtT(r.start.slice(11))}–${fmtT(r.end.slice(11))}`) + kv('Where', r.location) + kv('From', 'Shared calendar') +
-      `<div class="kv muted small">${r.recurring ? 'A repeating entry from the shared calendar. Make it an app activity to manage it here, with rides and the kids it is for.' : 'From the shared calendar. Make it an app item to add who it is for, rides and caretakers, and edit it here.'}</div>` +
-      `<div class="actions"><button class="btn sm" data-a="convert">${ic('plus', 16)}Make it an app item</button><button class="btn gray sm" data-a="link">${ic('link')}Link</button><button class="btn gray sm" data-a="careFor">${ic('care')}Add caretaker</button>${r.recurring ? '' : '<button class="btn danger sm" data-a="gcalDel">' + ic('trash') + 'Delete</button>'}</div>`; },
+      `<div class="kv muted small">${r.recurring ? 'A repeating entry from the shared calendar. Import it as an app activity to manage it here, with rides and the kids it is for.' : 'From the shared calendar. Import it to add who it is for, rides and caretakers, and edit it here.'}</div>` +
+      `<div class="actions"><button class="btn sm" data-a="convert">${ic('plus', 16)}Import</button><button class="btn gray sm" data-a="link">${ic('link')}Link</button><button class="btn gray sm" data-a="careFor">${ic('care')}Add caretaker</button>${r.recurring ? '' : '<button class="btn danger sm" data-a="gcalDel">' + ic('trash') + 'Delete</button>'}</div>`; },
   Activities(r, d) { const o = d ? ovr(r.id, d) : {};
     return `<h2>${esc(r.name)}</h2>` + kvh('Who', list(r.kids).map(n => `<span class="pdot" style="background:${pcol(n)}"></span>${esc(n)}`).join('&nbsp;&nbsp; ')) + kv('When', schedTxt(actGroup(r))) + kv('Season', r.from || r.until ? `${r.from ? fmtDate(r.from) : 'now'} to ${r.until ? fmtDate(r.until) : 'ongoing'}` : '') + kv('Where', r.location) + kv('Teacher or contact', r.teacher) +
       (list(r.kids).some(n => kidN().includes(n)) ? kv('Usual rides', `Drop-off: ${r.dropoff || 'not set'} · Pickup: ${r.pickup || 'not set'}`) : '') + kv('House', r.house) + kv('Notes', r.notes) + kv('Calendar', actGroup(r).some(x => x.gcalId) ? 'Copied to the shared calendar; change it here, not in Google Calendar' : '') + (d && list(r.kids).some(n => kidN().includes(n)) ? rideBox('Rides for ' + fmtDay(d), o.dropoff || r.dropoff, o.pickup || r.pickup, true) : '') + std({ care: 1 }); },
@@ -1321,11 +1321,11 @@ A.rideSave = async (v, el) => { const d = el.closest('dialog'), c = d._ctx, dr =
   if (await write(dc)) toast('Rides saved'); };
 A.skipDay = async (v, el) => { const c = ctx(el); if (!confirm(`Cancel ${titleOf(c.t, c.id)} on ${fmtDay(c.date)} only?`)) return;
   if (await write({ t: 'Overrides', row: { id: ovr(c.id, c.date).id || nid(), ref: c.id, date: c.date, cancelled: '1' }, log: L('cancel', `canceled ${titleOf(c.t, c.id)} for ${fmtDay(c.date)}`, 'planner', { table: 'Activities', ref: c.id }) })) A.close(v, el); };
-// ----- Make a shared-calendar entry an app item -----
+// ----- Import a shared-calendar entry into the app -----
 // The script tags the existing calendar entry (or repeating series) so it isn't shown twice, and the app controls it from then on.
 A.convert = (v, el) => { const r = CAL.find(x => x.id === ctx(el).id); if (!r) return; A.close(null, el);
   const opt = (k, icon, t, sub) => `<div class="li" style="padding:12px 0" data-a="convertAs" data-v="${k}" data-id="${esc(r.id)}"><div class="hicon">${ic(icon)}</div><div class="grow"><div class="ti">${t}</div><div class="small muted">${sub}</div></div><span class="chev">›</span></div>`;
-  sheet(() => `<h2>Make it an app item</h2><div class="small muted" style="margin-bottom:8px">“${esc(r.title)}” becomes an app ${r.recurring ? 'activity' : 'event'}. The app takes over the calendar entry instead of copying it, so it shows once. Edit it in the app from now on.</div>` +
+  sheet(() => `<h2>Import into the app</h2><div class="small muted" style="margin-bottom:8px">“${esc(r.title)}” comes into the app as ${r.recurring ? 'an activity' : 'an event'}. The calendar entry stays where it is, just managed by the app now, so it shows once. Edit it in the app from now on. What is it?</div>` +
     (r.recurring ? opt('activity', 'activity', 'Repeating activity', 'Swimming, lessons, practice, a standing meeting. Weekly, with rides and who it is for.')
       : opt('Kids', 'users', 'Kids event', 'Appointment, party, game. With rides and caretakers.') + opt('Work', 'building', 'Work event', 'Shows on your page and in Right now.') + opt('Family', 'house', 'Family or social event', 'Plans for the family or just the two of you.'))); };
 A.convertAs = (k, el) => { const r = CAL.find(x => x.id === el.dataset.id); if (!r) return; A.close(null, el);
