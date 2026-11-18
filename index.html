@@ -353,7 +353,7 @@
 // Momnie Family app v6.0
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'], DAYN = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'], ADULTS = ['Paul', 'Shana'];
 // Shown at the bottom of Home. Bump it together with VERSION in sw.js on every release.
-const APP_VERSION = '14.6 · Nov 18, 2026';
+const APP_VERSION = '14.7 · Nov 18, 2026';
 const TABLES = ['People', 'Schools', 'SchoolCal', 'Activities', 'Overrides', 'Events', 'Caretakers', 'Childcare', 'Birthdays', 'Todos', 'TodoTypes', 'Recipes', 'DinnerRules', 'Weeks', 'Menus',
   'Groceries', 'GroceryList', 'HouseCards', 'Houses', 'WeatherRules', 'Quotes', 'Memories', 'Updates', 'Messages', 'Activity', 'Comments', 'Reactions', 'Links', 'Settings', 'Photos', 'gifts', 'ai_rules', 'ai_requests', 'notes', 'daily_items', 'daily_completions'];
 const CAT = { School: '#3f6fb5', Kids: '#4f7cc2', Work: '#64748b', Family: '#5b6fa8', Dinner: '#b08a4f', Caretaker: '#3e9aa6', Shared: '#94a3b8', Birthday: '#c9806a' }, SCHOOL_C = ['#5a72b8', '#7a8597', '#4a6fb0'];
@@ -752,7 +752,8 @@ function schoolRuns(date) { const out = {};
     const add = (kind, time) => { const key = sch.id + '|' + kind + '|' + time; (out[key] = out[key] || { sid: sch.id, name: sch.short || sch.name, kind, time, kids: [] }).kids.push(k.name); };
     add('d', b.s); add(b.ext ? 'x' : 'p', b.e); });
   return Object.values(out).map(r => Object.assign(r, schoolRide(r.sid, date, r.kind))); }
-const rideTag = r => r.who ? `<span class="${r.changed ? 'rchg' : 'muted'}">(${esc(r.who)}${r.changed ? ' · changed' : ''})</span>` : '<span class="red">(who?)</span>';
+// Who is doing a school run: just the name (whether it differs from the usual week isn't shown here).
+const rideTag = r => r.who ? `<span class="muted">(${esc(r.who)})</span>` : '<span class="red">(who?)</span>';
 function schoolDay(sch, d, kid) {
   const day = DAYS[dowIdx(d)], r = kidWeekRows(kid, sch).find(x => x.day === day) || { s: '', e: '', x: '' }, ext = !!(r.s && r.x);
   return { s: r.s, e: ext ? r.x : r.e, ext, base: r.e };
