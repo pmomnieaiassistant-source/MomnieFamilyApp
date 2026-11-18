@@ -353,7 +353,7 @@
 // Momnie Family app v6.0
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'], DAYN = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'], ADULTS = ['Paul', 'Shana'];
 // Shown at the bottom of Home. Bump it together with VERSION in sw.js on every release.
-const APP_VERSION = '14.2 · Nov 18, 2026';
+const APP_VERSION = '14.3 · Nov 18, 2026';
 const TABLES = ['People', 'Schools', 'SchoolCal', 'Activities', 'Overrides', 'Events', 'Caretakers', 'Childcare', 'Birthdays', 'Todos', 'TodoTypes', 'Recipes', 'DinnerRules', 'Weeks', 'Menus',
   'Groceries', 'GroceryList', 'HouseCards', 'Houses', 'WeatherRules', 'Quotes', 'Memories', 'Updates', 'Messages', 'Activity', 'Comments', 'Reactions', 'Links', 'Settings', 'Photos', 'gifts', 'ai_rules', 'ai_requests', 'notes', 'daily_items', 'daily_completions'];
 const CAT = { School: '#3f6fb5', Kids: '#4f7cc2', Work: '#64748b', Family: '#5b6fa8', Dinner: '#b08a4f', Caretaker: '#3e9aa6', Shared: '#94a3b8', Birthday: '#c9806a' }, SCHOOL_C = ['#5a72b8', '#7a8597', '#4a6fb0'];
@@ -1848,8 +1848,8 @@ function vFeed() {
   const hide = c => c && st('f.' + c, '1') === '0';
   const gone = feedHidden();
   const kindHidden = a => a.type === 'answer' ? true : a.table === 'Photos' ? !fOn('photos') : a.type === 'daily' ? !fOn('daily') : hide(a.cat);
-  const stream = S.Activity.filter(a => a.type !== 'message' && (a.type !== 'ai' || aiNoteFor(a).includes(ME)) && !kindHidden(a) && !gone.has('A:' + a.id)).map(a => ({ time: a.time, a })).concat(S.Messages.filter(mm => fOn('messages') && !gone.has('M:' + mm.id)).map(mm => ({ time: mm.time, m: mm, pin: mm.pinUntil >= TODAY && mm.resolved !== '1' })))
-    .concat(S.ai_requests.filter(q => !hide('ai') && q.status !== 'filled' && (q.status !== 'error' || q.who === ME) && !gone.has('R:' + q.id)).map(q => ({ time: q.time || '', r: q })))
+  const stream = S.Activity.filter(a => a.type !== 'message' && a.state !== 'cleared' && (a.type !== 'ai' || aiNoteFor(a).includes(ME)) && !kindHidden(a) && !gone.has('A:' + a.id)).map(a => ({ time: a.time, a })).concat(S.Messages.filter(mm => fOn('messages') && !gone.has('M:' + mm.id)).map(mm => ({ time: mm.time, m: mm, pin: mm.pinUntil >= TODAY && mm.resolved !== '1' })))
+    .concat(S.ai_requests.filter(q => !hide('ai') && q.status !== 'filled' && q.status !== 'cleared' && (q.status !== 'error' || q.who === ME) && !gone.has('R:' + q.id)).map(q => ({ time: q.time || '', r: q })))
     .sort((x, y) => (y.pin ? 1 : 0) - (x.pin ? 1 : 0) || y.time.localeCompare(x.time)).slice(0, 70);
   // Bundle bursts: several changes by the same person within a few minutes become one post.
   const win = (+st('bundleMin', '5') || 0) * 60000, out = [];
@@ -1991,7 +1991,9 @@ async function assistApply(plan, meta, req) {
   const summary = [plan.summary, errs.length ? 'Could not save: ' + errs.join(' ') : '', plan.dropped && !made.length && !plan.question ? 'Some details were unclear.' : ''].filter(Boolean).join(' ');
   const status = plan.question ? 'question' : !made.length && errs.length ? 'error' : 'done';
   if (req) { const refs = jl(req.refs); made.forEach(m => { if (!refs.some(r => r[0] === m[0] && r[1] === m[1])) refs.push(m); });
-    return write({ t: 'ai_requests', row: { id: req.id, status, summary: summary || req.summary, question: plan.question || '', answer: meta.answer, refs: JSON.stringify(refs) } }); }
+    // An answered question is settled: the plan is updated, the card leaves the Feed, and the log keeps the record.
+    if (status === 'done') toast(summary || 'Updated');
+    return write({ t: 'ai_requests', row: { id: req.id, status: status === 'done' ? 'cleared' : status, summary: summary || req.summary, question: plan.question || '', answer: meta.answer, refs: JSON.stringify(refs) } }); }
   return write({ t: 'ai_requests', row: { id: nid(), time: stamp(), who: ME, text: meta.text, source: meta.source, status, summary, question: plan.question || '', answer: '', refs: JSON.stringify(made) } });
 }
 A.askOpen = () => { const src = ($('title') || {}).textContent || 'the app';
@@ -2001,7 +2003,7 @@ A.askOpen = () => { const src = ($('title') || {}).textContent || 'the app';
       <div class="small muted">It can add events, weekly activities, to-dos and bills, caretaker requests, school calendar days and house cards. What it makes shows in the Feed, and if it needs a detail it asks you there.</div>
       <h3>Requests</h3>${S.ai_requests.slice().sort((a, b) => (b.time || '').localeCompare(a.time || '')).slice(0, 40).map(q => { const refs = jl(q.refs).filter(([t, id]) => byId(t, id));
         return `<div class="areq"><div class="small muted">${esc(q.who)} · ${ago(q.time)}${q.source ? ' · from ' + esc(q.source) : ''}</div><div class="q">“${esc(q.text)}”</div>
-          <div class="small" style="margin-top:2px">${q.status === 'question' ? `<span class="amb">Question:</span> ${esc(q.question)}` : q.status === 'error' ? `<span class="amb">Couldn't do it:</span> ${esc(q.summary)}` : esc(q.summary)}</div>
+          <div class="small" style="margin-top:2px">${q.status === 'question' ? `<span class="amb">Question:</span> ${esc(q.question)}` : q.status === 'error' ? `<span class="amb">Couldn't do it:</span> ${esc(q.summary)}` : esc(q.summary)}${q.status === 'cleared' ? ' <span class="muted">· settled, cleared from the Feed</span>' : ''}</div>
           ${refs.length ? `<div class="stack">${refs.map(askItem).join('')}</div>` : ''}</div>`; }).join('') || '<div class="empty">Nothing asked yet.</div>'}`);
   d.addEventListener('input', e => { if (e.target.dataset.askdraft !== undefined) ASK_DRAFT = e.target.value; });
   setTimeout(() => { const ta = d.querySelector('[data-askdraft]'); if (ta) ta.focus(); }, 50); };

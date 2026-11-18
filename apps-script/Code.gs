@@ -1,6 +1,11 @@
 /**
  * Momnie Family app backend
- * Version 3.23 (2026-11-18)
+ * Version 3.24 (2026-11-18)
+ *   3.24: The assistant tidies up after itself. Each review it checks its own recent notes and open questions
+ *         against the current plan and clears the ones that are outdated (the question was answered somewhere
+ *         else, the gap was filled, the day has passed). Cleared posts leave the Feed but stay in the Assistant's
+ *         request log. Conversations can now settle who is cooking or away for dinner, and clear the question
+ *         they answered. Notes expire after 3 days and unanswered questions after 7.
  *   3.23: Fixes the Assistant button, Fill it in and answering a question, which 3.22 broke (their routes were
  *         removed by mistake). The assistant now reviews far more often: every two hours from 6 AM to 10 PM (notes,
  *         rules, Today cards, conversations), and straight after anyone uses the Assistant button, answers a question
@@ -85,7 +90,7 @@ var T = {
   Memories: 'id,date,note,photo',
   Updates: 'id,date,title,message,hiddenFrom,label',   // label: optional heading over a splash screen, e.g. "A bit from Paul"
   Messages: 'id,time,from,text,tags,visibility,pinUntil,urgent,resolved,resolvedBy,kind,answerType,options',   // kind 'question': answerType yesno / time / choice / text
-  Activity: 'id,time,who,type,text,amount,table,ref,cat,audience',   // audience: who sees an AI assistant note
+  Activity: 'id,time,who,type,text,amount,table,ref,cat,audience,state',   // audience: who sees an AI assistant note; state: 'cleared' = the assistant retired it
   Comments: 'id,time,who,table,ref,text,system',
   Reactions: 'id,time,who,table,ref,emoji',
   Links: 'id,aTable,aRef,bTable,bRef,by',
@@ -1000,9 +1005,36 @@ function aiReview_(t, hour) {
   if (hour < Number(setting_('app|ai.hour', '6')) || hour >= 22) return;   // the "start at" hour is Paul's choice in Settings, Assistant
   if (minsSince_('job|ai_review_at') >= gap) { stamp_('job|ai_review_at'); aiSafe_(t); aiCardsSafe_(t, hour); }
   if (setting_('app|ai.convo', '1') === '1') aiConvoSafe_(t, false);   // every tick; only calls Claude when there is something new
+  if (minsSince_('job|ai_tidy_at') >= gap) { stamp_('job|ai_tidy_at'); aiTidySafe_(t); }
 }
 /** Today cards: tomorrow's from 7 PM, today's before that. */
 function aiCardsSafe_(t, hour) { try { if (hour >= 19) briefAll_(addDays_(t, 1), 'night'); else briefAll_(t, 'day'); } catch (e) { console.error(e); } }
+// ---------- The assistant tidies up its own posts ----------
+function aiTidySafe_(t) { try { return aiTidy_(t); } catch (e) { console.error(e); return { error: String(e && e.message || e) }; } }
+/** Clears the assistant's notes and questions that are no longer relevant. Nothing is deleted: cleared posts just leave the Feed. */
+function aiTidy_(t) {
+  var cleared = [], notes = rows_('Activity').filter(function (a) { return a.type === 'ai' && a.state !== 'cleared'; }),
+      asks = rows_('ai_requests').filter(function (q) { return q.status === 'question'; });
+  // Old ones simply expire: notes after 3 days, unanswered questions after 7.
+  notes.forEach(function (a) { if (String(a.time).slice(0, 10) < addDays_(t, -3)) { put_('Activity', { id: a.id, state: 'cleared' }); cleared.push(a.id); } });
+  asks.forEach(function (q) { if (String(q.time).slice(0, 10) < addDays_(t, -7)) { put_('ai_requests', { id: q.id, status: 'cleared' }); cleared.push(q.id); } });
+  notes = notes.filter(function (a) { return cleared.indexOf(a.id) < 0; }); asks = asks.filter(function (q) { return cleared.indexOf(q.id) < 0; });
+  if (!notes.length && !asks.length) return { cleared: cleared.length };
+  var facts = aiContext_(t); delete facts.recipes; delete facts.rules; delete facts.recentNotes; delete facts.openRequests; delete facts.topics; delete facts.note;
+  var cand = notes.map(function (a) { return { id: a.id, kind: 'note', posted: a.time, text: a.text }; })
+    .concat(asks.map(function (q) { return { id: q.id, kind: 'question', posted: q.time, asked: q.who, request: q.text, question: q.question }; }));
+  var S = { type: 'string' }, schema = { type: 'object', additionalProperties: false, required: ['clear'], properties: { clear: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['id', 'reason'], properties: { id: S, reason: S } } } } };
+  var system = 'You are the Assistant inside a family\'s home app. Earlier you posted notes and asked questions in the family\'s Feed (posts). Decide which are now outdated and should be cleared from the Feed.\n' +
+    'Clear a post when what it raised is no longer true or no longer needed: the gap it pointed out has been filled (for example a dinner now has someone cooking, a ride or caretaker is now set, a bill or to-do is done), the question has already been answered in the plan, or the day it was about has passed. ' +
+    'Compare each post with "facts", the current state of the plan. Keep a post when the issue it raised is still open or still useful. When unsure, keep it. Most of the time clear nothing or only a few. Never invent ids.';
+  var r = claude_(system, JSON.stringify({ posts: cand, facts: facts }), schema, 'low');
+  if (r.error || r.refused || !r.data) return { error: r.error || 'declined', cleared: cleared.length };
+  var ids = {}; cand.forEach(function (c) { ids[c.id] = c.kind; });
+  (r.data.clear || []).forEach(function (x) { var k = ids[x.id]; if (!k) return;
+    if (k === 'note') put_('Activity', { id: x.id, state: 'cleared' }); else put_('ai_requests', { id: x.id, status: 'cleared', summary: txt_(x.reason, 200) });
+    cleared.push(x.id); });
+  return { cleared: cleared.length };
+}
 /** A quick review right after someone uses the Assistant: conversations, then the Today cards and the notes if it has been a while. */
 function aiAfter_(t) {
   if (setting_('app|ai.on', '') !== '1') return { skipped: 'off' };
@@ -1011,12 +1043,13 @@ function aiAfter_(t) {
   var hour = Number(now_().slice(11, 13)), out = {};
   if (setting_('app|ai.convo', '1') === '1') out.convo = (aiConvoSafe_(t, true) || {}).actions || [];
   if (minsSince_('job|ai_review_at') >= 30) { stamp_('job|ai_review_at'); aiSafe_(t); aiCardsSafe_(t, hour); out.reviewed = true; }
+  out.tidied = (aiTidySafe_(t) || {}).cleared || 0; if (out.tidied) out.reviewed = true;
   return out;
 }
 /** Everything the assistant does, now: notes for the Feed, the AI Today cards, and plans from conversations. */
 function aiAll_(t) {
-  stamp_('job|ai_review_at'); var night = Number(now_().slice(11, 13)) >= 19, notes = aiPosts_(t, true), cards = briefAll_(night ? addDays_(t, 1) : t, night ? 'night' : 'day'), convo = setting_('app|ai.convo', '1') === '1' ? aiConvoSafe_(t, true) : {};
-  return { notes: notes, cards: cards.done, cardError: cards.error, convo: convo.actions || [] };
+  stamp_('job|ai_review_at'); var night = Number(now_().slice(11, 13)) >= 19, notes = aiPosts_(t, true), cards = briefAll_(night ? addDays_(t, 1) : t, night ? 'night' : 'day'), convo = setting_('app|ai.convo', '1') === '1' ? aiConvoSafe_(t, true) : {}, tidy = aiTidySafe_(t);
+  return { notes: notes, cards: cards.done, cardError: cards.error, convo: convo.actions || [], tidied: tidy.cleared || 0 };
 }
 /** Everything on person p's plate for date d, each with a ref the app can open. Gift ideas are never included. */
 function briefCands_(p, d, mode) {
@@ -1196,19 +1229,25 @@ function aiConvo_(t, manual) {
   var plan = rows_('Events').filter(function (e) { return e.date >= t && e.date <= addDays_(t, 14); }).map(function (e) { return e.date + ' ' + (e.start || 'all day') + ' ' + e.title + (e.people ? ' (' + e.people + ')' : ''); })
     .concat(rows_('Todos').filter(function (x) { return x.status !== 'Done'; }).slice(0, 40).map(function (x) { return 'To-do: ' + x.title + (x.assignee ? ' (' + x.assignee + ')' : ''); }));
   var done = rows_('ai_requests').filter(function (q) { return q.source === 'Conversation' && q.time >= since; }).map(function (q) { return q.summary; });
+  var dinners = []; for (var di = 0; di < 4; di++) { var dd2 = addDays_(t, di), mm = get_('Menus', monday_(dd2) + '-' + DAYS[dow_(dd2)]); dinners.push({ date: dd2, dinner: mm ? (dishName_(mm) || 'nothing planned') : 'nothing planned', cook: mm && mm.cook || '', notHome: mm && mm.away || '' }); }
+  var myPosts = rows_('Activity').filter(function (a) { return a.type === 'ai' && a.state !== 'cleared' && a.time >= since; }).map(function (a) { return { id: a.id, kind: 'note', text: a.text }; })
+    .concat(rows_('ai_requests').filter(function (q) { return q.status === 'question'; }).map(function (q) { return { id: q.id, kind: 'question', askedOf: q.who, question: q.question }; }));
   var S = { type: 'string' }, o = function (props) { return { type: 'object', additionalProperties: false, required: Object.keys(props), properties: props }; },
       strs = function (keys) { var x = {}; keys.forEach(function (k) { x[k] = S; }); return x; };
   var schema = o({ actions: { type: 'array', items: o({ thread_id: S, summary: S, forPerson: S,
     events: { type: 'array', items: o(strs(['title', 'category', 'date', 'allDay', 'endDate', 'start', 'end', 'people', 'location', 'house', 'dropoff', 'pickup', 'notes'])) },
     todos: { type: 'array', items: o(strs(['type', 'title', 'amount', 'due', 'assignee', 'repeat', 'house', 'kid', 'notes'])) },
-    schoolRuns: { type: 'array', items: o({ key: S, who: S }) } }) } });
+    schoolRuns: { type: 'array', items: o({ key: S, who: S }) },
+    dinners: { type: 'array', items: o({ date: S, cook: S, away: S }) }, resolves: { type: 'array', items: S } }) } });
   var system = 'You are the Assistant inside a family\'s home app. You read the family\'s recent conversations in the app (posts, replies, and answers to question posts). ' +
     'When a conversation settles a concrete plan that is not already in the app, add it so nobody has to type it in. Examples: asked "What time are you coming home today?" and Paul answered 6:30 PM: add an event "Paul home" today at 18:30 with people Paul, category Family. ' +
     'Asked "Are you picking the kids up?" and the answer was Yes: set that school run (from schoolRuns, by key) to the person who answered. Someone agreed to buy or do something: add a to-do for them.\n' +
     'Only act on things that were clearly answered or agreed, in threads marked isNew. Never act on open questions, maybes or jokes. Never duplicate anything in "plan" or "alreadyAdded". Most of the time return no actions.\n' +
+    'Dinners: when someone says they are making dinner (or taking tonight, or answers who is cooking), add a dinners entry with that date and cook set to them ("away" is a name only if someone says they will not be home for dinner; otherwise ""). Use dates from "dinners".\n' +
+    '"myPosts" are notes and questions you posted earlier. When a thread answers or settles one of them, put its id in resolves so it can be cleared from the Feed, even if nothing needs adding to the plan.\n' +
     'Family: ' + people.map(function (p) { return p.name + (p.kind === 'kid' ? ' (kid)' : ''); }).join(', ') + '. Ride options: ' + rides_().join(', ') + '. Today is ' + nice_(t) + ' (' + t + '), time ' + now_().slice(11, 16) + '. ' +
     'Dates are YYYY-MM-DD, times 24-hour HH:MM; "today" in a thread means the day it was written. One action per thread: summary is one short past-tense sentence ("Added Paul home at 6:30 PM today."), forPerson is the person the plan is about (a name from the family, or ""). Use "" for anything not said.';
-  var r = claude_(system, JSON.stringify({ threads: threads, schoolRuns: runs, plan: plan, alreadyAdded: done }), schema, 'low');
+  var r = claude_(system, JSON.stringify({ threads: threads, schoolRuns: runs, plan: plan, dinners: dinners, myPosts: myPosts, alreadyAdded: done }), schema, 'low');
   if (r.error || r.refused || !r.data) return { error: r.error || 'declined' };
   var out = [], keys = {}; runs.forEach(function (x) { keys[x.key] = 1; });
   (r.data.actions || []).forEach(function (a) {
@@ -1219,6 +1258,11 @@ function aiConvo_(t, manual) {
     (a.schoolRuns || []).forEach(function (x) { if (!keys[x.key] || rides_().indexOf(x.who) < 0) return; var k = x.key.split('|'), ref = 'school:' + k[0] + '|' + k[2];
       var ov = rows_('Overrides').filter(function (y) { return y.ref === ref && y.date === k[1]; })[0], row = { id: ov ? ov.id : id_(), ref: ref, date: k[1], pickup: x.who, dropoff: '', cancelled: '' };
       ops.push({ t: 'Overrides', row: row }); refs.push(['Overrides', row.id]); });
+    var mine = {}; myPosts.forEach(function (x) { mine[x.id] = x.kind; });
+    (a.resolves || []).forEach(function (rid) { if (mine[rid] === 'note') put_('Activity', { id: rid, state: 'cleared' }); else if (mine[rid] === 'question') put_('ai_requests', { id: rid, status: 'cleared' }); });
+    (a.dinners || []).forEach(function (x) { if (!isDate_(x.date) || x.date < t || x.date > addDays_(t, 7)) return; var cook = one_(x.cook, ADULTS), away = one_(x.away, ADULTS); if (!cook && !away) return;
+      var mid = monday_(x.date) + '-' + DAYS[dow_(x.date)], mrow = get_('Menus', mid); if (!mrow) { weekAdd_(monday_(x.date)); mrow = get_('Menus', mid); } if (!mrow) return;
+      var upd = { id: mid }; if (cook) upd.cook = cook; if (away) upd.away = away; ops.push({ t: 'Menus', row: upd }); refs.push(['Menus', mid]); });
     if (!ops.length) return;
     write_({ ops: ops }, 'Assistant');
     var snippet = th.from + ': ' + th.text + th.replies.slice(-2).map(function (c) { return ' / ' + c.who + ': ' + c.text; }).join('');
