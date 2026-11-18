@@ -15,10 +15,10 @@
 <script src="config.js"></script>
 <style>
   /* Day: light background, deep blue. Night (phone in Dark Mode): dark navy, very light blue. */
-  :root { --bg:#eef2f7; --card:#fff; --text:#0f172a; --muted:#475569; --line:#dfe5ee; --soft:#eef2f8; --accent:#1e40af; --onacc:#fff; --accsoft:#dde6fb;
+  :root { --bg:#eef2f7; --card:#fff; --text:#0f172a; --muted:#475569; --line:#dfe5ee; --soft:#eef2f8; --accent:#1e40af; --onacc:#fff; --accsoft:#dde6fb; --asst:#6b3fc4; --asstbg:#f3eefe;
           --green:#0f6b3e; --red:#b4233a; --amber:#7a4b00; --redbg:#ffe8ec; --amberbg:#fdecc8; --greenbg:#dcf3e6; --grad:var(--accent); --blur:rgba(238,242,247,.86);
           --shadow:0 1px 2px rgba(15,23,42,.05), 0 6px 18px rgba(15,23,42,.07); --shadow-sm:0 1px 3px rgba(15,23,42,.12); color-scheme:light dark; }
-  @media (prefers-color-scheme: dark) { :root { --bg:#0b1220; --card:#151e30; --text:#f1f5f9; --muted:#a3b3ca; --line:#24314b; --soft:#1d2840; --accent:#bfdbfe; --onacc:#0b1220; --accsoft:#1f3052;
+  @media (prefers-color-scheme: dark) { :root { --asst:#c9b6ff; --asstbg:#221a3d; --bg:#0b1220; --card:#151e30; --text:#f1f5f9; --muted:#a3b3ca; --line:#24314b; --soft:#1d2840; --accent:#bfdbfe; --onacc:#0b1220; --accsoft:#1f3052;
           --green:#86e3b7; --red:#ff9aab; --amber:#f5c66b; --redbg:#3d1219; --amberbg:#3a2a07; --greenbg:#0f3326; --blur:rgba(11,18,32,.86);
           --shadow:0 8px 22px rgba(0,0,0,.35); --shadow-sm:0 1px 3px rgba(0,0,0,.4); } }
   * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
@@ -192,6 +192,10 @@
   .plan .ph a { display:inline-flex; align-items:center; font-size:13px; letter-spacing:0; text-transform:none; }
   .prow { display:grid; grid-template-columns:62px minmax(0,1fr); gap:10px; font-size:14px; line-height:1.35; padding:4px 0; } .prow > span:first-child { font-weight:800; color:var(--muted); }
   .prow.past { opacity:.5; }
+  .post.asst { border-left:3px solid var(--asst); } .swipe > .post.asst, .post.asst { background:var(--asstbg); }
+  .av.asav { background:var(--asst); color:var(--asstbg); display:inline-flex; align-items:center; justify-content:center; }
+  .asst .ahead b { color:var(--asst); } .aq { margin-top:8px; padding:10px 12px; border-radius:12px; background:var(--card); border:1px solid var(--asst); font-size:14px; }
+  .aq textarea { width:100%; margin-top:8px; } .areq { padding:12px 0; border-bottom:1px solid var(--line); } .areq .q { font-weight:600; }
   .aiopen { float:right; margin:0 8px 0 0; height:32px; padding:0 10px; } .aibox { margin-top:4px; padding:12px; border-radius:16px; background:var(--soft); } .aibox textarea { width:100%; background:var(--card); }
   .aihead { margin-top:10px; font-size:17px; line-height:1.4; font-weight:600; letter-spacing:-.2px; }
   .wxline { display:flex; align-items:center; gap:8px; margin-top:12px; font-size:14px; } .wxline b { font-size:17px; }
@@ -317,7 +321,7 @@
 </style>
 </head>
 <body>
-<header><h1 id="title">Feed</h1><div style="display:flex"><button class="icon-btn" id="hdrGear" data-a="openSettings" aria-label="Settings" style="display:none"></button><button class="icon-btn" id="hdrReload" data-a="reload" aria-label="Refresh"></button></div></header>
+<header><h1 id="title">Feed</h1><div style="display:flex"><button class="icon-btn" id="hdrGear" data-a="openSettings" aria-label="Settings" style="display:none"></button><button class="icon-btn" id="hdrAsk" data-a="askOpen" aria-label="Assistant" style="display:none"></button><button class="icon-btn" id="hdrReload" data-a="reload" aria-label="Refresh"></button></div></header>
 <main id="view"><div class="empty">Loading…</div></main>
 <nav class="bottom">
   <button data-a="nav" data-v="feed" data-ic="feed"><span>Feed</span></button>
@@ -332,9 +336,9 @@
 // Momnie Family app v6.0
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'], DAYN = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'], ADULTS = ['Paul', 'Shana'];
 // Shown at the bottom of Home. Bump it together with VERSION in sw.js on every release.
-const APP_VERSION = '12.7 · Nov 18, 2026';
+const APP_VERSION = '13.0 · Nov 18, 2026';
 const TABLES = ['People', 'Schools', 'SchoolCal', 'Activities', 'Overrides', 'Events', 'Caretakers', 'Childcare', 'Birthdays', 'Todos', 'TodoTypes', 'Recipes', 'DinnerRules', 'Weeks', 'Menus',
-  'Groceries', 'GroceryList', 'HouseCards', 'Houses', 'WeatherRules', 'Quotes', 'Memories', 'Updates', 'Messages', 'Activity', 'Comments', 'Reactions', 'Links', 'Settings', 'Photos', 'gifts', 'ai_rules', 'daily_items', 'daily_completions'];
+  'Groceries', 'GroceryList', 'HouseCards', 'Houses', 'WeatherRules', 'Quotes', 'Memories', 'Updates', 'Messages', 'Activity', 'Comments', 'Reactions', 'Links', 'Settings', 'Photos', 'gifts', 'ai_rules', 'ai_requests', 'daily_items', 'daily_completions'];
 const CAT = { School: '#3f6fb5', Kids: '#4f7cc2', Work: '#64748b', Family: '#5b6fa8', Dinner: '#b08a4f', Caretaker: '#3e9aa6', Shared: '#94a3b8', Birthday: '#c9806a' }, SCHOOL_C = ['#5a72b8', '#7a8597', '#4a6fb0'];
 // Muted person colors (Outlook-style): Clara pink, Conrad green, Charlie blue, Shana purple, Paul grey.
 const PCOL = { Clara: '#c8578f', Conrad: '#3d9a62', Charlie: '#3a7fd5', Shana: '#8b62c7', Paul: '#6b7280' }, PCOL_X = ['#b07a3c', '#3e9aa6', '#a65f5f'];
@@ -342,7 +346,7 @@ const pcol = n => PCOL[n] || PCOL[String(n || '').split(' ')[0]] || PCOL_X[(Stri
 // App-made text (older weekly cards) can carry emoji; drop them so posts stay plain.
 const stripEmo = s => String(s || '').replace(/(\p{Extended_Pictographic}(️|‍\p{Extended_Pictographic})*)\s*/gu, '');
 const noEmo = s => String(s || '').replace(/(\p{Extended_Pictographic}(️|‍\p{Extended_Pictographic})*)\s*/gu, '').trim();
-const NCATS = { ai: 'AI assistant notes', planning: 'Planning gaps (rides, caretakers)', bills: 'Bills and to-dos', convo: 'Messages, comments and questions', planner: 'Planner changes', dinner: 'Meals and groceries', upkeep: 'House upkeep', summary: 'Morning summary and weekly cards' };
+const NCATS = { ai: 'Assistant notes and requests', planning: 'Planning gaps (rides, caretakers)', bills: 'Bills and to-dos', convo: 'Messages, comments and questions', planner: 'Planner changes', dinner: 'Meals and groceries', upkeep: 'House upkeep', summary: 'Morning summary and weekly cards' };
 const $ = id => document.getElementById(id);
 const store = { get: k => { try { return localStorage.getItem(k) || ''; } catch (e) { return ''; } }, set: (k, v) => { try { localStorage.setItem(k, v); } catch (e) {} } };
 const S = {}; TABLES.forEach(t => S[t] = []);
@@ -590,6 +594,7 @@ const call = (action, data) => new Promise(done => { outbox.push({ action, data,
 /** Saves rows: shows the change now and returns true; the Sheet catches up in the background. */
 function write(ops, extra) {
   ops = [].concat(ops).filter(Boolean); ops.forEach(o => { if (o.row && !o.row.id) o.row.id = nid(); });
+  if (ASSIST) { ops.forEach(o => { delete o.log; if (!ASSIST.made && o.t === ASSIST.t && o.row && !o.del) ASSIST.made = o.row.id; }); if (extra) delete extra.log; }
   applyOps(ops); refresh();
   outbox.push({ action: 'write', data: Object.assign({ ops }, extra || {}), ops, done: () => {} }); pump();
   return Promise.resolve(true);
@@ -685,6 +690,7 @@ function alerts() {
     out.push({ lvl: 'red', icon: 'car', text: `${r.name} ${RIDE_WORD[r.kind]} ${fmtT(r.time)}${d === tm ? ' tomorrow' : ''} (${kidNames(r.kids)}): no one set`, sride: `${r.sid}|${d}|${r.kind}` }); }));
   [TODAY, tm, addDays(TODAY, 2)].forEach(d => conflictsFor(d).forEach(c => out.push({ lvl: 'amber', icon: 'alert', text: c.text, open: c.open })));
   S.Messages.forEach(m => { if (m.resolved !== '1' && list(m.tags).includes(ME)) out.push({ lvl: m.urgent === '1' ? 'red' : '', icon: m.urgent === '1' ? 'alert' : 'msg', text: `${m.from}: “${titleOf('Messages', m.id)}”`, open: ['Messages', m.id] }); });
+  S.ai_requests.forEach(q => { if (q.who === ME && q.status === 'question' && q.question) out.push({ lvl: 'amber', icon: 'spark', text: `The assistant asks: ${q.question}`, nav: 'feed' }); });
   S.Reactions.forEach(r => { if (r.emoji === '❓' && r.who !== ME && !cmts(r.table, r.ref).some(c => c.who === ME && c.time > r.time)) { const ti = titleOf(r.table, r.ref); if (ti) out.push({ lvl: '', icon: 'question', text: `${r.who} has a question on “${ti}”`, open: [r.table, r.ref] }); } });
   return out;
 }
@@ -905,7 +911,7 @@ const rideO = () => [['', 'Not set']].concat(ADULTS, S.Caretakers.map(c => c.nam
 const kidN = () => kids().map(p => p.name);
 /** Warn when a caretaker who isn't cleared to drive is picked for a ride. Returns extra ops, or null to cancel. */
 function driveCheck(names) {
-  const ops = [];
+  const ops = []; if (ASSIST) return ops;
   for (const n of names) { const c = S.Caretakers.find(x => x.name === n || x.id === n); if (!c || c.drive === '1') continue;
     if (!confirm(`${c.name} isn't marked as cleared to drive.\n\nOK = Clear to drive (updates their card)\nCancel = go back`)) return null;
     ops.push({ t: 'Caretakers', row: { id: c.id, drive: '1' } }); }
@@ -1163,7 +1169,7 @@ const SAVE = {
     need(v.title && v.title.trim(), 'Give it a name.'); need(v.date, 'Pick a date.'); if (v.allDay !== '1') need(v.start, 'Pick a start time, or mark it all day.');
     const isNew = !v.id, row = Object.assign({}, v, { id: v.id || nid() }), ops = [];
     if (v.category === 'Kids') { const dc = driveCheck([v.dropoff, v.pickup].filter(Boolean)); if (!dc) return false; ops.push(...dc); }
-    if (isNew && !v.gcalId) { const k = norm(v.title), dup = itemsFor(v.date).find(i => ['GCal', 'Events', 'SchoolCal'].includes(i.t) && (norm(i.title) === k || norm(i.title).includes(k) || k.includes(norm(i.title))));
+    if (isNew && !v.gcalId && !ASSIST) { const k = norm(v.title), dup = itemsFor(v.date).find(i => ['GCal', 'Events', 'SchoolCal'].includes(i.t) && (norm(i.title) === k || norm(i.title).includes(k) || k.includes(norm(i.title))));
       if (dup && confirm(`This looks like a duplicate of “${dup.title}”. Merge them into one card?`)) { if (dup.t === 'GCal') row.gcalId = dup.id; else { openCard(dup.t, dup.id, v.date); return; } } }
     ops.push({ t: 'Events', row, adopt: isNew && row.gcalId ? row.gcalId : undefined, log: L(isNew ? 'event_add' : 'event_edit', `${isNew ? (row.gcalId ? 'imported from the calendar' : 'added plans') : 'updated'}: ${v.title} (${fmtDay(v.date)}${v.allDay !== '1' && v.start ? ', ' + fmtT(v.start) : ''})`, 'planner') });
     if (v._link) ops.push({ t: 'Links', row: { id: nid(), aTable: v._link[0], aRef: v._link[1], bTable: 'Events', bRef: row.id } }, sys(v._link[0], v._link[1], `added a Planner event and linked this ${NAMES[v._link[0]] || 'card'}`));
@@ -1191,7 +1197,7 @@ const SAVE = {
     const isNew = !v.id, row = Object.assign({}, v, { id: v.id || nid() }), ops = [{ t: 'Childcare', row, log: isNew ? L('care_add', `needs a caretaker: ${careTitle(row)} on ${fmtDay(v.date)}`, 'planning') : null }];
     if (isNew) ops.push({ t: 'Todos', row: { id: nid(), type: 'task', title: 'Find a caretaker for ' + fmtDay(v.date), due: v.date < addDays(TODAY, 7) ? v.date : addDays(TODAY, 7), status: 'Open', assignee: '', source: 'findcare:' + row.id } });
     if (v._link) ops.push({ t: 'Links', row: { id: nid(), aTable: v._link[0], aRef: v._link[1], bTable: 'Childcare', bRef: row.id } });
-    const ok = await write(ops); if (ok && isNew) openCard('Childcare', row.id); return ok;
+    const ok = await write(ops); if (ok && isNew && !ASSIST) openCard('Childcare', row.id); return ok;
   },
   async Recipes(v) {
     need(v.name && v.name.trim(), 'Name the recipe.');
@@ -1220,12 +1226,13 @@ function editForm(t, row, extra) {
   const isNew = !row || !row.id, v = Object.assign(isNew && DEFAULTS[t] ? DEFAULTS[t]() : {}, row || {}, extra || {});
   if (t === 'Activities' && !isNew) { const g = actGroup(row); v._grp = g.map(x => x.id); v._slots = g.flatMap(x => list(x.days).map(dd => ({ day: dd, start: x.start, end: x.end }))).sort((a, b) => DAYS.indexOf(a.day) - DAYS.indexOf(b.day)); }
   if (t === 'Messages' && isNew) return form('New message', FORMS.Messages, v, SAVE.Messages, [['Post', 'off'], ['Post and notify', 'on'], ['Post as urgent', 'urgent']]);
-  const ai = isNew && t === 'Events' && (byId('Settings', 'app|ai.on') || {}).value === '1' ? { ph: "e.g. Clara's dentist next Tuesday at 3:30 at Brookline Dental, I'll take her", ai: aiEvent } : null;
+  const ai = isNew && t === 'Events' && aiCanUse() ? { ph: "e.g. Clara's dentist next Tuesday at 3:30 at Brookline Dental, I'll take her", ai: aiEvent } : null;
   return form((isNew ? 'New ' : 'Edit ') + (NAMES[t] || 'item'), FORMS[t], v, x => saveRow(t, x), null, ai);
 }
 // The assistant turns a sentence into an event (title, type, date, times, who, where, rides). Nothing is saved until you tap Save.
 async function aiEvent(text) { const r = await api('ai_event', { text, today: TODAY, now: nowHM() }); if (!r.event) throw new Error('The assistant could not read that. Try again or fill it in yourself.');
-  const e = r.event; return Object.assign(e, e.allDay === '1' ? { start: '', end: '' } : { endDate: '', end: e.end || hm(toMin(e.start) + 60) }); }
+  const e = r.event; write({ t: 'ai_requests', row: { id: nid(), time: stamp(), who: ME, text, source: 'New event', status: 'filled', summary: 'Filled in a new event: ' + e.title, question: '', answer: '', refs: '[]' } });
+  return Object.assign(e, e.allDay === '1' ? { start: '', end: '' } : { endDate: '', end: e.end || hm(toMin(e.start) + 60) }); }
 A.add = (t, el) => editForm(t, null, el && el.dataset.d ? { date: el.dataset.d, due: el.dataset.d } : null);
 A.edit = (v, el) => { const c = ctx(el); if (c.t === 'GCal') return A.convert(v, el); editForm(c.t, byId(c.t, c.id)); };
 A.del = async (v, el) => {
@@ -1565,7 +1572,7 @@ function render() {
   $('title').textContent = pv ? (pv.name === ME ? 'Me' : pv.name) : TITLES[view];
   document.querySelectorAll('nav.bottom button').forEach(b => b.className = b.dataset.v === view ? 'on' : '');
   if (!ME) return;
-  $('hdrGear').style.display = view === 'home' ? '' : 'none';
+  $('hdrGear').style.display = view === 'home' ? '' : 'none'; $('hdrAsk').style.display = aiCanUse() ? '' : 'none';
   $('view').innerHTML = ({ feed: vFeed, planner: vPlanner, meals: vDinner, todo: vTodo, home: vHome, person: vPerson })[view]();
   if (view === 'person') document.documentElement.style.setProperty('--hdrh', document.querySelector('header').offsetHeight + 'px');
 }
@@ -1654,7 +1661,7 @@ function aiHero(b, o) {
   return `<div class="hero"><div class="small muted b">${new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}</div>
       <div style="font-size:22px;font-weight:800;letter-spacing:-.5px">Good ${o.h < 12 ? 'morning' : o.h < 17 ? 'afternoon' : 'evening'}, ${esc(ME)}</div>
       <div class="aihead">${esc(b.headline)}</div>${wxl}${wsay}
-      ${reds.length ? `<div class="stack" style="margin-top:12px">${reds.map(a => o.remHTML({ lvl: a.lvl || 'plain', icon: a.icon, text: a.text, open: a.open, sride: a.sride })).join('')}</div>` : ''}
+      ${reds.length ? `<div class="stack" style="margin-top:12px">${reds.map(a => o.remHTML({ lvl: a.lvl || 'plain', icon: a.icon, text: a.text, open: a.open, sride: a.sride, nav: a.nav })).join('')}</div>` : ''}
       ${items.length ? `<div class="lbl">${o.night ? 'For tomorrow' : 'What matters'}</div><div class="stack">${items.map(item).join('')}</div>` : ''}
       <details class="plan"><summary class="ph"><span>${o.night ? "Tomorrow's plan" : 'Full plan'} · ${o.pl.length}</span><span class="chev">${ic('chev', 16)}</span></summary>
         ${o.pl.length ? o.pl.map(o.prow).join('') : `<div class="small muted" style="padding-top:6px">Nothing planned.</div>`}
@@ -1678,7 +1685,7 @@ function vFeed() {
   // Where the other parent is working today (tomorrow after 7 PM), from the Office / Home switch on their page.
   const where = S.People.filter(p => p.kind !== 'kid' && p.name !== ME && p.workStart && list(p.workDays).includes(DAYS[dowIdx(sd)])).map(p => { const home = workWhere(p, sd) === 'home';
     return { lvl: 'plain', icon: home ? 'house' : 'building', text: `${p.name} ${home ? 'working from home' : 'in the office'} ${night ? 'tomorrow' : 'today'}${p.workEnd ? ' · until ' + fmtT(p.workEnd) : ''}`, open: ['People', p.id] }; });
-  const rem = where.concat(dinnerFlags(sd, night)).concat(al.map(a => ({ lvl: a.lvl || 'plain', icon: a.icon, text: a.text, open: a.open, sride: a.sride })))
+  const rem = where.concat(dinnerFlags(sd, night)).concat(al.map(a => ({ lvl: a.lvl || 'plain', icon: a.icon, text: a.text, open: a.open, sride: a.sride, nav: a.nav })))
     .concat(bdays.map(b => ({ lvl: 'plain', icon: 'cake', text: b.title + (night ? ' tomorrow' : ' today'), open: [b.t, b.id] })),
       todoSummary(mine, over, due, night));
   const remHTML = r => `<div class="alert ${r.lvl}${r.tag ? ' flag' : ''}" ${r.sride ? `data-a="schoolRide" data-v="${r.sride}"` : r.nav ? `data-a="nav" data-v="${r.nav}"` : r.open ? `data-a="open" data-t="${r.open[0]}" data-id="${esc(r.open[1])}" data-d="${r.open[2] || ''}"` : ''}>${r.ty ? tyIcon(r.ty, 16) : ic(r.icon || 'alert', 16)}<span class="grow">${esc(r.text)}</span>${r.tag ? `<span class="ftag">${esc(r.tag)}</span>` : ''}</div>`;
@@ -1702,10 +1709,11 @@ function vFeed() {
   const gone = feedHidden();
   const kindHidden = a => a.table === 'Photos' ? !fOn('photos') : a.type === 'daily' ? !fOn('daily') : hide(a.cat);
   const stream = S.Activity.filter(a => a.type !== 'message' && (a.type !== 'ai' || aiNoteFor(a).includes(ME)) && !kindHidden(a) && !gone.has('A:' + a.id)).map(a => ({ time: a.time, a })).concat(S.Messages.filter(mm => fOn('messages') && !gone.has('M:' + mm.id)).map(mm => ({ time: mm.time, m: mm, pin: mm.pinUntil >= TODAY && mm.resolved !== '1' })))
+    .concat(S.ai_requests.filter(q => !hide('ai') && q.status !== 'filled' && (q.status !== 'error' || q.who === ME) && !gone.has('R:' + q.id)).map(q => ({ time: q.time || '', r: q })))
     .sort((x, y) => (y.pin ? 1 : 0) - (x.pin ? 1 : 0) || y.time.localeCompare(x.time)).slice(0, 70);
   // Bundle bursts: several changes by the same person within a few minutes become one post.
   const win = (+st('bundleMin', '5') || 0) * 60000, out = [];
-  stream.forEach(e => { const p = out[out.length - 1], solo = x => x.m || x.pin || x.a.type === 'ai' || taggedMe(x.a.text, x.a.who) || x.a.table === 'Photos' || x.a.type === 'daily' || x.a.type.startsWith('summary') || x.a.who === 'App';
+  stream.forEach(e => { const p = out[out.length - 1], solo = x => x.r || x.m || x.pin || x.a.type === 'ai' || taggedMe(x.a.text, x.a.who) || x.a.table === 'Photos' || x.a.type === 'daily' || x.a.type.startsWith('summary') || x.a.who === 'App';
     if (win && p && !solo(e) && !solo(p.items ? p.items[0] : p) && p.who === e.a.who && new Date(p.t0) - new Date(e.time) <= win) { p.items = p.items || [{ time: p.time, a: p.a }]; p.items.push(e); p.t0 = e.time; return; }
     out.push(Object.assign({ who: e.a ? e.a.who : '', t0: e.time }, e)); });
   const fOff = FKINDS().filter(([k]) => !fOn(k)).map(x => x[1]);
@@ -1714,7 +1722,7 @@ function vFeed() {
       ${FKINDS().map(([k, l]) => `<label class="check-row" style="margin-top:8px"><input type="checkbox" data-c="feedTog" data-k="${k}" ${fOn(k) ? 'checked' : ''}>${esc(l)}</label>`).join('')}
       <div class="actions"><button class="btn gray sm" data-a="feedAll">Show everything</button><button class="btn sm" data-a="feedMenu">Done</button></div>
       <div class="small muted" style="margin-top:10px">Only changes your Feed. Same as Home, Settings, Show in my Feed.</div></div>` : ''}
-    ${fOff.length ? `<div class="small muted rapplied" style="padding:2px 0 0">Hiding ${esc(fOff.join(', '))} · <a data-a="feedAll">Show everything</a></div>` : ''}</div>` + (out.length ? out.map(e => swipeWrap(e.items ? e.items.map(x => 'A:' + x.a.id) : e.m ? ['M:' + e.m.id] : ['A:' + e.a.id], e.items ? bundlePost(e) : e.m ? msgPost(e.m, e.pin) : actPost(e.a))).join('') : '<div class="empty">Nothing yet. Changes either of you make will show up here.</div>');
+    ${fOff.length ? `<div class="small muted rapplied" style="padding:2px 0 0">Hiding ${esc(fOff.join(', '))} · <a data-a="feedAll">Show everything</a></div>` : ''}</div>` + (out.length ? out.map(e => swipeWrap(e.items ? e.items.map(x => 'A:' + x.a.id) : e.r ? ['R:' + e.r.id] : e.m ? ['M:' + e.m.id] : ['A:' + e.a.id], e.items ? bundlePost(e) : e.r ? askPost(e.r) : e.m ? msgPost(e.m, e.pin) : actPost(e.a))).join('') : '<div class="empty">Nothing yet. Changes either of you make will show up here.</div>');
   return html + `<button class="fab" data-a="newMsg" aria-label="New post">${ic('plus', 20)}Post</button>`;
 }
 // Feed filter (three-line menu next to Activity). Uses the same per-person settings as Home > Settings > Show in my Feed.
@@ -1735,7 +1743,7 @@ A.feedDel = fid => { const ids = fid.split(' ').filter(Boolean); if (!ids.length
   if (ME !== 'Paul') { if (confirm(`Remove ${n} from your Feed?\n\nIt stays in Paul's Feed.`)) hideMine(); return; }
   const d = sheet(`<h2>Delete ${n}?</h2><div class="actions" style="flex-direction:column"><button class="btn danger" style="flex:1" data-a="feedDelAll">Delete for everyone</button><button class="btn gray" style="flex:1" data-a="feedHideMe">Remove from my Feed only</button><button class="btn gray" style="flex:1" data-a="close">Cancel</button></div>`);
   d._ids = ids; d._hide = hideMine; };
-A.feedDelAll = (v, el) => { const d = el.closest('dialog'), ops = d._ids.map(x => x[0] === 'M' ? { t: 'Messages', del: x.slice(2) } : { t: 'Activity', del: x.slice(2) });
+A.feedDelAll = (v, el) => { const d = el.closest('dialog'), ops = d._ids.map(x => x[0] === 'M' ? { t: 'Messages', del: x.slice(2) } : x[0] === 'R' ? { t: 'ai_requests', del: x.slice(2) } : { t: 'Activity', del: x.slice(2) });
   d._ids.filter(x => x[0] === 'M').forEach(x => S.Activity.filter(a => a.table === 'Messages' && a.ref === x.slice(2)).forEach(a => ops.push({ t: 'Activity', del: a.id })));
   d.close(); write(ops).then(ok => ok && toast('Deleted for everyone')); };
 A.feedHideMe = (v, el) => { const d = el.closest('dialog'); d.close(); d._hide(); };
@@ -1748,6 +1756,69 @@ const postFoot = (t, id, lead) => { const n = cmts(t, id).filter(c => c.system !
 function dailyHTML(a) { let j = {}; try { j = JSON.parse(a.text); } catch (e) {}
   return (j.memories || []).map(x => `${x.photo ? `<img src="${esc(photoUrl(x.photo))}" alt="" style="max-width:100%;border-radius:12px;display:block;margin-bottom:6px">` : ''}<div class="b">${x.years > 0 ? x.years + ' year' + (x.years === 1 ? '' : 's') + ' ago today' : 'On this day'}</div><div>${esc(x.note)}</div>`).join('<br>') +
     (j.quote ? `<div class="q" style="margin-top:${(j.memories || []).length ? 12 : 0}px;font-family:Georgia,serif;font-style:italic">“${esc(j.quote)}”</div>${j.author ? `<div class="small muted">${esc(j.author)}</div>` : ''}` : ''); }
+// ---------- The Assistant ----------
+// The sparkle at the top of every tab: type anything ("Clara has piano every Monday at 8 AM") and the assistant works out
+// what to make. The app saves it through the same steps as a person's save (calendar copy, caretaker to-do, and so on).
+let ASSIST = null, ASK_DRAFT = '', ASK_BUSY = '';
+const ANS_DRAFT = {};
+const jl = s => { try { const a = JSON.parse(s || '[]'); return Array.isArray(a) ? a : []; } catch (e) { return []; } };
+const ASK_IC = { Events: 'planner', Todos: 'todo', Activities: 'activity', Childcare: 'care', SchoolCal: 'school', HouseCards: 'house' };
+const askItem = ([t, id]) => { const r = byId(t, id); if (!r) return ''; const when = t === 'Childcare' ? fmtT(r.start) + '–' + fmtT(r.end) : t === 'Events' || t === 'SchoolCal' ? fmtDay(r.date) + (r.start ? ', ' + fmtT(r.start) : '') : t === 'Activities' ? actGroup(r).map(x => x.days + ' ' + fmtT(x.start)).join(' · ') : t === 'Todos' && r.due ? 'due ' + fmtDay(r.due) : '';
+  return `<div class="alert plain" data-a="open" data-t="${t}" data-id="${esc(id)}" data-d="${r.date || ''}">${ic(ASK_IC[t] || 'spark', 16)}<span class="grow"><b>${esc(titleOf(t, id) || NAMES[t])}</b>${when ? `<span class="small muted"> · ${esc(when)}</span>` : ''}</span>${ic('chev', 16)}</div>`; };
+function askPost(q) {
+  const refs = jl(q.refs).filter(([t, id]) => byId(t, id)), one = refs.length === 1 ? NAMES[refs[0][0]] : '';
+  const did = q.status === 'error' ? "couldn't do this" : refs.length ? `created ${one ? 'this ' + one : refs.length + ' things'}` : q.status === 'question' ? 'needs a detail' : 'replied';
+  const mine = q.who === ME, busy = ASK_BUSY === q.id;
+  return `<div class="post asst"><span class="av asav">${ic('spark', 18)}</span><div class="pbody"><div class="ahead"><b>Assistant</b> ${did} for ${esc(q.who === ME ? 'you' : q.who)} <span class="muted">· ${ago(q.time)}</span></div>
+    ${q.summary ? `<div class="ptext" style="font-weight:400;margin-top:4px">${esc(q.summary)}</div>` : ''}
+    ${refs.length ? `<div class="stack">${refs.map(askItem).join('')}</div>` : ''}
+    ${q.status === 'question' && q.question ? `<div class="aq"><b>@${esc(q.who)}</b> ${esc(q.question)}${mine ? `<textarea data-askans="${q.id}" rows="2" placeholder="Your answer">${esc(ANS_DRAFT[q.id] || '')}</textarea>
+      <div class="actions" style="margin-top:6px"><button class="btn sm" data-a="askAnswer" data-v="${q.id}" ${busy ? 'disabled' : ''}>${busy ? 'Working on it…' : 'Answer'}</button></div>` : `<div class="small muted" style="margin-top:4px">Waiting on ${esc(q.who)}</div>`}</div>` : ''}
+    <div class="small muted" style="margin-top:8px">${esc(q.who)} asked: “${esc(q.text)}”${q.answer ? ` · answered: “${esc(q.answer)}”` : ''}${q.source ? ' · from ' + esc(q.source) : ''}</div></div></div>`;
+}
+/** Saves what the assistant worked out, then records the request (new) or updates it (answer). */
+async function assistApply(plan, meta, req) {
+  const made = [], errs = [];
+  for (const it of plan.items || []) {
+    const cur = it.id ? byId(it.t, it.id) : null; if (it.id && !cur) continue;
+    const v = Object.assign({}, cur || {}, it.row);
+    if (it.t === 'Activities') { v._slots = (it.row.slots || []).map(x => Object.assign({}, x)); delete v.slots; if (cur) { v._grp = actGroup(cur).map(x => x.id); v.id = cur.id; } }
+    ASSIST = { t: it.t, made: null };
+    try { const r = await (SAVE[it.t] ? SAVE[it.t](v) : saveRow(it.t, v)); if (r === false) errs.push('One item was not saved.'); else if (cur || ASSIST.made) made.push([it.t, cur ? cur.id : ASSIST.made]); }
+    catch (e) { errs.push(e.message); }
+    ASSIST = null;
+  }
+  const summary = [plan.summary, errs.length ? 'Could not save: ' + errs.join(' ') : '', plan.dropped && !made.length && !plan.question ? 'Some details were unclear.' : ''].filter(Boolean).join(' ');
+  const status = plan.question ? 'question' : !made.length && errs.length ? 'error' : 'done';
+  if (req) { const refs = jl(req.refs); made.forEach(m => { if (!refs.some(r => r[0] === m[0] && r[1] === m[1])) refs.push(m); });
+    return write({ t: 'ai_requests', row: { id: req.id, status, summary: summary || req.summary, question: plan.question || '', answer: meta.answer, refs: JSON.stringify(refs) } }); }
+  return write({ t: 'ai_requests', row: { id: nid(), time: stamp(), who: ME, text: meta.text, source: meta.source, status, summary, question: plan.question || '', answer: '', refs: JSON.stringify(made) } });
+}
+A.askOpen = () => { const src = ($('title') || {}).textContent || 'the app';
+  const d = sheet(() => `<h2>Assistant</h2><label>What do you need the assistant to do?</label>
+      <textarea data-askdraft rows="4" placeholder="e.g. Clara has piano every Monday at 8 AM, I'll take her">${esc(ASK_DRAFT)}</textarea>
+      <div class="actions"><button class="btn" data-a="askSend" data-v="${esc(src)}" ${ASK_BUSY === 'new' ? 'disabled' : ''}>${ic('spark', 16)}${ASK_BUSY === 'new' ? 'Working on it…' : 'Send'}</button></div>
+      <div class="small muted">It can add events, weekly activities, to-dos and bills, caretaker requests, school calendar days and house cards. What it makes shows in the Feed, and if it needs a detail it asks you there.</div>
+      <h3>Requests</h3>${S.ai_requests.slice().sort((a, b) => (b.time || '').localeCompare(a.time || '')).slice(0, 40).map(q => { const refs = jl(q.refs).filter(([t, id]) => byId(t, id));
+        return `<div class="areq"><div class="small muted">${esc(q.who)} · ${ago(q.time)}${q.source ? ' · from ' + esc(q.source) : ''}</div><div class="q">“${esc(q.text)}”</div>
+          <div class="small" style="margin-top:2px">${q.status === 'question' ? `<span class="amb">Question:</span> ${esc(q.question)}` : q.status === 'error' ? `<span class="amb">Couldn't do it:</span> ${esc(q.summary)}` : esc(q.summary)}</div>
+          ${refs.length ? `<div class="stack">${refs.map(askItem).join('')}</div>` : ''}</div>`; }).join('') || '<div class="empty">Nothing asked yet.</div>'}`);
+  d.addEventListener('input', e => { if (e.target.dataset.askdraft !== undefined) ASK_DRAFT = e.target.value; });
+  setTimeout(() => { const ta = d.querySelector('[data-askdraft]'); if (ta) ta.focus(); }, 50); };
+A.askSend = async src => { const text = ASK_DRAFT.trim(); if (text.length < 4) return toast('Tell the assistant what you need.'); if (ASK_BUSY) return;
+  ASK_BUSY = 'new'; refresh();
+  try { const r = await api('ai_do', { text, source: src, today: TODAY, now: nowHM() }), plan = r.plan || {};
+    if (plan.error) toast(plan.error); else { await assistApply(plan, { text, source: src }); ASK_DRAFT = ''; } }
+  catch (e) { toast(e.message); }
+  ASK_BUSY = ''; refresh(); };
+A.askAnswer = async id => { const q = byId('ai_requests', id), answer = (ANS_DRAFT[id] || '').trim(); if (!q || ASK_BUSY) return; if (!answer) return toast('Type your answer first.');
+  ASK_BUSY = id; refresh();
+  try { const r = await api('ai_answer', { id, answer, today: TODAY, now: nowHM() }), plan = r.plan || {};
+    if (plan.error) toast(plan.error); else { await assistApply(plan, { answer }, q); delete ANS_DRAFT[id]; } }
+  catch (e) { toast(e.message); }
+  ASK_BUSY = ''; refresh(); };
+document.addEventListener('input', e => { const k = e.target.dataset && e.target.dataset.askans; if (k) ANS_DRAFT[k] = e.target.value; });
+
 function bundlePost(e) {
   return `<div class="post">${avatar(e.who)}<div class="pbody"><div><b>${esc(e.who)}</b> made ${e.items.length} updates <span class="muted">· ${ago(e.items[0].time)}</span></div><div class="ptext" style="font-weight:400">` +
     e.items.map(x => { const a = x.a, ti = a.table && a.ref ? titleOf(a.table, a.ref) : ''; return `<div class="row" style="padding:3px 0" ${ti ? `data-a="open" data-t="${a.table}" data-id="${esc(a.ref)}"` : ''}><span>${esc(a.text)}</span>${ti ? '<span class="chev">›</span>' : ''}</div>`; }).join('') + '</div></div></div>';
@@ -1757,7 +1828,7 @@ function actPost(a) {
     if (p) return `<div class="post" data-a="photoView" data-v="${p.id}">${avatar(a.who)}<div class="pbody"><div><b>${esc(a.who)}</b> added a photo${ti ? ` to <b>${esc(ti)}</b>` : ''} <span class="muted">· ${ago(a.time)}</span></div>
       <img class="phpost" src="${esc(photoSrc(p.fileId, 1200))}" alt="" loading="lazy">${postFoot(p.table, p.ref, '')}</div></div>`; }
   if (a.type === 'ai') { const aud = aiNoteFor(a), rule = String(a.ref || '').startsWith('rule:') ? byId('ai_rules', a.ref.slice(5)) : null;
-    return `<div class="post"><span class="av aiav">${ic('spark', 18)}</span><div class="pbody"><div><b>AI assistant</b> <span class="muted">· ${ago(a.time)}</span>${aud.length === 1 ? ' <span class="chip">Just for you</span>' : ''}</div>${rule ? `<div class="small muted" data-a="aiRuleEdit" data-v="${rule.id}" style="cursor:pointer">${ic('spark', 12)} Your rule: ${esc(rule.text.length > 70 ? rule.text.slice(0, 70) + '…' : rule.text)}</div>` : ''}<div class="ptext" style="font-weight:400">${withMentions(a.text)}</div></div></div>`; }
+    return `<div class="post"><span class="av aiav">${ic('spark', 18)}</span><div class="pbody"><div><b>Assistant</b> <span class="muted">· ${ago(a.time)}</span>${aud.length === 1 ? ' <span class="chip">Just for you</span>' : ''}</div>${rule ? `<div class="small muted" data-a="aiRuleEdit" data-v="${rule.id}" style="cursor:pointer">${ic('spark', 12)} Your rule: ${esc(rule.text.length > 70 ? rule.text.slice(0, 70) + '…' : rule.text)}</div>` : ''}<div class="ptext" style="font-weight:400">${withMentions(a.text)}</div></div></div>`; }
   if (a.type === 'daily') return `<div class="post">${avatar('App')}<div class="pbody"><div><b>Today's memory</b> <span class="muted">· ${fmtDay(a.time)}</span></div><div class="ptext" style="font-weight:400">${dailyHTML(a)}</div></div></div>`;
   if (a.type.startsWith('summary')) { let extra = ''; if (a.type === 'summary_week' && a.ref) { const c = []; for (let i = 0; i < 7; i++) c.push(...conflictsFor(addDays(a.ref, i))); if (c.length) extra = '<div class="lbl">Conflicts to sort out</div>' + c.map(x => `<div class="alert amber" data-a="open" data-t="${x.open[0]}" data-id="${esc(x.open[1])}" data-d="${x.open[2]}">${esc(x.text)}</div>`).join(''); }
     return `<div class="post">${avatar('App')}<div class="pbody"><div><b>${a.type === 'summary_week' ? 'The week ahead' : 'This month'}</b> <span class="muted">· ${ago(a.time)}</span></div><div class="ptext" style="font-weight:400;white-space:normal">${md(stripEmo(a.text))}${extra}</div></div></div>`; }
@@ -1937,6 +2008,10 @@ const autofillDays = () => { const r = byId('Settings', 'app|autofillDays'); ret
 // AI assistant: who sees its Feed notes (Settings app|ai.who; Paul only until he chooses).
 const aiWho = () => list((byId('Settings', 'app|ai.who') || {}).value || 'Paul');
 // Who gets the AI Today card (Settings app|ai.card): Paul only until he adds others; 'none' turns it off for everyone.
+const aiOn = () => (byId('Settings', 'app|ai.on') || {}).value === '1';
+// Who can use the Assistant button and "Fill it in" (Settings app|ai.use): Paul only until he adds others.
+const aiUseFor = () => { const v = (byId('Settings', 'app|ai.use') || {}).value || 'Paul'; return v === 'none' ? [] : list(v); };
+const aiCanUse = () => aiOn() && aiUseFor().includes(ME);
 const aiCardFor = () => { const v = (byId('Settings', 'app|ai.card') || {}).value || 'Paul'; return v === 'none' ? [] : list(v); };
 const aiSees = name => aiWho().includes(name);
 const aiNoteFor = a => a.audience ? list(a.audience) : aiWho();
@@ -1961,13 +2036,14 @@ const aiRuleRow = r => `<div class="li" style="padding:12px 0" data-a="aiRuleEdi
 const aiAskBtn = area => `<button class="btn gray" data-a="aiRuleNew" data-v="${area}" aria-label="Create a rule with the assistant" title="Create a rule with the assistant" style="flex:0 0 auto;padding-left:16px;padding-right:16px">${ic('spark', 20)}</button>`;
 const AI_TOPICS = [['meals', 'Meals and recipes'], ['birthdays', 'Birthdays and gift-idea counts'], ['todos', 'To-dos and bills'], ['rides', 'Rides and caretakers'], ['week', 'The week ahead'], ['house', 'House upkeep']];
 A.aiEdit = (v, el) => { if (ME !== 'Paul') return; const g = k => (byId('Settings', 'app|ai.' + k) || {}).value;
-  form('AI assistant', [F('on', 'Post daily notes to the Feed', 'chk'), F('who', 'Who sees the AI posts', 'multi', ADULTS, { hint: 'Only these people see its notes in the Feed and get its notifications.' }),
+  form('Assistant', [F('on', 'Turn on the assistant (daily notes in the Feed)', 'chk'), F('who', 'Who sees the AI posts', 'multi', ADULTS, { hint: 'Only these people see its notes in the Feed and get its notifications.' }),
       F('topics', 'Topics', 'multi', AI_TOPICS.map(x => x[1])),
+      F('use', 'Who can use the Assistant button', 'multi', ADULTS, { hint: 'The sparkle button at the top of every tab, and Fill it in on new events. Everything it makes shows in the Feed.' }),
       F('card', 'Who gets the AI Today card', 'multi', ADULTS, { hint: 'The assistant writes their card at the top of the Feed each morning and at 7 PM for tomorrow. Everyone else keeps the usual card. Leave it empty to turn it off.' }), F('hour', 'Post after', 'sel', [6, 7, 8, 9, 10, 12, 17, 19].map(h => [String(h), fmtT(pad(h) + ':00')]))],
-    { on: g('on') || '', who: aiWho().join(', '), topics: AI_TOPICS.filter(x => list(g('topics') || AI_TOPICS.map(y => y[0]).join(', ')).includes(x[0])).map(x => x[1]).join(', '), hour: g('hour') || '7', card: aiCardFor().join(', ') },
+    { on: g('on') || '', who: aiWho().join(', '), topics: AI_TOPICS.filter(x => list(g('topics') || AI_TOPICS.map(y => y[0]).join(', ')).includes(x[0])).map(x => x[1]).join(', '), hour: g('hour') || '7', card: aiCardFor().join(', '), use: aiUseFor().join(', ') },
     x => { need(list(x.who).length, 'Pick at least one person to see the posts.');
       const keys = AI_TOPICS.filter(t => list(x.topics).includes(t[1])).map(t => t[0]); need(keys.length, 'Pick at least one topic.');
-      return write(['on', 'who', 'topics', 'hour', 'card'].map(k => ({ t: 'Settings', row: { id: 'app|ai.' + k, value: k === 'on' ? (x.on === '1' ? '1' : '') : k === 'who' ? ADULTS.filter(a => list(x.who).includes(a)).join(', ') : k === 'topics' ? keys.join(', ') : k === 'card' ? ADULTS.filter(a => list(x.card).includes(a)).join(', ') || 'none' : x.hour } }))); }); };
+      return write(['on', 'who', 'topics', 'hour', 'card', 'use'].map(k => ({ t: 'Settings', row: { id: 'app|ai.' + k, value: k === 'on' ? (x.on === '1' ? '1' : '') : k === 'who' ? ADULTS.filter(a => list(x.who).includes(a)).join(', ') : k === 'topics' ? keys.join(', ') : k === 'card' || k === 'use' ? ADULTS.filter(a => list(x[k]).includes(a)).join(', ') || 'none' : x.hour } }))); }); };
 A.aiRun = async (v, el) => { el.disabled = true; el.textContent = 'Asking Claude…'; let r = null; try { r = await api('ai_run'); } catch (e) { toast(e.message); } el.disabled = false; refresh();
   if (r && r.ai) toast(r.ai.error ? r.ai.error : r.ai.notes && r.ai.notes.length ? `Posted ${r.ai.notes.length} note${r.ai.notes.length === 1 ? '' : 's'} to the Feed` : 'Nothing worth posting right now.'); };
 const pauseDays = () => +((byId('Settings', 'app|pauseDays') || {}).value || 30) || 30;
@@ -2278,7 +2354,7 @@ function vHome() {
 A.feedback = () => form('Constructive feedback', [F('idea', 'What would make the app better?', 'area', null, { ph: 'Ideas, annoyances, anything' })], {}, async v => {
   need(v.idea && v.idea.trim(), 'Write your idea first.');
   const ok = await write({ t: 'ideas', row: { id: nid(), text: v.idea.trim() } }); if (ok) toast('Thank you! Paul will see it.'); return ok; });
-A.openSettings = () => sheet(() => '<h2>Settings</h2><div style="clear:both"></div>' + (ME === 'Paul' ? [['ai', 'spark', 'AI assistant', `Daily notes in the Feed · seen by ${joinNames(aiWho())}`]] : []).concat(SETTINGS).map(([k, icon, l, sub]) => hrow('homeOpen', k, icon, l, sub)).join(''));
+A.openSettings = () => sheet(() => '<h2>Settings</h2><div style="clear:both"></div>' + (ME === 'Paul' ? [['ai', 'spark', 'Assistant', `Daily notes in the Feed · seen by ${joinNames(aiWho())}`]] : []).concat(SETTINGS).map(([k, icon, l, sub]) => hrow('homeOpen', k, icon, l, sub)).join(''));
 const rowLi = (t, id, title, sub) => `<div class="li" style="padding:12px 0" data-a="open" data-t="${t}" data-id="${esc(id)}"><div class="grow"><div class="ti">${esc(title)}</div>${sub ? `<div class="small muted">${esc(sub)}</div>` : ''}</div><span class="chev">›</span></div>`;
 const addBtn = (t, l) => `<div class="actions"><button class="btn" data-a="add" data-v="${t}">＋ ${l}</button></div>`;
 const PAGES = {
@@ -2303,17 +2379,18 @@ const PAGES = {
   memories: () => `<h2>Quotes and memories</h2><div class="kv">${S.Quotes.length} wedding quote${S.Quotes.length === 1 ? '' : 's'} and ${S.Memories.length} "this day" memor${S.Memories.length === 1 ? 'y' : 'ies'} saved.</div><div class="kv muted small">Add them in the Sheet: the Quotes tab (quote, author) and the Memories tab (date, note, and an optional link to a photo in Google Drive). On a day with a quote or memory, a splash screen shows the first time each of you opens the app.</div>
     <div class="actions"><button class="btn gray" data-a="splashAgain">Show today's splash again</button></div>`,
   airules: () => { const on = (byId('Settings', 'app|ai.on') || {}).value === '1';
-    return '<h2>Assistant rules</h2><div class="small muted">Rules in plain English. Each time the AI assistant runs it checks them all and posts a note only when one applies, to the people that rule names.</div>' +
-      (on ? '' : '<div class="alert amber" style="margin-top:10px">The AI assistant is off, so these rules are not being checked yet. Paul can turn it on in Settings, AI assistant.</div>') +
+    return '<h2>Assistant rules</h2><div class="small muted">Rules in plain English. Each time the assistant runs it checks them all and posts a note only when one applies, to the people that rule names.</div>' +
+      (on ? '' : '<div class="alert amber" style="margin-top:10px">The assistant is off, so these rules are not being checked yet. Paul can turn it on in Settings, Assistant.</div>') +
       (S.ai_rules.map(aiRuleRow).join('') || '<div class="empty">No rules yet.</div>') + `<div class="actions">${aiAskBtn('general')}</div>`; },
-  ai: () => { if (ME !== 'Paul') return '<h2>AI assistant</h2><div class="small muted">Only Paul can change these settings.</div>';
+  ai: () => { if (ME !== 'Paul') return '<h2>Assistant</h2><div class="small muted">Only Paul can change these settings.</div>';
     const on = (byId('Settings', 'app|ai.on') || {}).value === '1', last = (byId('Settings', 'app|ai.last') || {}).value, topics = list((byId('Settings', 'app|ai.topics') || {}).value || AI_TOPICS.map(x => x[0]).join(', '));
     const hour = (byId('Settings', 'app|ai.hour') || {}).value || '7';
-    return `<h2>AI assistant</h2><div class="small muted">Once a day Claude reads a summary of the family's plans and posts 0 to 3 short notes to the Feed: gaps to fill, ideas, heads-ups. It is never sent what the gift ideas are.</div>
+    return `<h2>Assistant</h2><div class="small muted">Once a day Claude reads a summary of the family's plans and posts 0 to 3 short notes to the Feed: gaps to fill, ideas, heads-ups. It is never sent what the gift ideas are.</div>
       <div class="kv"><span>Status</span>${on ? 'On' : 'Off'}${on ? ` · posts after ${fmtT(pad(+hour) + ':00')}` : ''}</div>
       <div class="kv"><span>Seen by</span>${esc(joinNames(aiWho()))}</div>
       <div class="kv"><span>Topics</span>${esc(AI_TOPICS.filter(x => topics.includes(x[0])).map(x => x[1]).join(', ') || 'None')}</div>
       ${last ? `<div class="kv"><span>Last run</span>${esc(last.replace('T', ' '))}</div>` : ''}
+      <div class="kv"><span>Assistant button</span>${esc(joinNames(aiUseFor()) || 'No one')}</div>
       <div class="kv"><span>AI Today card</span>${esc(joinNames(aiCardFor()) || 'No one')}</div>
       <div class="kv"><span>Assistant rules</span>${S.ai_rules.filter(r => r.active !== '0').length} on · <a data-a="homeOpen" data-v="airules">See and add rules</a></div>
       <div class="actions"><button class="btn" data-a="aiEdit">${ic('pen', 16)}Change</button><button class="btn gray" data-a="aiRun">${ic('spark', 16)}Post now</button></div>
@@ -2489,7 +2566,7 @@ A.dinClear = id => { const m = byId('Menus', id); if (!m || (!m.recipeId && !m.n
   document.addEventListener('touchmove', e => { if (y0 === null) return; if (window.scrollY > 0) { y0 = null; set(0, true); return; } d = Math.min(110, Math.max(0, e.touches[0].clientY - y0) * 0.5); set(d, false); }, { passive: true });
   document.addEventListener('touchend', async () => { if (y0 === null) return; y0 = null; if (d < TRIG) { set(0, true); return; } on = true; ic.textContent = '↻'; el.classList.add('spin'); set(60, true); try { await load(); } catch (e) { toast(e.message); } el.classList.remove('spin'); on = false; set(0, true); }); })();
 document.querySelectorAll('nav.bottom button').forEach(b => b.insertAdjacentHTML('afterbegin', ic(b.dataset.ic, 24)));
-$('hdrGear').innerHTML = ic('gear', 22); $('hdrReload').innerHTML = ic('refresh', 21);
+$('hdrGear').innerHTML = ic('gear', 22); $('hdrAsk').innerHTML = ic('spark', 21); $('hdrReload').innerHTML = ic('refresh', 21);
 boot();
 </script>
 </body>

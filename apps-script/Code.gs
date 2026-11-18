@@ -1,6 +1,11 @@
 /**
  * Momnie Family app backend
- * Version 3.16 (2026-11-18)
+ * Version 3.17 (2026-11-18)
+ *   3.17: The Assistant. Type anything ("Clara has piano every Monday at 8 AM") and it works out what to create:
+ *         events, to-dos and bills, weekly activities, caretaker requests, school calendar days, house cards
+ *         (ai_do). It can ask a follow-up question, and the answer revises what it made (ai_answer). Every
+ *         value is checked before the app saves it. New ai_requests tab keeps a log of every request.
+ *         Paul chooses who can use it (app|ai.use; just Paul until he adds others). Notes now post as "Assistant".
  *   3.16: New event by description: the assistant reads a sentence and fills in the event form (ai_event).
  *   3.15: Paul chooses who gets the AI Today card (app|ai.card; just Paul until he adds others).
  *   3.14: AI Today card. For each person who turns it on, the assistant writes their Today card: a short headline, a
@@ -73,7 +78,8 @@ var T = {
   Settings: 'id,value',
   NeedsReview: 'id,recipe,ingredient,closest,action',
   gifts: 'id,recipient,added_by,name,description,url,photo,assigned_to,created_at',
-  ai_rules: 'id,text,audience,area,active,created_by,created_at',   // plain-English rules the AI assistant follows
+  ai_rules: 'id,text,audience,area,active,created_by,created_at',
+  ai_requests: 'id,time,who,text,source,status,summary,question,answer,refs',   // everything asked of the Assistant, and what it made   // plain-English rules the AI assistant follows
   daily_items: 'id,title,days,time_of_day,for_person,visible_to,created_by,active',
   daily_completions: 'id,item_id,date,completed_by,completed_at',   // id = item_id|date, so each item is checked once per day
   ideas: 'id,time,who,text'   // feedback sent from the Home screen; read it in the Sheet
@@ -306,8 +312,14 @@ function route_(b, me) {
       if (aiCardFor_().indexOf(me) < 0) return { ok: false, error: 'The AI Today card is not turned on for you.' };
       return { brief: aiBrief_(me, isDate_(b.date) ? b.date : today_(), b.mode === 'night' ? 'night' : 'day') };
     case 'ai_event':   // "Describe it" on a new event: fills in the form, saves nothing
-      if (setting_('app|ai.on', '') !== '1') return { ok: false, error: 'The AI assistant is off.' };
+      if (setting_('app|ai.on', '') !== '1') return { ok: false, error: 'The assistant is off.' };
+      if (aiUseFor_().indexOf(me) < 0) return { ok: false, error: 'The assistant is not turned on for you.' };
       return aiEvent_(String(b.text || '').slice(0, 1000), isDate_(b.today) ? b.today : today_(), String(b.now || ''), me);
+    case 'ai_do':      // the Assistant button: works out what to create (the app saves it)
+    case 'ai_answer':  // an answer to the Assistant's question: works out what to change
+      if (setting_('app|ai.on', '') !== '1') return { ok: false, error: 'The assistant is off.' };
+      if (aiUseFor_().indexOf(me) < 0) return { ok: false, error: 'The assistant is not turned on for you.' };
+      return { plan: aiDo_(b, me) };
     case 'notify_test':
       var sent = send_(me, 'Test from the Momnie Family app', 'Notifications are working.');
       return sent ? { sent: sent } : { ok: false, error: 'No email or Pushover is set up for you yet (see README).' };
@@ -350,7 +362,7 @@ function write_(b, me) {
 function log_(who, log, t, ref) {
   put_('Activity', { time: log.time || now_(), who: who, type: log.type || '', text: log.text || '', amount: log.amount === undefined ? '' : log.amount,
     table: log.table || t || '', ref: log.ref || ref || '', cat: log.cat || '', audience: log.audience || '' });
-  if (who !== 'App' && who !== 'AI assistant') _logs.push(log);   // AI notes notify only their chosen audience (aiPosts_)
+  if (who !== 'App' && who !== 'AI assistant' && who !== 'Assistant') _logs.push(log);   // AI notes notify only their chosen audience (aiPosts_)
 }
 
 // ---------- notifications ----------
@@ -920,8 +932,8 @@ function aiPosts_(t, manual) {
   var who = list_(setting_('app|ai.who', 'Paul'));
   notes.forEach(function (n) {
     var rule = rulesById[n.rule_id], aud = rule && rule.audience ? list_(rule.audience) : who;   // a rule's note goes only to the people it names
-    log_('AI assistant', { type: 'ai', text: String(n.text).slice(0, 400), cat: 'ai', ref: rule ? 'rule:' + rule.id : n.topic, audience: aud.join(', ') });
-    aud.forEach(function (p) { if (pref_(p, 'ai')) notify_(p, 'AI assistant', String(n.text).slice(0, 400)); });
+    log_('Assistant', { type: 'ai', text: String(n.text).slice(0, 400), cat: 'ai', ref: rule ? 'rule:' + rule.id : n.topic, audience: aud.join(', ') });
+    aud.forEach(function (p) { if (pref_(p, 'ai')) notify_(p, 'Assistant', String(n.text).slice(0, 400)); });
   });
   put_('Settings', { id: 'app|ai.last', value: now_() + ' · ' + notes.length + ' note' + (notes.length === 1 ? '' : 's') + (manual ? ' (Post now)' : '') });
   return { notes: notes };
@@ -986,6 +998,113 @@ function aiBrief_(p, d, mode) {
   return brief;
 }
 
+// ---------- The Assistant: checking what Claude returns ----------
+/** Who can use the Assistant button and "Fill it in": Paul's choice (app|ai.use), just Paul until he adds others. */
+function aiUseFor_() { var v = setting_('app|ai.use', 'Paul'); return v === 'none' ? [] : list_(v); }
+function hm_(v) { return /^\d{2}:\d{2}$/.test(v || '') && Number(v.slice(0, 2)) < 24 && Number(v.slice(3)) < 60 ? v : ''; }
+function one_(v, o) { return o.indexOf(v) >= 0 ? v : ''; }
+function names_(v, o) { return list_(v).filter(function (n) { return o.indexOf(n) >= 0; }).join(', '); }
+function txt_(v, n) { return String(v || '').trim().slice(0, n || 200); }
+function rides_() { return ADULTS.concat(rows_('Caretakers').map(function (c) { return c.name; }), ['Carpool', 'School bus']); }
+function kidNames_() { return rows_('People').filter(function (p) { return p.kind === 'kid'; }).map(function (p) { return p.name; }); }
+function evClean_(x, t) {
+  var people = rows_('People').map(function (p) { return p.name; }), rides = rides_(), cats = ['School', 'Work', 'Kids', 'Family'];
+  var e = { title: txt_(x.title, 120), category: one_(x.category, cats) || 'Family', date: isDate_(x.date) ? x.date : t, allDay: x.allDay === '1' || !hm_(x.start) ? '1' : '',
+    endDate: isDate_(x.endDate) && x.endDate > x.date ? x.endDate : '', start: hm_(x.start), end: hm_(x.end), people: names_(x.people, people), location: txt_(x.location),
+    house: one_(x.house, ['Boston', 'Cape']), dropoff: one_(x.dropoff, rides), pickup: one_(x.pickup, rides), notes: txt_(x.notes, 1000) };
+  return e.title ? e : null;
+}
+function todoClean_(x) {
+  var types = rows_('TodoTypes').map(function (y) { return y.id; }), amt = parseFloat(String(x.amount || '').replace(/[$,]/g, ''));
+  var rep = /^(\d{1,3}) (day|week|month|year)s?$/.exec(String(x.repeat || '').trim()), n = rep ? Number(rep[1]) : 0;
+  var e = { type: one_(x.type, types.length ? types : ['task', 'bill']) || 'task', title: txt_(x.title, 120), amount: isNaN(amt) ? '' : String(Math.round(amt * 100) / 100),
+    due: isDate_(x.due) ? x.due : '', assignee: one_(x.assignee, ADULTS), repeat: n ? n + ' ' + rep[2] + (n === 1 ? '' : 's') : '', house: one_(x.house, ['Boston', 'Cape']),
+    kid: one_(x.kid, kidNames_()), notes: txt_(x.notes, 1000) };
+  if (e.type === 'bill' && !e.amount) e.type = 'task';
+  return e.title ? e : null;
+}
+function actClean_(x) {
+  var people = rows_('People').map(function (p) { return p.name; }), rides = rides_(), seen = {};
+  var slots = (x.slots || []).map(function (y) { return { day: one_(y.day, DAYS), start: hm_(y.start), end: hm_(y.end) }; })
+    .filter(function (y) { if (!y.day || !y.start || seen[y.day]) return false; seen[y.day] = 1; return true; });
+  var e = { name: txt_(x.name, 80), kids: names_(x.kids, people), slots: slots, from: isDate_(x.from) ? x.from : '', until: isDate_(x.until) ? x.until : '',
+    location: txt_(x.location), teacher: txt_(x.teacher), dropoff: one_(x.dropoff, rides), pickup: one_(x.pickup, rides), house: one_(x.house, ['Boston', 'Cape']), notes: txt_(x.notes, 1000) };
+  return e.name && e.kids && slots.length ? e : null;
+}
+function careClean_(x, t) {
+  var e = { task: one_(x.task, ['babysit', 'pick up', 'bring to']) || 'babysit', place: txt_(x.place), kids: names_(x.kids, kidNames_()), date: isDate_(x.date) ? x.date : '',
+    start: hm_(x.start), end: hm_(x.end), roster: one_(x.roster, ['Boston', 'Cape']) || 'Boston', notes: txt_(x.notes, 1000) };
+  if (e.task !== 'babysit' && !e.place) e.task = 'babysit';
+  return e.kids && e.date && e.start && e.end && e.end > e.start ? e : null;
+}
+function schoolClean_(x) {
+  var ids = rows_('Schools').map(function (y) { return y.id; });
+  var e = { schoolId: one_(x.schoolId, ids) || (ids.length === 1 ? ids[0] : ''), title: txt_(x.title, 120), kind: one_(x.kind, ['event', 'off', 'half']) || 'event',
+    date: isDate_(x.date) ? x.date : '', endDate: isDate_(x.endDate) && x.endDate > x.date ? x.endDate : '', start: hm_(x.start), end: hm_(x.end), notes: txt_(x.notes, 1000) };
+  return e.schoolId && e.title && e.date ? e : null;
+}
+function houseClean_(x) {
+  var m = parseInt(x.everyMonths, 10);
+  var e = { house: one_(x.house, ['Boston', 'Cape']) || 'Boston', kind: one_(x.kind, ['info', 'upkeep']) || 'info', title: txt_(x.title, 120), body: txt_(x.body, 2000),
+    everyMonths: m > 0 && m < 241 ? String(m) : '', nextDue: isDate_(x.nextDue) ? x.nextDue : '' };
+  if (e.kind === 'upkeep' && !e.everyMonths) e.everyMonths = '12';
+  return e.title ? e : null;
+}
+var AI_KINDS_ = { events: ['Events', evClean_], todos: ['Todos', todoClean_], activities: ['Activities', actClean_], caretaker: ['Childcare', careClean_], schooldays: ['SchoolCal', schoolClean_], housecards: ['HouseCards', houseClean_] };
+/** What the Assistant should create or change. The app saves it through the same steps a person's save takes. */
+function aiDo_(b, me) {
+  var t = isDate_(b.today) ? b.today : today_(), now = hm_(b.now), S = { type: 'string' }, obj = function (props) {
+    var o = { type: 'object', additionalProperties: false, required: Object.keys(props), properties: props }; return o; };
+  var str = function (keys) { var o = { ref: S }; keys.forEach(function (k) { o[k] = S; }); return o; };
+  var schema = obj({ summary: S, question: S,
+    events: { type: 'array', items: obj(str(['title', 'category', 'date', 'allDay', 'endDate', 'start', 'end', 'people', 'location', 'house', 'dropoff', 'pickup', 'notes'])) },
+    todos: { type: 'array', items: obj(str(['type', 'title', 'amount', 'due', 'assignee', 'repeat', 'house', 'kid', 'notes'])) },
+    activities: { type: 'array', items: obj(Object.assign(str(['name', 'kids', 'from', 'until', 'location', 'teacher', 'dropoff', 'pickup', 'house', 'notes']),
+      { slots: { type: 'array', items: obj({ day: { type: 'string', enum: DAYS }, start: S, end: S }) } })) },
+    caretaker: { type: 'array', items: obj(str(['task', 'place', 'kids', 'date', 'start', 'end', 'roster', 'notes'])) },
+    schooldays: { type: 'array', items: obj(str(['schoolId', 'title', 'kind', 'date', 'endDate', 'start', 'end', 'notes'])) },
+    housecards: { type: 'array', items: obj(str(['house', 'kind', 'title', 'body', 'everyMonths', 'nextDue'])) } });
+  var fam = rows_('People').map(function (p) { var sc = p.schoolId ? get_('Schools', p.schoolId) : null; return p.name + (p.kind === 'kid' ? ' (kid' + (sc ? ', ' + (sc.short || sc.name) : '') + ')' : ''); });
+  var setup = 'Family: ' + fam.join(', ') + '. Caretakers: ' + (rows_('Caretakers').map(function (c) { return c.name; }).join(', ') || 'none') + '. Ride options: ' + rides_().join(', ') + '.\n' +
+    'Schools (schoolId: name): ' + (rows_('Schools').map(function (x) { return x.id + ': ' + x.name; }).join('; ') || 'none') + '. To-do types (type id: name): ' + rows_('TodoTypes').map(function (x) { return x.id + ': ' + x.name; }).join('; ') + '. Houses: Boston, Cape.\n' +
+    'The person asking is ' + me + ' ("I", "me", "my"). Today is ' + nice_(t) + ' (' + t + ')' + (now ? ', time ' + now : '') + '. They asked from: ' + txt_(b.source || 'the app', 60) + '.\n';
+  var rules = 'What each list is for: events = one-time plans; activities = things that repeat weekly (lessons, sports, clubs), with a slot per day; todos = tasks and bills (type "bill" needs an amount; repeat is like "1 month" or "6 months"); ' +
+    'caretaker = asking a babysitter or caretaker to babysit, pick up or bring kids somewhere (task: babysit, pick up or bring to; roster: Boston or Cape); schooldays = school calendar entries (kind: off = no school, half = half day with end = dismissal time, event = school is on); housecards = house info or upkeep that repeats every N months.\n' +
+    'Dates are YYYY-MM-DD, times 24-hour HH:MM. Work out relative dates from today. Use only names from the lists above. Fill only what is said or clearly implied; use "" for anything else. Never invent details.\n' +
+    'For kids\' events and activities, "I\'ll take them" means dropoff is the person asking. ' +
+    'If something important is missing (a time, which kid, which school), still make the item with what you know when you can, and ask ONE short, specific question in "question", written to the person asking; otherwise question is "". If you cannot make the item at all without the answer, leave it out and ask.\n' +
+    'summary: one short past-tense sentence saying what you did, e.g. "Added Clara\'s piano lessons, Mondays at 8 AM." If the request is not something you can create, make nothing and say in summary what you can do.';
+  var content, system;
+  if (b.action === 'ai_answer') {
+    var req = get_('ai_requests', String(b.id || ''));
+    if (!req) return { error: 'That request is gone.' };
+    var refs = jsonList_(req.refs), current = refs.map(function (r) { var row = get_(r[0], r[1]); if (!row) return null; var o = { ref: r[0] + ':' + r[1], kind: r[0] };
+      cols_(r[0]).forEach(function (k) { if (row[k] && ['id', 'gcal', 'gcalId', 'createdBy', 'created', 'addedBy', 'status', 'source', 'asks', 'confirmedId'].indexOf(k) < 0) o[k] = row[k]; }); return o; }).filter(Boolean);
+    system = 'You are the Assistant inside a family\'s home app. Earlier someone asked you to create things, you made them and asked a question. Now they have answered. Revise what you made.\n' + setup + rules +
+      '\nInclude only items you change (with their ref copied exactly) and any new items (ref ""). Activities you change must list all their slots. summary: one past-tense sentence saying what you changed.';
+    content = 'Their request: ' + req.text + '\nWhat you made (JSON): ' + JSON.stringify(current) + '\nYour question: ' + req.question + '\nTheir answer: ' + txt_(b.answer, 1000);
+  } else {
+    system = 'You are the Assistant inside a family\'s home app. Someone typed a request; turn it into things to create in the app.\n' + setup + rules + '\nFor new items, ref is "".';
+    content = txt_(b.text, 2000);
+  }
+  var r = claude_(system, content, schema, 'low');
+  if (r.error) return { error: r.nokey ? r.error : 'The assistant is not available right now. Try again in a minute.' };
+  if (r.refused || !r.data) return { error: 'The assistant could not help with that.' };
+  var d = r.data, items = [], dropped = 0, allowed = {};
+  if (b.action === 'ai_answer') jsonList_(get_('ai_requests', String(b.id)).refs).forEach(function (x) { allowed[x[0] + ':' + x[1]] = 1; });
+  Object.keys(AI_KINDS_).forEach(function (k) {
+    (d[k] || []).forEach(function (x) {
+      var tb = AI_KINDS_[k][0], ref = String(x.ref || ''), row = AI_KINDS_[k][1](x, t);
+      if (!row) { dropped++; return; }
+      if (ref && !(allowed[ref] && ref.split(':')[0] === tb)) { dropped++; return; }   // only items this request made can be changed
+      var id = ref ? ref.split(':').slice(1).join(':') : '';
+      items.push({ t: tb, id: id, row: row });
+    });
+  });
+  return { summary: txt_(d.summary, 300), question: txt_(d.question, 300), items: items, dropped: dropped };
+}
+function jsonList_(s) { try { var a = JSON.parse(s || '[]'); return Array.isArray(a) ? a : []; } catch (e) { return []; } }
+
 // ---------- New event by description ----------
 function aiEvent_(text, t, now, me) {
   var people = rows_('People').map(function (p) { return p.name; }), rides = ADULTS.concat(rows_('Caretakers').map(function (c) { return c.name; }), ['Carpool', 'School bus']);
@@ -1003,12 +1122,8 @@ function aiEvent_(text, t, now, me) {
   var r = claude_(system, text, schema, 'low');
   if (r.error) return { ok: false, error: r.nokey ? r.error : 'The assistant is not available right now.' };
   if (r.refused || !r.data) return { event: null };
-  var x = r.data, hm = function (v) { return /^\d{2}:\d{2}$/.test(v || '') ? v : ''; }, one = function (v, o) { return o.indexOf(v) >= 0 ? v : ''; };
-  var e = { title: String(x.title || '').slice(0, 120), category: one(x.category, cats) || 'Family', date: isDate_(x.date) ? x.date : t, allDay: x.allDay === '1' || !hm(x.start) ? '1' : '',
-    endDate: isDate_(x.endDate) && x.endDate > x.date ? x.endDate : '', start: hm(x.start), end: hm(x.end),
-    people: list_(x.people).filter(function (n) { return people.indexOf(n) >= 0; }).join(', '), location: String(x.location || '').slice(0, 200),
-    house: one(x.house, houses), dropoff: one(x.dropoff, rides), pickup: one(x.pickup, rides), notes: String(x.notes || '').slice(0, 1000) };
-  if (!e.title) return { event: null };
+  var e = evClean_(r.data, t);
+  if (!e) return { event: null };
   return { event: e };
 }
 
