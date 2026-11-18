@@ -216,7 +216,7 @@
   .pwk { display:flex; align-items:center; justify-content:space-between; margin:12px 12px 4px; text-align:center; }
   .pdaybox.today { border-color:var(--accent); } .pdaybox.past { opacity:.6; }
   .pgifts .rbar { margin-right:0 !important; }
-  .rchg { color:var(--accent); font-weight:700; } .irow.ihead span { font-size:12px; font-weight:700; color:var(--muted); text-transform:uppercase; letter-spacing:.4px; padding:0 4px; } .prow[data-a] { cursor:pointer; }
+  .rchg { color:var(--accent); font-weight:700; } .av.aiav { background:var(--accsoft); color:var(--accent); display:inline-flex; align-items:center; justify-content:center; } .irow.ihead span { font-size:12px; font-weight:700; color:var(--muted); text-transform:uppercase; letter-spacing:.4px; padding:0 4px; } .prow[data-a] { cursor:pointer; }
   .wseg { display:inline-flex; margin-top:5px; padding:3px; gap:3px; border-radius:10px; background:var(--soft); }
   .wseg button { border:0; background:none; font:inherit; font-size:13px; font-weight:700; color:var(--muted); padding:5px 12px; border-radius:8px; display:inline-flex; align-items:center; gap:4px; }
   .wseg button.on { background:var(--card); color:var(--accent); box-shadow:0 1px 3px rgba(0,0,0,.12); } .small.wfh { color:var(--accent); font-weight:600; }
@@ -324,7 +324,7 @@
 // Momnie Family app v6.0
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'], DAYN = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'], ADULTS = ['Paul', 'Shana'];
 // Shown at the bottom of Home. Bump it together with VERSION in sw.js on every release.
-const APP_VERSION = '12.1 · Nov 18, 2026';
+const APP_VERSION = '12.2 · Nov 18, 2026';
 const TABLES = ['People', 'Schools', 'SchoolCal', 'Activities', 'Overrides', 'Events', 'Caretakers', 'Childcare', 'Birthdays', 'Todos', 'TodoTypes', 'Recipes', 'DinnerRules', 'Weeks', 'Menus',
   'Groceries', 'GroceryList', 'HouseCards', 'Houses', 'WeatherRules', 'Quotes', 'Memories', 'Updates', 'Messages', 'Activity', 'Comments', 'Reactions', 'Links', 'Settings', 'Photos', 'gifts', 'daily_items', 'daily_completions'];
 const CAT = { School: '#3f6fb5', Kids: '#4f7cc2', Work: '#64748b', Family: '#5b6fa8', Dinner: '#b08a4f', Caretaker: '#3e9aa6', Shared: '#94a3b8', Birthday: '#c9806a' }, SCHOOL_C = ['#5a72b8', '#7a8597', '#4a6fb0'];
@@ -334,7 +334,7 @@ const pcol = n => PCOL[n] || PCOL[String(n || '').split(' ')[0]] || PCOL_X[(Stri
 // App-made text (older weekly cards) can carry emoji; drop them so posts stay plain.
 const stripEmo = s => String(s || '').replace(/(\p{Extended_Pictographic}(️|‍\p{Extended_Pictographic})*)\s*/gu, '');
 const noEmo = s => String(s || '').replace(/(\p{Extended_Pictographic}(️|‍\p{Extended_Pictographic})*)\s*/gu, '').trim();
-const NCATS = { planning: 'Planning gaps (rides, caretakers)', bills: 'Bills and to-dos', convo: 'Messages, comments and questions', planner: 'Planner changes', dinner: 'Meals and groceries', upkeep: 'House upkeep', summary: 'Morning summary and weekly cards' };
+const NCATS = { ai: 'AI assistant notes', planning: 'Planning gaps (rides, caretakers)', bills: 'Bills and to-dos', convo: 'Messages, comments and questions', planner: 'Planner changes', dinner: 'Meals and groceries', upkeep: 'House upkeep', summary: 'Morning summary and weekly cards' };
 const $ = id => document.getElementById(id);
 const store = { get: k => { try { return localStorage.getItem(k) || ''; } catch (e) { return ''; } }, set: (k, v) => { try { localStorage.setItem(k, v); } catch (e) {} } };
 const S = {}; TABLES.forEach(t => S[t] = []);
@@ -496,6 +496,7 @@ const ICONS = {
   shuffle: '<path d="M16 3h5v5M4 20 21 3M21 16v5h-5M15 15l6 6M4 4l5 5"/>',
   archive: '<rect x="3" y="4" width="18" height="5" rx="1"/><path d="M5 9v10a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V9M10 13h4"/>',
   receipt: '<path d="M6 2.5h12v19l-3-2-3 2-3-2-3 2zM9 8h6M9 12h6M9 16h3"/>',
+  spark: '<path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z"/><path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8z"/>',
   copy: '<rect x="8.5" y="8.5" width="12" height="12" rx="2"/><path d="M15.5 8.5V5a1.5 1.5 0 0 0-1.5-1.5H5A1.5 1.5 0 0 0 3.5 5v9A1.5 1.5 0 0 0 5 15.5h3.5"/>',
   building: '<path d="M4 21V5a1 1 0 0 1 1-1h9a1 1 0 0 1 1 1v16M15 9h4a1 1 0 0 1 1 1v11M3 21h18M8 8h3M8 12h3M8 16h3"/>',
   bag: '<path d="M5 8h14l-1 13H6zM9 8V6a3 3 0 0 1 6 0v2"/>',
@@ -1635,11 +1636,11 @@ function vFeed() {
   const hide = c => c && st('f.' + c, '1') === '0';
   const gone = feedHidden();
   const kindHidden = a => a.table === 'Photos' ? !fOn('photos') : a.type === 'daily' ? !fOn('daily') : hide(a.cat);
-  const stream = S.Activity.filter(a => a.type !== 'message' && !kindHidden(a) && !gone.has('A:' + a.id)).map(a => ({ time: a.time, a })).concat(S.Messages.filter(mm => fOn('messages') && !gone.has('M:' + mm.id)).map(mm => ({ time: mm.time, m: mm, pin: mm.pinUntil >= TODAY && mm.resolved !== '1' })))
+  const stream = S.Activity.filter(a => a.type !== 'message' && (a.type !== 'ai' || aiSees(ME)) && !kindHidden(a) && !gone.has('A:' + a.id)).map(a => ({ time: a.time, a })).concat(S.Messages.filter(mm => fOn('messages') && !gone.has('M:' + mm.id)).map(mm => ({ time: mm.time, m: mm, pin: mm.pinUntil >= TODAY && mm.resolved !== '1' })))
     .sort((x, y) => (y.pin ? 1 : 0) - (x.pin ? 1 : 0) || y.time.localeCompare(x.time)).slice(0, 70);
   // Bundle bursts: several changes by the same person within a few minutes become one post.
   const win = (+st('bundleMin', '5') || 0) * 60000, out = [];
-  stream.forEach(e => { const p = out[out.length - 1], solo = x => x.m || x.pin || taggedMe(x.a.text, x.a.who) || x.a.table === 'Photos' || x.a.type === 'daily' || x.a.type.startsWith('summary') || x.a.who === 'App';
+  stream.forEach(e => { const p = out[out.length - 1], solo = x => x.m || x.pin || x.a.type === 'ai' || taggedMe(x.a.text, x.a.who) || x.a.table === 'Photos' || x.a.type === 'daily' || x.a.type.startsWith('summary') || x.a.who === 'App';
     if (win && p && !solo(e) && !solo(p.items ? p.items[0] : p) && p.who === e.a.who && new Date(p.t0) - new Date(e.time) <= win) { p.items = p.items || [{ time: p.time, a: p.a }]; p.items.push(e); p.t0 = e.time; return; }
     out.push(Object.assign({ who: e.a ? e.a.who : '', t0: e.time }, e)); });
   const fOff = FKINDS().filter(([k]) => !fOn(k)).map(x => x[1]);
@@ -1690,6 +1691,7 @@ function actPost(a) {
   if (a.table === 'Photos') { const p = byId('Photos', a.ref), ti = p ? titleOf(p.table, p.ref) : '';
     if (p) return `<div class="post" data-a="photoView" data-v="${p.id}">${avatar(a.who)}<div class="pbody"><div><b>${esc(a.who)}</b> added a photo${ti ? ` to <b>${esc(ti)}</b>` : ''} <span class="muted">· ${ago(a.time)}</span></div>
       <img class="phpost" src="${esc(photoSrc(p.fileId, 1200))}" alt="" loading="lazy">${postFoot(p.table, p.ref, '')}</div></div>`; }
+  if (a.type === 'ai') return `<div class="post"><span class="av aiav">${ic('spark', 18)}</span><div class="pbody"><div><b>AI assistant</b> <span class="muted">· ${ago(a.time)}</span></div><div class="ptext" style="font-weight:400">${withMentions(a.text)}</div></div></div>`;
   if (a.type === 'daily') return `<div class="post">${avatar('App')}<div class="pbody"><div><b>Today's memory</b> <span class="muted">· ${fmtDay(a.time)}</span></div><div class="ptext" style="font-weight:400">${dailyHTML(a)}</div></div></div>`;
   if (a.type.startsWith('summary')) { let extra = ''; if (a.type === 'summary_week' && a.ref) { const c = []; for (let i = 0; i < 7; i++) c.push(...conflictsFor(addDays(a.ref, i))); if (c.length) extra = '<div class="lbl">Conflicts to sort out</div>' + c.map(x => `<div class="alert amber" data-a="open" data-t="${x.open[0]}" data-id="${esc(x.open[1])}" data-d="${x.open[2]}">${esc(x.text)}</div>`).join(''); }
     return `<div class="post">${avatar('App')}<div class="pbody"><div><b>${a.type === 'summary_week' ? 'The week ahead' : 'This month'}</b> <span class="muted">· ${ago(a.time)}</span></div><div class="ptext" style="font-weight:400;white-space:normal">${md(stripEmo(a.text))}${extra}</div></div></div>`; }
@@ -1866,6 +1868,19 @@ A.choose = id => { const m = byId('Menus', id), recs = S.Recipes.filter(r => r.s
   form(fmtLong(m.date), [F('pick', 'Dinner', 'sel', recs.map(r => ['r:' + r.id, r.name]).concat([['n:Takeout', 'Takeout'], ['n:Eating out', 'Eating out'], ['n:Leftovers', 'Leftovers'], ['n:', 'No dinner planned']]))], { pick: m.recipeId ? 'r:' + m.recipeId : 'n:' + (m.note || '') },
     v => write({ t: 'Menus', row: { id, recipeId: v.pick[0] === 'r' ? v.pick.slice(2) : '', note: v.pick[0] === 'n' ? v.pick.slice(2) : '', kept: '1', skipped: '' }, log: menuLog(m, 'menu_set', `changed dinner for ${fmtDay(m.date)}`) })); };
 const autofillDays = () => { const r = byId('Settings', 'app|autofillDays'); return r && r.value ? (r.value === 'none' ? [] : list(r.value)) : ['Mon', 'Tue', 'Wed', 'Thu']; };
+// AI assistant: who sees its Feed notes (Settings app|ai.who; Paul only until he chooses).
+const aiWho = () => list((byId('Settings', 'app|ai.who') || {}).value || 'Paul');
+const aiSees = name => aiWho().includes(name);
+const AI_TOPICS = [['meals', 'Meals and recipes'], ['birthdays', 'Birthdays and gift-idea counts'], ['todos', 'To-dos and bills'], ['rides', 'Rides and caretakers'], ['week', 'The week ahead'], ['house', 'House upkeep']];
+A.aiEdit = (v, el) => { if (ME !== 'Paul') return; const g = k => (byId('Settings', 'app|ai.' + k) || {}).value;
+  form('AI assistant', [F('on', 'Post daily notes to the Feed', 'chk'), F('who', 'Who sees the AI posts', 'multi', ADULTS, { hint: 'Only these people see its notes in the Feed and get its notifications.' }),
+      F('topics', 'Topics', 'multi', AI_TOPICS.map(x => x[1])), F('hour', 'Post after', 'sel', [6, 7, 8, 9, 10, 12, 17, 19].map(h => [String(h), fmtT(pad(h) + ':00')]))],
+    { on: g('on') || '', who: aiWho().join(', '), topics: AI_TOPICS.filter(x => list(g('topics') || AI_TOPICS.map(y => y[0]).join(', ')).includes(x[0])).map(x => x[1]).join(', '), hour: g('hour') || '7' },
+    x => { need(list(x.who).length, 'Pick at least one person to see the posts.');
+      const keys = AI_TOPICS.filter(t => list(x.topics).includes(t[1])).map(t => t[0]); need(keys.length, 'Pick at least one topic.');
+      return write(['on', 'who', 'topics', 'hour'].map(k => ({ t: 'Settings', row: { id: 'app|ai.' + k, value: k === 'on' ? (x.on === '1' ? '1' : '') : k === 'who' ? ADULTS.filter(a => list(x.who).includes(a)).join(', ') : k === 'topics' ? keys.join(', ') : x.hour } }))); }); };
+A.aiRun = async (v, el) => { el.disabled = true; el.textContent = 'Asking Claude…'; let r = null; try { r = await api('ai_run'); } catch (e) { toast(e.message); } el.disabled = false; refresh();
+  if (r && r.ai) toast(r.ai.error ? r.ai.error : r.ai.notes && r.ai.notes.length ? `Posted ${r.ai.notes.length} note${r.ai.notes.length === 1 ? '' : 's'} to the Feed` : 'Nothing worth posting right now.'); };
 const pauseDays = () => +((byId('Settings', 'app|pauseDays') || {}).value || 30) || 30;
 A.rules = () => { const tags = [...new Set(S.Recipes.flatMap(r => list(r.tags.toLowerCase())))].sort(), recs = S.Recipes.slice().sort((a, b) => a.name.localeCompare(b.name));
   const rule = d => byId('DinnerRules', d) || (DAYS.indexOf(d) >= 4 ? { type: 'off', value: '' } : { type: 'any', value: '' }), val = r => r.type === 'any' ? 'any' : r.type + ':' + r.value;
@@ -2173,7 +2188,7 @@ function vHome() {
 A.feedback = () => form('Constructive feedback', [F('idea', 'What would make the app better?', 'area', null, { ph: 'Ideas, annoyances, anything' })], {}, async v => {
   need(v.idea && v.idea.trim(), 'Write your idea first.');
   const ok = await write({ t: 'ideas', row: { id: nid(), text: v.idea.trim() } }); if (ok) toast('Thank you! Paul will see it.'); return ok; });
-A.openSettings = () => sheet(() => '<h2>Settings</h2><div style="clear:both"></div>' + SETTINGS.map(([k, icon, l, sub]) => hrow('homeOpen', k, icon, l, sub)).join(''));
+A.openSettings = () => sheet(() => '<h2>Settings</h2><div style="clear:both"></div>' + (ME === 'Paul' ? [['ai', 'spark', 'AI assistant', `Daily notes in the Feed · seen by ${joinNames(aiWho())}`]] : []).concat(SETTINGS).map(([k, icon, l, sub]) => hrow('homeOpen', k, icon, l, sub)).join(''));
 const rowLi = (t, id, title, sub) => `<div class="li" style="padding:12px 0" data-a="open" data-t="${t}" data-id="${esc(id)}"><div class="grow"><div class="ti">${esc(title)}</div>${sub ? `<div class="small muted">${esc(sub)}</div>` : ''}</div><span class="chev">›</span></div>`;
 const addBtn = (t, l) => `<div class="actions"><button class="btn" data-a="add" data-v="${t}">＋ ${l}</button></div>`;
 const PAGES = {
@@ -2196,6 +2211,16 @@ const PAGES = {
   TodoTypes: () => '<h2>To-do types</h2>' + S.TodoTypes.map(t => rowLi('TodoTypes', t.id, t.name, `Goes to ${t.assignee || 'either of us'}${t.builtin === '1' ? ' · built in' : ''}`)).join('') + addBtn('TodoTypes', 'Add a type'),
   memories: () => `<h2>Quotes and memories</h2><div class="kv">${S.Quotes.length} wedding quote${S.Quotes.length === 1 ? '' : 's'} and ${S.Memories.length} "this day" memor${S.Memories.length === 1 ? 'y' : 'ies'} saved.</div><div class="kv muted small">Add them in the Sheet: the Quotes tab (quote, author) and the Memories tab (date, note, and an optional link to a photo in Google Drive). On a day with a quote or memory, a splash screen shows the first time each of you opens the app.</div>
     <div class="actions"><button class="btn gray" data-a="splashAgain">Show today's splash again</button></div>`,
+  ai: () => { if (ME !== 'Paul') return '<h2>AI assistant</h2><div class="small muted">Only Paul can change these settings.</div>';
+    const on = (byId('Settings', 'app|ai.on') || {}).value === '1', last = (byId('Settings', 'app|ai.last') || {}).value, topics = list((byId('Settings', 'app|ai.topics') || {}).value || AI_TOPICS.map(x => x[0]).join(', '));
+    const hour = (byId('Settings', 'app|ai.hour') || {}).value || '7';
+    return `<h2>AI assistant</h2><div class="small muted">Once a day Claude reads a summary of the family's plans and posts 0 to 3 short notes to the Feed: gaps to fill, ideas, heads-ups. It is never sent what the gift ideas are.</div>
+      <div class="kv"><span>Status</span>${on ? 'On' : 'Off'}${on ? ` · posts after ${fmtT(pad(+hour) + ':00')}` : ''}</div>
+      <div class="kv"><span>Seen by</span>${esc(joinNames(aiWho()))}</div>
+      <div class="kv"><span>Topics</span>${esc(AI_TOPICS.filter(x => topics.includes(x[0])).map(x => x[1]).join(', ') || 'None')}</div>
+      ${last ? `<div class="kv"><span>Last run</span>${esc(last.replace('T', ' '))}</div>` : ''}
+      <div class="actions"><button class="btn" data-a="aiEdit">${ic('pen', 16)}Change</button><button class="btn gray" data-a="aiRun">${ic('spark', 16)}Post now</button></div>
+      <div class="small muted" style="margin-top:12px">Needs an Anthropic API key in Apps Script: Project Settings, Script properties, ANTHROPIC_API_KEY. Each person can mute its notifications under Notifications and Feed.</div>`; },
   settings: () => { const q = k => st(k, ''), chk = (c, k, def, l) => `<label class="check-row"><input type="checkbox" data-c="${c}" data-k="${k}" ${st(k, def) === '1' ? 'checked' : ''}> ${l}</label>`;
     return `<h2>Notifications and Feed</h2><h3>Push on this phone</h3>${pushHTML()}<h3>Notifications for ${esc(ME)}</h3>` + Object.keys(NCATS).map(c => chk('setFlag', 'n.' + c, c === 'dinner' ? '0' : '1', NCATS[c])).join('') +
       `<h3>Bundling</h3><div class="small muted">When several things happen close together, you get one notification that sums them up instead of a string of buzzes. Urgent alerts always come right away.</div><label>Bundle alerts that arrive within</label><select data-c="setVal" data-k="bundleMin">${[['0', 'Off (send each one)'], ['5', '5 minutes'], ['15', '15 minutes'], ['30', '30 minutes'], ['60', '1 hour']].map(([v, l]) => `<option value="${v}" ${st('bundleMin', '5') === v ? 'selected' : ''}>${l}</option>`).join('')}</select>` +
