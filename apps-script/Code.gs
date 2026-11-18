@@ -1,6 +1,8 @@
 /**
  * Momnie Family app backend
- * Version 3.10 (2026-11-18)
+ * Version 3.11 (2026-11-18)
+ *   3.11: caretakers can be paid weekly: one "Pay <name>" to-do a week on their pay day (no per-job to-dos), listing that
+ *        week's jobs, for their usual weekly amount or hours times rate. New Caretakers columns pay, payDay, weekly.
  *   3.10: school drop-off and pickup in the reminders. The 8 PM message lists tomorrow's school runs and who is doing
  *        each (changes and runs with no one set are called out), and the morning summary lists today's.
  *   3.9: new weeks start with no dinner planned (the weekly draft no longer picks random recipes). Who usually cooks
@@ -34,7 +36,7 @@ var T = {
   Activities: 'id,name,kids,days,start,end,from,until,location,teacher,dropoff,pickup,house,notes,gcalId',
   Overrides: 'id,ref,date,dropoff,pickup,cancelled',
   Events: 'id,title,date,endDate,allDay,start,end,category,people,house,location,dropoff,pickup,notes,gcal,gcalId,createdBy',
-  Caretakers: 'id,name,relationship,phone,roster,birthday,drive,rate,unpaid,notes',
+  Caretakers: 'id,name,relationship,phone,roster,birthday,drive,rate,unpaid,notes,pay,payDay,weekly',
   Childcare: 'id,date,start,end,task,place,kids,roster,notes,asks,confirmedId,payTodoId,paidAmount,paidOn,createdBy',
   Birthdays: 'id,name,date,notes',
   Todos: 'id,created,type,title,amount,where,due,status,assignee,addedBy,doneOn,doneBy,notes,house,kid,repeat,link,source',
@@ -671,6 +673,7 @@ function jobs_(fromTrigger) {
   if (once_('groceries', t)) groceryRoll_(t);
   if (once_('upkeep', t)) upkeep_(t);
   if (once_('pay', t)) payCare_(t);
+  weeklyPay_(t);   // each weekly caretaker once, on their pay day
   if (dow === setting_('app|draftDay', 'Mon') && once_('draft', t)) weekAdd_(addDays_(monday_(t), 7));
   if (dow === 'Sun' && hour >= 10 && once_('weekcard', t)) weekCard_(t);
   if (t.slice(8) === '01' && once_('monthcard', t)) monthCard_(t);
@@ -729,12 +732,27 @@ function payCare_(t) {
   rows_('Childcare').slice().forEach(function (c) {
     if (c.date >= t || c.date < addDays_(t, -14) || !c.confirmedId || c.payTodoId) return;
     var ct = get_('Caretakers', c.confirmedId);
-    if (!ct || ct.unpaid === '1') return;
+    if (!ct || ct.unpaid === '1' || ct.pay === 'unpaid' || ct.pay === 'weekly') return;   // weekly: covered by weeklyPay_
     var h = c.start && c.end ? hrs_(c.start, c.end) : 0, amt = ct.rate && h ? Math.round(Number(ct.rate) * h * 100) / 100 : '';
     var todo = put_('Todos', { created: t, type: 'paycare', title: 'Pay ' + ct.name + ' for ' + nice_(c.date), amount: amt, due: addDays_(t, 3), status: 'Open',
       assignee: typeAssignee_('paycare'), addedBy: 'App', source: 'childcare:' + c.id, notes: h ? h + ' hours' + (ct.rate ? ' at $' + ct.rate + '/hr' : '') : '' });
     put_('Childcare', { id: c.id, payTodoId: todo.id });
     log_('App', { type: 'care_done', text: ct.name + ' did childcare ' + nice_(c.date) + (c.start ? ', ' + t12_(c.start) + '–' + t12_(c.end) : '') + '. Confirm the hours and pay.', amount: amt, cat: 'bills', table: 'Todos', ref: todo.id });
+  });
+}
+/** Weekly-paid caretakers: on their pay day, one to-do for the 7 days ending today, listing any jobs in that week. */
+function weeklyPay_(t) {
+  var day = DAYS[dow_(t)], from = addDays_(t, -6);
+  rows_('Caretakers').slice().forEach(function (ct) {
+    if (ct.pay !== 'weekly' || (ct.payDay || 'Fri') !== day || !once_('weeklypay|' + ct.id, t)) return;
+    var jobs = rows_('Childcare').filter(function (c) { return c.confirmedId === ct.id && c.date >= from && c.date <= t; }).sort(function (a, b) { return a.date < b.date ? -1 : 1; });
+    var hours = 0, lines = jobs.map(function (c) { var h = c.start && c.end ? hrs_(c.start, c.end) : 0; hours += h; return nice_(c.date) + (c.start ? ', ' + t12_(c.start) + '–' + t12_(c.end) : '') + (h ? ' (' + h + ' h)' : ''); });
+    var amt = ct.weekly ? Number(ct.weekly) : ct.rate && hours ? Math.round(Number(ct.rate) * hours * 100) / 100 : '';
+    var todo = put_('Todos', { created: t, type: 'paycare', title: 'Pay ' + ct.name + ' for the week ending ' + nice_(t), amount: amt, due: t, status: 'Open',
+      assignee: typeAssignee_('paycare'), addedBy: 'App', source: 'weeklypay:' + ct.id + '|' + from,
+      notes: (lines.length ? 'Jobs in the app this week:\n' + lines.join('\n') + (hours ? '\n' + hours + ' hours' + (ct.rate ? ' at $' + ct.rate + '/hr' : '') : '') : 'No jobs logged in the app this week.') + (ct.weekly ? '\nUsual weekly amount: $' + ct.weekly : '') });
+    jobs.forEach(function (c) { if (!c.payTodoId) put_('Childcare', { id: c.id, payTodoId: todo.id }); });
+    log_('App', { type: 'care_pay', text: 'Payday: pay ' + ct.name + ' for the week' + (amt ? ' ($' + amt + ')' : '') + '.', amount: amt, cat: 'bills', table: 'Todos', ref: todo.id });
   });
 }
 function weekCard_(t) {

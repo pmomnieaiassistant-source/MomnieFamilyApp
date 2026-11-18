@@ -324,7 +324,7 @@
 // Momnie Family app v6.0
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'], DAYN = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'], ADULTS = ['Paul', 'Shana'];
 // Shown at the bottom of Home. Bump it together with VERSION in sw.js on every release.
-const APP_VERSION = '11.8 · Nov 18, 2026';
+const APP_VERSION = '11.9 · Nov 18, 2026';
 const TABLES = ['People', 'Schools', 'SchoolCal', 'Activities', 'Overrides', 'Events', 'Caretakers', 'Childcare', 'Birthdays', 'Todos', 'TodoTypes', 'Recipes', 'DinnerRules', 'Weeks', 'Menus',
   'Groceries', 'GroceryList', 'HouseCards', 'Houses', 'WeatherRules', 'Quotes', 'Memories', 'Updates', 'Messages', 'Activity', 'Comments', 'Reactions', 'Links', 'Settings', 'Photos', 'gifts', 'daily_items', 'daily_completions'];
 const CAT = { School: '#3f6fb5', Kids: '#4f7cc2', Work: '#64748b', Family: '#5b6fa8', Dinner: '#b08a4f', Caretaker: '#3e9aa6', Shared: '#94a3b8', Birthday: '#c9806a' }, SCHOOL_C = ['#5a72b8', '#7a8597', '#4a6fb0'];
@@ -1052,8 +1052,12 @@ const FORMS = {
     F('dropoff', 'Usual drop-off, for kids (leave "Not set" to decide each week)', 'sel', rideO), F('pickup', 'Usual pickup, for kids', 'sel', rideO), F('house', 'House', 'sel', HOUSE_O), F('notes', 'Notes', 'area')],
   Childcare: [F('task', 'What do you need?', 'sel', [['babysit', 'Babysit'], ['pick up', 'Pick up'], ['bring to', 'Bring to a place']], { re: 1 }), F('place', 'Place', 'text', null, { show: x => x.task !== 'babysit', ph: 'e.g. soccer practice' }),
     F('kids', 'Which kids', 'multi', kidN), F('date', 'Date', 'date'), F('start', 'From', 'time'), F('end', 'Until', 'time', null, { dur: 'start' }), F('roster', 'Which roster to ask', 'sel', ['Boston', 'Cape']), F('notes', 'Notes', 'area')],
-  Caretakers: [F('name', 'Name'), F('relationship', 'Relationship'), F('phone', 'Phone', 'tel'), F('roster', 'Roster', 'multi', ['Boston', 'Cape']), F('birthday', 'Birthday (optional)', 'date'),
-    F('drive', 'Cleared to drive the kids', 'chk'), F('unpaid', 'Unpaid (no "pay caretaker" to-dos)', 'chk'), F('rate', 'Hourly rate', 'num'), F('notes', 'Notes', 'area')],
+  Caretakers: v => { if (!v.pay) v.pay = v.unpaid === '1' ? 'unpaid' : 'job'; if (v.pay === 'weekly' && !v.payDay) v.payDay = 'Fri'; return [F('name', 'Name'), F('relationship', 'Relationship'), F('phone', 'Phone', 'tel'), F('roster', 'Roster', 'multi', ['Boston', 'Cape']), F('birthday', 'Birthday (optional)', 'date'),
+    F('drive', 'Cleared to drive the kids', 'chk'),
+    F('pay', "How they're paid", 'sel', [['job', 'After each job (a "pay" to-do each time)'], ['weekly', 'Weekly (one reminder a week)'], ['unpaid', 'Unpaid']], { re: 1, on: x => { if (x.pay === 'weekly' && !x.payDay) x.payDay = 'Fri'; } }),
+    F('payDay', 'Pay day', 'sel', DAYS.map((d, i) => [d, DAYN[i]]), { show: x => x.pay === 'weekly' }),
+    F('weekly', 'Usual weekly amount (optional; else hours × rate)', 'num', null, { show: x => x.pay === 'weekly' }),
+    F('rate', 'Hourly rate', 'num', null, { show: x => x.pay !== 'unpaid' }), F('notes', 'Notes', 'area')]; },
   People: [F('name', 'Name'), F('kind', 'Adult or kid', 'sel', [['adult', 'Adult'], ['kid', 'Kid']], { re: 1 }), F('schoolId', 'School', 'sel', () => [['', 'None']].concat(S.Schools.map(s => [s.id, s.name])), { show: x => x.kind === 'kid', re: 1, on: x => { delete x._sched; } }),
     F('_sched', 'School day for this kid', 'rows', null, { fixed: 1, noDur: 1, copy: 1, step: 5, show: x => x.kind === 'kid' && !!x.schoolId,
       hint: 'Starts from the school. Change a pickup only if it differs. Set an extended-day pickup for days they stay late. Extended day shows as its own Planner event. After-school classes go under Home → Activities.',
@@ -1103,6 +1107,9 @@ function dinnerAwayOps(ev) {
   return hits.map(x => ({ t: 'Menus', row: { id: x.m.id, away: list(x.m.away).concat(x.add).join(', ') }, log: L('away', `${names === ME ? 'is' : 'marked ' + names + ' as'} not home for dinner ${fmtDay(x.m.date)}`, 'dinner') }));
 }
 const SAVE = {
+  Caretakers(v) { need(v.name && v.name.trim(), 'Name is required.');
+    if (v.pay === 'weekly') need(v.payDay, 'Pick a pay day.');
+    return write({ t: 'Caretakers', row: Object.assign({}, v, { id: v.id || nid(), unpaid: v.pay === 'unpaid' ? '1' : '', payDay: v.pay === 'weekly' ? v.payDay || 'Fri' : '', weekly: v.pay === 'weekly' ? v.weekly || '' : '' }) }); },
   People(v) { need(v.name && v.name.trim(), 'Name is required.');
     const row = Object.assign({}, v, { id: v.id || nid() }), ops = [{ t: 'People', row }];
     delete row._sched; delete row.extDays; delete row._wfh;
@@ -1281,7 +1288,7 @@ const CARD = {
   People(p) { return personPage(p); },
   Caretakers(k, d, t) { const jobs = S.Childcare.filter(c => c.confirmedId === k.id).sort((a, b) => b.date.localeCompare(a.date)), b = k.birthday && k.birthday.length >= 10 ? ageOn({ year: +k.birthday.slice(0, 4), md: k.birthday.slice(5) }, TODAY) : null;
     return `<h2>${esc(k.name)}</h2>` + kv('Relationship', k.relationship) + kvh('Phone', k.phone && `<a href="tel:${esc(k.phone.replace(/[^\d+]/g, ''))}">${esc(k.phone)}</a> · <a href="sms:${esc(k.phone.replace(/[^\d+]/g, ''))}">Text</a>`) + kv('Roster', k.roster) +
-      (k.birthday ? kv('Birthday', fmtDate(k.birthday) + (b !== null ? ` · ${b} years old` : '')) : '') + kv('Cleared to drive', k.drive === '1' ? 'Yes' : 'No') + kv('Pay', k.unpaid === '1' ? 'Unpaid' : k.rate ? `$${k.rate}/hour` : 'Rate not set') + kv('Notes', k.notes) +
+      (k.birthday ? kv('Birthday', fmtDate(k.birthday) + (b !== null ? ` · ${b} years old` : '')) : '') + kv('Cleared to drive', k.drive === '1' ? 'Yes' : 'No') + kv('Pay', k.pay === 'weekly' ? `Weekly on ${DAYN[DAYS.indexOf(k.payDay || 'Fri')]}s${k.weekly ? ' · ' + money(k.weekly) : k.rate ? ' · $' + k.rate + '/hour' : ''}` : k.pay === 'unpaid' || k.unpaid === '1' ? 'Unpaid' : k.rate ? `$${k.rate}/hour` : 'Rate not set') + kv('Notes', k.notes) +
       (jobs.length ? `<h3>History</h3>` + jobs.slice(0, 8).map(c => `<div class="row small" style="padding:4px 0"><span>${fmtDay(c.date)} · ${fmtT(c.start)}–${fmtT(c.end)}</span><span>${c.paidOn ? money(c.paidAmount) + ' paid' : k.unpaid === '1' ? '' : 'not paid yet'}</span></div>`).join('') : '') +
       `<div class="actions"><button class="btn gray sm" data-a="soon">${ic('key')}Allow access to family app</button></div>` + std(); },
   HouseCards(h, d, t) { return `<h2>${esc(h.title)}</h2>` + kv('House', h.house) + (h.body ? `<div class="kv" style="white-space:normal">${md(h.body)}</div>` : '') + kvh('Link', h.link && linkOr(h.link)) + (h.kind === 'upkeep' ? kv('Schedule', `Every ${h.everyMonths || '?'} months · next due ${h.nextDue ? fmtDay(h.nextDue) : 'not set'}`) : '') + std(); },
