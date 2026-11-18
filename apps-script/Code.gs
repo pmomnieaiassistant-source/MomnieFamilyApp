@@ -1,6 +1,7 @@
 /**
  * Momnie Family app backend
- * Version 3.15 (2026-11-18)
+ * Version 3.16 (2026-11-18)
+ *   3.16: New event by description: the assistant reads a sentence and fills in the event form (ai_event).
  *   3.15: Paul chooses who gets the AI Today card (app|ai.card; just Paul until he adds others).
  *   3.14: AI Today card. For each person who turns it on, the assistant writes their Today card: a short headline, a
  *         practical weather line and the 2 to 5 things that matter most, each linked to the real item. Written early
@@ -304,6 +305,9 @@ function route_(b, me) {
       if (setting_('app|ai.on', '') !== '1') return { ok: false, error: 'The AI assistant is off.' };
       if (aiCardFor_().indexOf(me) < 0) return { ok: false, error: 'The AI Today card is not turned on for you.' };
       return { brief: aiBrief_(me, isDate_(b.date) ? b.date : today_(), b.mode === 'night' ? 'night' : 'day') };
+    case 'ai_event':   // "Describe it" on a new event: fills in the form, saves nothing
+      if (setting_('app|ai.on', '') !== '1') return { ok: false, error: 'The AI assistant is off.' };
+      return aiEvent_(String(b.text || '').slice(0, 1000), isDate_(b.today) ? b.today : today_(), String(b.now || ''), me);
     case 'notify_test':
       var sent = send_(me, 'Test from the Momnie Family app', 'Notifications are working.');
       return sent ? { sent: sent } : { ok: false, error: 'No email or Pushover is set up for you yet (see README).' };
@@ -980,6 +984,32 @@ function aiBrief_(p, d, mode) {
     items: (x.items || []).filter(function (i) { return i && i.text; }).slice(0, 5).map(function (i) { return { text: String(i.text).slice(0, 160), ref: refs[i.ref] ? i.ref : '', level: i.level === 'heads-up' ? 'heads-up' : 'normal' }; }) };
   put_('Settings', { id: p + '|ai.brief', value: JSON.stringify(brief) });
   return brief;
+}
+
+// ---------- New event by description ----------
+function aiEvent_(text, t, now, me) {
+  var people = rows_('People').map(function (p) { return p.name; }), rides = ADULTS.concat(rows_('Caretakers').map(function (c) { return c.name; }), ['Carpool', 'School bus']);
+  var houses = ['Boston', 'Cape'], cats = ['School', 'Work', 'Kids', 'Family'];
+  var system = 'You turn one sentence into a calendar event for a family home app. The family: ' + rows_('People').map(function (p) { return p.name + (p.kind === 'kid' ? ' (kid)' : ''); }).join(', ') + '. ' +
+    'The person typing is ' + me + ' ("I", "me"). Today is ' + nice_(t) + ' (' + t + ')' + (now ? ', time ' + now : '') + '. Work out relative dates ("next Tuesday", "the 4th") from today; dates are YYYY-MM-DD and times are 24-hour HH:MM.\n' +
+    'Fill every field, using "" when the sentence does not say and you cannot reasonably infer it. title: short, like "Dentist" or "Clara\'s recital"; do not repeat the date or time in it. ' +
+    'category: Kids for anything a kid goes to or needs a ride to, School for school events (conferences, school concerts, days off), Work for work, otherwise Family. ' +
+    'allDay "1" only when there is no time. end: the end time if given, otherwise "". endDate only for a multi-day all-day event. people: comma-separated names from the family list only. ' +
+    'house: Boston or Cape only if the sentence says so. dropoff and pickup (only for Kids events with a time): one of ' + rides.join(', ') + '; "I" means ' + me + '; if one person takes them and nothing else is said, set dropoff only. ' +
+    'notes: anything useful left over (what to bring, a phone number), else "". Never invent details.';
+  var str = { type: 'string' }, schema = { type: 'object', additionalProperties: false,
+    required: ['title', 'category', 'date', 'allDay', 'endDate', 'start', 'end', 'people', 'location', 'house', 'dropoff', 'pickup', 'notes'],
+    properties: { title: str, category: { type: 'string', enum: cats }, date: str, allDay: { type: 'string', enum: ['1', ''] }, endDate: str, start: str, end: str, people: str, location: str, house: str, dropoff: str, pickup: str, notes: str } };
+  var r = claude_(system, text, schema, 'low');
+  if (r.error) return { ok: false, error: r.nokey ? r.error : 'The assistant is not available right now.' };
+  if (r.refused || !r.data) return { event: null };
+  var x = r.data, hm = function (v) { return /^\d{2}:\d{2}$/.test(v || '') ? v : ''; }, one = function (v, o) { return o.indexOf(v) >= 0 ? v : ''; };
+  var e = { title: String(x.title || '').slice(0, 120), category: one(x.category, cats) || 'Family', date: isDate_(x.date) ? x.date : t, allDay: x.allDay === '1' || !hm(x.start) ? '1' : '',
+    endDate: isDate_(x.endDate) && x.endDate > x.date ? x.endDate : '', start: hm(x.start), end: hm(x.end),
+    people: list_(x.people).filter(function (n) { return people.indexOf(n) >= 0; }).join(', '), location: String(x.location || '').slice(0, 200),
+    house: one(x.house, houses), dropoff: one(x.dropoff, rides), pickup: one(x.pickup, rides), notes: String(x.notes || '').slice(0, 1000) };
+  if (!e.title) return { event: null };
+  return { event: e };
 }
 
 function digest_(t) {
