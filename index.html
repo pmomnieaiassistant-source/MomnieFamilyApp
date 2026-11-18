@@ -207,6 +207,8 @@
   .pwk { display:flex; align-items:center; justify-content:space-between; margin:12px 12px 4px; text-align:center; }
   .pdaybox.today { border-color:var(--accent); } .pdaybox.past { opacity:.6; }
   .pgifts .rbar { margin-right:0 !important; }
+  dialog:not(.splash)::before { content:''; display:block; width:40px; height:5px; border-radius:3px; background:var(--line); margin:-12px auto 8px; }
+  .dcard { transition:transform .15s; } .dcard.clearing { box-shadow:inset 0 0 0 2px #e5484d; } .dcard.clearing::after { content:'Release to clear'; position:absolute; right:14px; top:12px; font-size:12px; font-weight:700; color:#e5484d; }
   input.fk { flex:0 0 38% !important; font-weight:600; } .pbox .li.plain:last-child { border-bottom:0; } .psec .lbl { margin:0 0 4px; } .li.plain { padding:10px 0; border-bottom:1px solid var(--line); }
   a.mention { color:var(--accent); font-weight:700; } .plink { cursor:pointer; }
   .msugg { display:flex; flex-wrap:wrap; gap:6px; margin-top:6px; }
@@ -298,7 +300,7 @@
 // Momnie Family app v6.0
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'], DAYN = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'], ADULTS = ['Paul', 'Shana'];
 // Shown at the bottom of Home. Bump it together with VERSION in sw.js on every release.
-const APP_VERSION = '8.9 · Nov 18, 2026';
+const APP_VERSION = '9.0 · Nov 18, 2026';
 const TABLES = ['People', 'Schools', 'SchoolCal', 'Activities', 'Overrides', 'Events', 'Caretakers', 'Childcare', 'Birthdays', 'Todos', 'TodoTypes', 'Recipes', 'DinnerRules', 'Weeks', 'Menus',
   'Groceries', 'GroceryList', 'HouseCards', 'Houses', 'WeatherRules', 'Quotes', 'Memories', 'Updates', 'Messages', 'Activity', 'Comments', 'Reactions', 'Links', 'Settings', 'Photos', 'gifts', 'daily_items', 'daily_completions'];
 const CAT = { Kids: '#4f7cc2', Work: '#64748b', Family: '#5b6fa8', Dinner: '#b08a4f', Caretaker: '#3e9aa6', Shared: '#94a3b8', Birthday: '#c9806a' }, SCHOOL_C = ['#5a72b8', '#7a8597', '#4a6fb0'];
@@ -726,6 +728,18 @@ const A = {}, sheets = [];
 document.addEventListener('click', ev => { const el = ev.target.closest('[data-a]'); if (!el) return; const f = A[el.dataset.a]; if (!f) return; if (el.tagName !== 'A') ev.preventDefault(); ev.stopPropagation(); f(el.dataset.v, el, ev); });
 document.addEventListener('change', ev => { const el = ev.target.closest('[data-c]'); if (el && A[el.dataset.c]) A[el.dataset.c](el.type === 'checkbox' ? (el.checked ? '1' : '') : el.value, el); });
 const XBTN = '<button class="x" data-a="close" aria-label="Close">✕</button>';
+// Pull a bottom sheet down to close it (only when it's scrolled to the top, and not while typing or swiping a row).
+(function () { let d = null, y0 = 0, x0 = 0, dy = 0, on = false, t0 = 0;
+  document.addEventListener('touchstart', e => { d = null; const dl = e.target.closest && e.target.closest('dialog[open]');
+    if (!dl || dl.classList.contains('splash') || dl.scrollTop > 0 || e.target.closest('input, textarea, select, .rmenu, .swipe, .rcard, .dcard')) return;
+    d = dl; y0 = e.touches[0].clientY; x0 = e.touches[0].clientX; dy = 0; on = false; t0 = Date.now(); }, { passive: true });
+  document.addEventListener('touchmove', e => { if (!d) return; const y = e.touches[0].clientY - y0, x = e.touches[0].clientX - x0;
+    if (!on) { if (y > 10 && y > Math.abs(x) && d.scrollTop <= 0) { on = true; d.style.transition = 'none'; d.style.animation = 'none'; } else if (Math.abs(x) > 10 || y < -10) { d = null; return; } else return; }
+    dy = Math.max(0, y); d.style.transform = `translateY(${dy}px)`; e.preventDefault(); }, { passive: false });
+  const end = () => { if (!d || !on) { d = null; return; } const dl = d, fast = dy / Math.max(1, Date.now() - t0) > 0.5; d = null; dl.style.transition = 'transform .18s ease-out';
+    if (dy > 110 || (fast && dy > 40)) { dl.style.transform = 'translateY(105%)'; setTimeout(() => dl.close(), 170); }
+    else { dl.style.transform = ''; setTimeout(() => { dl.style.transition = ''; }, 200); } };
+  document.addEventListener('touchend', end); document.addEventListener('touchcancel', end); })();
 function sheet(content, cls) {
   const d = document.createElement('dialog'); if (cls) d.className = cls; document.body.appendChild(d);
   d._render = typeof content === 'function' ? content : null;
@@ -1515,7 +1529,7 @@ function vMenu() {
   if (!S.Recipes.length) html += '<div class="empty">Add a few recipes first (Home, then Recipes). Then the app can propose a week.</div>';
   if (!w) html += `<div class="empty">${MW === cur ? 'This week isn\'t planned yet.' : 'This week isn\'t set up yet.'}<br><br><button class="btn" data-a="weekAdd" data-v="${MW}">Set up ${weekLow(MW, cur)}</button></div>`;
   else { const ms = S.Menus.filter(m => m.week === w.id).sort((a, b) => a.date.localeCompare(b.date));
-    html += `<div class="row pad" style="margin:4px 0"><span class="small muted">Swipe a night right to change it.</span></div>` +
+    html += `<div class="row pad" style="margin:4px 0"><span class="small muted">Swipe a night right to change it, or left to clear it.</span></div>` +
       ms.map(m => { const r = byId('Recipes', m.recipeId), name = dish(m), past = m.date < TODAY;
         return `<div class="card dcard" data-menu="${m.id}" ${past ? '' : 'data-swipe="1"'} style="${past ? 'opacity:.55' : ''}"><div class="row"><span class="small b ${m.date === TODAY ? '' : 'muted'}" style="${m.date === TODAY ? 'color:var(--accent)' : ''}">${m.day.toUpperCase()} ${fmtDate(m.date)}${m.date === TODAY ? ' · TONIGHT' : ''}</span><span>${m.cook ? `<span class="chip">${ic('meals', 13)} ${esc(m.cook)}</span> ` : ''}${m.away ? `<span class="chip bad">${esc(m.away)} out</span>` : ''}${m.skipped === '1' ? '<span class="chip bad">Skipped</span>' : ''}</span></div>
           <div class="row" style="margin-top:4px"><div class="grow" data-a="open" data-t="Menus" data-id="${m.id}"><div style="font-size:18px;font-weight:800" class="${name ? '' : 'muted'}">${esc(name || 'No dinner planned')}</div>${r && r.tags ? `<div class="small muted">${list(r.tags).map(t => '#' + esc(t)).join(' ')}</div>` : ''}</div>
@@ -1811,12 +1825,11 @@ function vHome() {
   const order = S.People.slice().sort((a, b) => (a.kind === 'kid') - (b.kind === 'kid'));
   const grp = actGroups(), houses = ['Boston', 'Cape'].map(h => `${h === 'Cape' ? 'Cape' : 'Boston'} ${S.HouseCards.filter(c => c.house === h).length}`).join(' · ');
   return `<div class="pad small muted b" style="padding-top:12px">${fmtLong(TODAY).toUpperCase()} · ${fmtT(nowHM())}</div>` +
-    `<div class="box"><div class="boxh">Family Status</div>` + order.map(p => { const x = statusOf(p);
+    `<div class="box"><div class="boxh row" style="justify-content:space-between;align-items:center"><span>Family</span><button class="lnk" style="text-transform:none;letter-spacing:0" data-a="add" data-v="People">${ic('plus', 15)}Add</button></div>` + order.map(p => { const x = statusOf(p);
       return `<div class="li" style="align-items:flex-start" data-a="open" data-t="People" data-id="${p.id}">${avatar(p.name)}<div class="grow"><div class="row"><span class="ti">${esc(p.name)}${ADULTS.includes(p.name) && p.name !== ME ? `<span class="small muted" style="font-weight:500" data-seen-txt="${esc(p.name)}">${seenTxt(p.name) ? ' · ' + seenTxt(p.name) : ''}</span>` : ''}</span>${x.warn ? '<span class="chip bad">Ride not set</span>' : x.rides ? `<span class="chip">${x.rides} ride${x.rides === 1 ? '' : 's'} today</span>` : ''}</div>
         <div style="font-size:15px;margin-top:2px">${x.busy ? ic('pin', 15) + ' ' : ''}${esc(x.now)}</div>${x.next ? `<div class="small muted" style="margin-top:2px">${ic('clock', 13)} Next: ${esc(x.next)}</div>` : ''}</div></div>`; }).join('') + `</div>` +
     (care.length ? `<div class="sect">Caretakers today</div>` + care.map(c => `<div class="li" data-a="open" data-t="Childcare" data-id="${c.id}"><div class="hicon" style="--hc:${HC.care}">${ic('care')}</div><div class="grow"><div class="ti">${esc(c.confirmedId ? careName(c.confirmedId) : 'Not confirmed yet')}</div><div class="small ${c.confirmedId ? 'muted' : 'red'}">${fmtT(c.start)}–${fmtT(c.end)} · ${esc(careTitle(c))}</div></div><span class="chev">›</span></div>`).join('') : '') +
     `<div class="sect">Household</div>` +
-    hrow('homeOpen', 'family', 'users', 'Family', 'Profiles, work schedules, schools and notes') +
     hrow('homeOpen', 'Schools', 'school', 'Schools', S.Schools.map(x => x.short || x.name).join(', ') || 'Hours, contacts and school calendars') +
     hrow('homeOpen', 'Activities', 'activity', 'Activities', grp.length ? `${grp.length} repeating, for kids and parents` : 'Repeating activities like hockey or piano') +
     hrow('homeOpen', 'houses', 'house', 'House', 'Info and upkeep · ' + houses) +
@@ -1960,11 +1973,20 @@ A.mentionPick = n => { const el = mentionEl; if (!el) return; const pos = el.sel
 document.addEventListener('visibilitychange', () => {
   if (document.hidden) return;
   if (ME && Date.now() - lastLoad > 60000 && !sheets.length) load().catch(() => {}); });
-// swipe an upcoming dinner right to change it (Random or Select)
+// swipe an upcoming dinner: right = change it (Random or Select), left = clear it (no meal set)
 (function () { let x0 = null, y0 = 0, el = null;
+  const reset = () => { if (el) { el.style.transform = ''; el.classList.remove('clearing'); } };
   document.addEventListener('touchstart', e => { el = e.target.closest('.dcard[data-swipe]'); if (el) { x0 = e.touches[0].clientX; y0 = e.touches[0].clientY; } }, { passive: true });
-  document.addEventListener('touchmove', e => { if (!el || x0 === null) return; const dx = e.touches[0].clientX - x0; if (Math.abs(e.touches[0].clientY - y0) > 30) { el.style.transform = ''; el = null; return; } el.style.transform = `translateX(${Math.max(0, dx) * 0.6}px)`; }, { passive: true });
-  document.addEventListener('touchend', e => { if (!el || x0 === null) return; const dx = e.changedTouches[0].clientX - x0, id = el.dataset.menu; el.style.transform = ''; el = null; x0 = null; if (dx > 70) { const stop = ev => { ev.stopPropagation(); ev.preventDefault(); }; document.addEventListener('click', stop, { capture: true, once: true }); setTimeout(() => document.removeEventListener('click', stop, { capture: true }), 400); MCHG = id; render(); } }); })();
+  document.addEventListener('touchmove', e => { if (!el || x0 === null) return; const dx = e.touches[0].clientX - x0; if (Math.abs(e.touches[0].clientY - y0) > 30) { reset(); el = null; return; }
+    el.style.transform = `translateX(${Math.max(-140, Math.min(140, dx * 0.6))}px)`; el.classList.toggle('clearing', dx < -70); }, { passive: true });
+  document.addEventListener('touchend', e => { if (!el || x0 === null) return; const dx = e.changedTouches[0].clientX - x0, id = el.dataset.menu; reset(); el = null; x0 = null;
+    if (Math.abs(dx) <= 70) return;
+    const stop = ev => { ev.stopPropagation(); ev.preventDefault(); }; document.addEventListener('click', stop, { capture: true, once: true }); setTimeout(() => document.removeEventListener('click', stop, { capture: true }), 400);
+    if (dx > 0) { MCHG = id; render(); } else A.dinClear(id); }); })();
+A.dinClear = id => { const m = byId('Menus', id); if (!m) return; if (!m.recipeId && !m.note) { toast('Nothing planned for ' + fmtDay(m.date) + ' yet'); return; }
+  const prev = { id, recipeId: m.recipeId || '', note: m.note || '', kept: m.kept || '', skipped: m.skipped || '' };
+  write({ t: 'Menus', row: { id, recipeId: '', note: '', kept: '1', skipped: '' }, log: menuLog(m, 'menu_set', `cleared dinner for ${fmtDay(m.date)}`) });
+  undoToast('Cleared dinner for ' + fmtDay(m.date), () => write({ t: 'Menus', row: prev, log: menuLog(m, 'menu_set', `put back dinner for ${fmtDay(m.date)}`) })); };
 // swipe on a recipe in Meals > Recipes: right = pick a night, left = skip for now
 (function () { let x0 = null, y0 = 0, el = null, inn = null, moved = false;
   document.addEventListener('touchstart', e => { el = e.target.closest('.rcard[data-rid]'); inn = el && el.querySelector('.rin'); moved = false; if (el) { x0 = e.touches[0].clientX; y0 = e.touches[0].clientY; } }, { passive: true });
