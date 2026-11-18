@@ -1,6 +1,9 @@
 /**
  * Momnie Family app backend
- * Version 3.13 (2026-11-18)
+ * Version 3.14 (2026-11-18)
+ *   3.14: AI Today card. For each person who turns it on, the assistant writes their Today card: a short headline, a
+ *         practical weather line and the 2 to 5 things that matter most, each linked to the real item. Written early
+ *         each morning (for today) and at 7 PM (for tomorrow), or on demand from the card's refresh button.
  *   3.13: assistant rules. Plain-English rules (new ai_rules tab) that the AI assistant checks every run, posting to the
  *        people each rule names (one person = a private note). Activity gets an audience column for these notes.
  *   3.12: AI assistant. Once a day (after the hour set in the app) Claude reads a summary of the Sheet and posts 0 to 3
@@ -296,6 +299,9 @@ function route_(b, me) {
     case 'ai_run':   // "Post now" from the AI assistant settings page (Paul only)
       if (me !== 'Paul') return { ok: false, error: 'Only Paul can run the AI assistant.' };
       return { ai: aiPosts_(today_(), true) };
+    case 'ai_brief':   // the refresh button on someone's AI Today card (their own card only)
+      if (setting_('app|ai.on', '') !== '1') return { ok: false, error: 'The AI assistant is off.' };
+      return { brief: aiBrief_(me, isDate_(b.date) ? b.date : today_(), b.mode === 'night' ? 'night' : 'day') };
     case 'notify_test':
       var sent = send_(me, 'Test from the Momnie Family app', 'Notifications are working.');
       return sent ? { sent: sent } : { ok: false, error: 'No email or Pushover is set up for you yet (see README).' };
@@ -657,10 +663,10 @@ function kidOcc_(date) {
     if (list_(a.days).indexOf(dow) < 0 || (a.from && date < a.from) || (a.until && date > a.until)) return;
     var o = rows_('Overrides').filter(function (x) { return x.ref === a.id && x.date === date; })[0] || {};
     if (o.cancelled === '1') return;
-    out.push({ title: a.name, kids: a.kids, start: a.start, dropoff: o.dropoff || a.dropoff, pickup: o.pickup || a.pickup });
+    out.push({ t: 'Activities', id: a.id, title: a.name, kids: a.kids, start: a.start, dropoff: o.dropoff || a.dropoff, pickup: o.pickup || a.pickup });
   });
   rows_('Events').forEach(function (e) {
-    if (e.date === date && e.category === 'Kids' && e.allDay !== '1' && e.start) out.push({ title: e.title, kids: e.people, start: e.start, dropoff: e.dropoff, pickup: e.pickup });
+    if (e.date === date && e.category === 'Kids' && e.allDay !== '1' && e.start) out.push({ t: 'Events', id: e.id, title: e.title, kids: e.people, start: e.start, dropoff: e.dropoff, pickup: e.pickup });
   });
   return out;
 }
@@ -689,7 +695,9 @@ function jobs_(fromTrigger) {
   if (t.slice(8) === '01' && once_('monthcard', t)) monthCard_(t);
   if (!fromTrigger) return;
   flushQueues_();
-  if (setting_('app|ai.on', '') === '1' && hour >= Number(setting_('app|ai.hour', '7')) && once_('ai', t)) aiSafe_(t);   // hourly tick only: never slows down opening the app
+  if (setting_('app|ai.on', '') === '1' && hour >= Number(setting_('app|ai.hour', '7')) && once_('ai', t)) aiSafe_(t);
+  if (setting_('app|ai.on', '') === '1' && hour >= 5 && hour < 19 && once_('brief_am', t)) briefAll_(t, 'day');
+  if (setting_('app|ai.on', '') === '1' && hour >= 19 && once_('brief_pm', t)) briefAll_(addDays_(t, 1), 'night');   // hourly tick only: never slows down opening the app
   if (hour >= 7 && once_('digest', t)) digest_(t);
   if (hour >= 20 && once_('gaps', t)) gaps_(t);
   if (hour >= 6 && once_('wx_am', t)) wxAlerts_(0, 'morning');
@@ -868,10 +876,24 @@ function aiContext_(t) {
   c.recentNotes = rows_('Activity').filter(function (a) { return a.type === 'ai' && a.time >= addDays_(t, -10); }).map(function (a) { return a.time.slice(0, 10) + ': ' + a.text; }).slice(-15);
   return c;
 }
+/** One structured call to Claude. Returns { data } (the parsed JSON), { refused: true } or { error }. */
+function claude_(system, content, schema, effort) {
+  var key = PropertiesService.getScriptProperties().getProperty('ANTHROPIC_API_KEY');
+  if (!key) return { error: 'No API key yet. In Apps Script: Project Settings, Script properties, add ANTHROPIC_API_KEY.', nokey: true };
+  var body = { model: PropertiesService.getScriptProperties().getProperty('AI_MODEL') || 'claude-opus-5-5', max_tokens: 4000,
+    output_config: { effort: effort || 'medium', format: { type: 'json_schema', schema: schema } }, fallbacks: 'default',
+    system: system, messages: [{ role: 'user', content: content }] };
+  var res = UrlFetchApp.fetch('https://api.anthropic.com/v1/messages', { method: 'post', contentType: 'application/json', muteHttpExceptions: true,
+    headers: { 'x-api-key': key, 'anthropic-version': '2026-10-21', 'anthropic-beta': 'server-side-fallback-2026-07-01' }, payload: JSON.stringify(body) });
+  var code = res.getResponseCode(), j = {};
+  try { j = JSON.parse(res.getContentText()); } catch (e) {}
+  if (code !== 200) return { error: 'Claude API error ' + code + (j.error && j.error.message ? ': ' + j.error.message : '') };
+  if (j.stop_reason === 'refusal') return { refused: true };
+  var text = (j.content || []).filter(function (b) { return b.type === 'text'; }).map(function (b) { return b.text; }).join('');
+  try { return { data: JSON.parse(text) }; } catch (e) { return { error: 'Could not read the answer.' }; }
+}
 /** Asks Claude for 0 to 3 notes and posts them to the Feed. Returns the notes (or why there are none). */
 function aiPosts_(t, manual) {
-  var key = PropertiesService.getScriptProperties().getProperty('ANTHROPIC_API_KEY');
-  if (!key) { put_('Settings', { id: 'app|ai.last', value: now_() + ' · no API key: add ANTHROPIC_API_KEY in Script properties' }); return { error: 'No API key yet. In Apps Script: Project Settings, Script properties, add ANTHROPIC_API_KEY.' }; }
   var ctx = aiContext_(t);
   var system = 'You are the AI assistant inside a family\'s shared home app (parents Paul and Shana, and their kids). Each morning you read a summary of the family\'s plans and write 0 to 3 short notes for the app\'s Feed.\n' +
     'Write only notes that help: something to act on, a gap in the plan, a timely idea or a useful heads-up. If nothing is worth saying, return no notes; that is often the right answer.\n' +
@@ -879,23 +901,16 @@ function aiPosts_(t, manual) {
     'Do not repeat or rephrase anything in recentNotes. Never name or describe gift ideas; at most say how many are saved. Do not invent facts that are not in the summary.\n' +
     'The family may give you standing rules (in "rules"). Check every rule against the summary. When a rule applies, write one note for it, set rule_id to that rule\'s id, and word it for the people in tellOnly (use @Name to tag someone). A rule note does not count toward the 3-note limit, and a rule that does not apply gets no note. ' +
     'Notes not tied to a rule must stay within the listed topics and set rule_id to "".';
-  var body = { model: PropertiesService.getScriptProperties().getProperty('AI_MODEL') || 'claude-opus-5-5', max_tokens: 4000,
-    output_config: { effort: 'medium', format: { type: 'json_schema', schema: { type: 'object', additionalProperties: false, required: ['notes'],
-      properties: { notes: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['text', 'topic', 'rule_id'],
-        properties: { text: { type: 'string' }, topic: { type: 'string', enum: Object.keys(AI_TOPICS_).concat('rule') }, rule_id: { type: 'string' } } } } } } } },
-    fallbacks: 'default',
-    system: system,
-    messages: [{ role: 'user', content: 'Family summary (JSON):\n' + JSON.stringify(ctx) + '\n\nWrite today\'s notes.' }] };
-  var res = UrlFetchApp.fetch('https://api.anthropic.com/v1/messages', { method: 'post', contentType: 'application/json', muteHttpExceptions: true,
-    headers: { 'x-api-key': key, 'anthropic-version': '2026-10-21', 'anthropic-beta': 'server-side-fallback-2026-07-01' }, payload: JSON.stringify(body) });
-  var code = res.getResponseCode(), j = {};
-  try { j = JSON.parse(res.getContentText()); } catch (e) {}
-  if (code !== 200) { var msg = 'Claude API error ' + code + (j.error && j.error.message ? ': ' + j.error.message : ''); put_('Settings', { id: 'app|ai.last', value: now_() + ' · ' + msg.slice(0, 200) }); return { error: msg }; }
-  if (j.stop_reason === 'refusal') { put_('Settings', { id: 'app|ai.last', value: now_() + ' · declined' }); return { notes: [] }; }
-  var text = (j.content || []).filter(function (b) { return b.type === 'text'; }).map(function (b) { return b.text; }).join('');
-  var notes = [], rulesById = {}; aiRules_().forEach(function (r) { rulesById[r.id] = r; });
-  try { var all = (JSON.parse(text).notes || []).filter(function (n) { return n && n.text; }), free = 0;
-    notes = all.filter(function (n) { return rulesById[n.rule_id] || free++ < 3; }); } catch (e) { notes = []; }
+  var schema = { type: 'object', additionalProperties: false, required: ['notes'],
+    properties: { notes: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['text', 'topic', 'rule_id'],
+      properties: { text: { type: 'string' }, topic: { type: 'string', enum: Object.keys(AI_TOPICS_).concat('rule') }, rule_id: { type: 'string' } } } } } };
+  var r = claude_(system, 'Family summary (JSON):\n' + JSON.stringify(ctx) + '\n\nWrite today\'s notes.', schema, 'medium');
+  if (r.nokey) { put_('Settings', { id: 'app|ai.last', value: now_() + ' · no API key: add ANTHROPIC_API_KEY in Script properties' }); return { error: r.error }; }
+  if (r.error) { put_('Settings', { id: 'app|ai.last', value: now_() + ' · ' + r.error.slice(0, 200) }); return { error: r.error }; }
+  if (r.refused) { put_('Settings', { id: 'app|ai.last', value: now_() + ' · declined' }); return { notes: [] }; }
+  var notes = [], rulesById = {}; aiRules_().forEach(function (x) { rulesById[x.id] = x; });
+  var all = ((r.data && r.data.notes) || []).filter(function (n) { return n && n.text; }), free = 0;
+  notes = all.filter(function (n) { return rulesById[n.rule_id] || free++ < 3; });
   var who = list_(setting_('app|ai.who', 'Paul'));
   notes.forEach(function (n) {
     var rule = rulesById[n.rule_id], aud = rule && rule.audience ? list_(rule.audience) : who;   // a rule's note goes only to the people it names
@@ -904,6 +919,63 @@ function aiPosts_(t, manual) {
   });
   put_('Settings', { id: 'app|ai.last', value: now_() + ' · ' + notes.length + ' note' + (notes.length === 1 ? '' : 's') + (manual ? ' (Post now)' : '') });
   return { notes: notes };
+}
+
+// ---------- AI Today card ----------
+function briefAll_(d, mode) { ADULTS.forEach(function (p) { if (setting_(p + '|ai.card', '') === '1') { try { aiBrief_(p, d, mode); } catch (e) { console.error(e); } } }); }
+/** Everything on person p's plate for date d, each with a ref the app can open. Gift ideas are never included. */
+function briefCands_(p, d, mode) {
+  var t = today_(), day = DAYS[dow_(d)], c = [], add = function (ref, text) { c.push({ ref: ref, what: text }); };
+  var people = rows_('People'), me = people.filter(function (x) { return x.name === p; })[0] || {};
+  people.forEach(function (x) {
+    if (x.kind === 'kid' || !x.workStart || list_(x.workDays).indexOf(day) < 0) return;
+    var w = jsonSafe_(setting_('person|' + x.id + '|wfh', '{}')), dates = w.dates && typeof w.dates === 'object' ? w.dates : {};
+    var where = dates[d] || (list_(w.days).indexOf(day) >= 0 ? 'home' : 'office');
+    add('People:' + x.id, (x.name === p ? 'You work' : x.name + ' works') + ' ' + t12_(x.workStart) + (x.workEnd ? '–' + t12_(x.workEnd) : '') + ', ' + (where === 'home' ? 'from home' : 'in the office'));
+  });
+  schoolRuns_(d).forEach(function (r) { add('run:' + r.sid + '|' + d + '|' + r.kind, runLine_(r)); });
+  kidOcc_(d).forEach(function (o) { add(o.t + ':' + o.id, t12_(o.start) + ' ' + o.title + ' (' + o.kids + '): drop-off ' + (o.dropoff || 'NOT SET') + ', pickup ' + (o.pickup || 'NOT SET')); });
+  rows_('Events').forEach(function (e) { if (e.date === d && !(e.category === 'Kids' && e.allDay !== '1' && e.start)) add('Events:' + e.id, (e.allDay === '1' || !e.start ? 'All day ' : t12_(e.start) + ' ') + e.title + (e.people ? ' (' + e.people + ')' : '') + (e.category ? ' [' + e.category + ']' : '')); });
+  rows_('Childcare').forEach(function (cc) { if (cc.date === d) { var ct = get_('Caretakers', cc.confirmedId); add('Childcare:' + cc.id, 'Caretaker ' + t12_(cc.start) + '–' + t12_(cc.end) + ': ' + (ct ? ct.name : 'NOT CONFIRMED')); } });
+  rows_('SchoolCal').forEach(function (s) { if (s.date && d >= s.date && d <= (s.endDate || s.date)) add('', 'School calendar: ' + s.title); });
+  var mid = monday_(d) + '-' + day, m = get_('Menus', mid);
+  add('Menus:' + mid, 'Dinner: ' + (m ? (m.skipped === '1' ? 'skipped' : dishName_(m) || 'nothing planned') + (m.cook ? ', ' + m.cook + ' cooking' : '') + (m.away ? ', ' + m.away + ' not home' : '') : 'nothing planned'));
+  rows_('Todos').filter(function (x) { return x.status !== 'Done' && (!x.assignee || x.assignee === p) && x.due && x.due <= addDays_(d, 3); })
+    .sort(function (a, b) { return a.due < b.due ? -1 : 1; }).slice(0, 20)
+    .forEach(function (x) { add('Todos:' + x.id, 'To-do: ' + x.title + ' | due ' + x.due + (x.due < t ? ' (OVERDUE)' : x.due === d ? ' (due this day)' : '') + (x.assignee ? ' | ' + x.assignee + "'s" : ' | anyone') + (x.amount ? ' | $' + x.amount : '')); });
+  var kids = people.filter(function (x) { return x.kind === 'kid'; }).map(function (x) { return x.name; }), gifts = rows_('gifts');
+  birthdays_().forEach(function (b) { var y = Number(d.slice(0, 4)), nx = y + '-' + b.md; if (nx < d) nx = (y + 1) + '-' + b.md;
+    if (nx <= addDays_(d, 10)) add('', 'Birthday: ' + b.name + ' on ' + nice_(nx) + (kids.indexOf(b.name) >= 0 ? ' | gift ideas saved: ' + gifts.filter(function (g) { return g.recipient === b.name; }).length : '')); });
+  rows_('HouseCards').forEach(function (h) { if (h.kind === 'upkeep' && h.nextDue && h.nextDue <= addDays_(d, 7)) add('HouseCards:' + h.id, 'House upkeep: ' + h.title + (h.house ? ' (' + h.house + ')' : '') + ' due ' + h.nextDue); });
+  var wx = null, h = get_('Houses', setting_(p + '|house', 'boston'));
+  if (h && h.lat) { var w = fetchWx_(+h.lat, +h.lon), wd = w && w.days.filter(function (x) { return x.date === d; })[0];
+    if (wd) wx = { place: h.name, high: wd.high, low: wd.low, rainChance: wd.rain, uv: wd.uv, snowInches: wd.snow, familyRules: ruleHits_(wd, mode === 'night' ? 'night' : 'morning').map(function (r) { return r.message; }) }; }
+  return { cands: c, weather: wx };
+}
+/** Writes person p's Today card for date d and saves it in Settings (p|ai.brief). */
+function aiBrief_(p, d, mode) {
+  var k = briefCands_(p, d, mode), refs = {};
+  k.cands.forEach(function (x) { if (x.ref) refs[x.ref] = 1; });
+  var ctx = { forPerson: p, date: nice_(d), now: now_().slice(11, 16), mode: mode, weather: k.weather, candidates: k.cands,
+    family: rows_('People').map(function (x) { return x.name + (x.kind === 'kid' ? ' (kid)' : ''); }) };
+  var system = 'You write the Today card at the top of a family home app, for one person (forPerson). The family: parents Paul and Shana and their kids.\n' +
+    (mode === 'night' ? 'It is evening. Write about TOMORROW (date) so they can get ready tonight.\n' : 'Write about TODAY (date). The time is "now": leave out anything already over unless it still needs action.\n') +
+    'Return:\n- headline: one or two sentences (under 180 characters) giving the shape of their day: how busy it is and the one or two things that matter most for them. Speak to them as "you".\n' +
+    '- weather: one practical sentence about what to wear or bring, mentioning any familyRules, or "" if the weather is unremarkable or missing.\n' +
+    '- items: the 2 to 5 things this person should focus on, most important first. Each under 110 characters, written to them, with ref copied exactly from the candidate it comes from ("" if none). ' +
+    'level "heads-up" means it needs action or something is at risk (NOT SET, NOT CONFIRMED, OVERDUE, nothing planned for dinner on a busy day); otherwise "normal".\n' +
+    'Put their own responsibilities first. Mention what someone else is doing only when it affects them (for example who has a pickup, or the other parent being out). Skip routine things that need nothing from them. Combine related candidates into one item when that reads better. ' +
+    'Plain words, first names, no emoji, no exclamation marks. Never name or describe gift ideas. Do not invent anything that is not in the candidates.';
+  var schema = { type: 'object', additionalProperties: false, required: ['headline', 'weather', 'items'],
+    properties: { headline: { type: 'string' }, weather: { type: 'string' },
+      items: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['text', 'ref', 'level'],
+        properties: { text: { type: 'string' }, ref: { type: 'string' }, level: { type: 'string', enum: ['heads-up', 'normal'] } } } } } };
+  var r = claude_(system, 'Candidates (JSON):\n' + JSON.stringify(ctx) + '\n\nWrite the card.', schema, 'low');
+  if (r.error || r.refused) return { error: r.error || 'The assistant declined.' };
+  var x = r.data || {}, brief = { for: d, mode: mode, time: now_(), headline: String(x.headline || '').slice(0, 300), weather: String(x.weather || '').slice(0, 200),
+    items: (x.items || []).filter(function (i) { return i && i.text; }).slice(0, 5).map(function (i) { return { text: String(i.text).slice(0, 160), ref: refs[i.ref] ? i.ref : '', level: i.level === 'heads-up' ? 'heads-up' : 'normal' }; }) };
+  put_('Settings', { id: p + '|ai.brief', value: JSON.stringify(brief) });
+  return brief;
 }
 
 function digest_(t) {
