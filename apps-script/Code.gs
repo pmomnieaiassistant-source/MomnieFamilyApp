@@ -1,6 +1,9 @@
 /**
  * Momnie Family app backend
- * Version 3.11 (2026-11-18)
+ * Version 3.12 (2026-11-18)
+ *   3.12: AI assistant. Once a day (after the hour set in the app) Claude reads a summary of the Sheet and posts 0 to 3
+ *        short notes to the Feed as "AI assistant". Turn it on and choose who sees it in the app: Home, Settings, AI
+ *        assistant (Paul only). Needs the Script property ANTHROPIC_API_KEY. Optional: AI_MODEL (default claude-opus-5-5).
  *   3.11: caretakers can be paid weekly: one "Pay <name>" to-do a week on their pay day (no per-job to-dos), listing that
  *        week's jobs, for their usual weekly amount or hours times rate. New Caretakers columns pay, payDay, weekly.
  *   3.10: school drop-off and pickup in the reminders. The 8 PM message lists tomorrow's school runs and who is doing
@@ -23,6 +26,7 @@
  *        extended day, plain-text weekly and monthly summaries. Needs Drive access: run "setup" once after pasting.
  *
  * Paste into Extensions > Apps Script in the family Google Sheet, then:
+ *   0. (AI assistant only) Project Settings > Script properties: ANTHROPIC_API_KEY = your key from console.anthropic.com
  *   1. Project Settings > Script properties: PASSCODE_PAUL, PASSCODE_SHANA
  *      (optional: CALENDAR_IDS, NOTIFY_EMAIL_PAUL, NOTIFY_EMAIL_SHANA, PUSHOVER_*, APP_URL)
  *   2. Run "setup" once from the editor and approve access.
@@ -286,6 +290,9 @@ function route_(b, me) {
     case 'photo_add': return photoAdd_(b, me);
     case 'dinner_swap': swap_(b.id); if (b.log) log_(me, b.log, 'Menus', b.id); return {};
     case 'gcal_delete': gcalDelete_(b.gcalId); calDrop_(); if (b.log) log_(me, b.log); return { cal: calCached_(addDays_(today_(), -7), 56) };
+    case 'ai_run':   // "Post now" from the AI assistant settings page (Paul only)
+      if (me !== 'Paul') return { ok: false, error: 'Only Paul can run the AI assistant.' };
+      return { ai: aiPosts_(today_(), true) };
     case 'notify_test':
       var sent = send_(me, 'Test from the Momnie Family app', 'Notifications are working.');
       return sent ? { sent: sent } : { ok: false, error: 'No email or Pushover is set up for you yet (see README).' };
@@ -328,7 +335,7 @@ function write_(b, me) {
 function log_(who, log, t, ref) {
   put_('Activity', { time: log.time || now_(), who: who, type: log.type || '', text: log.text || '', amount: log.amount === undefined ? '' : log.amount,
     table: log.table || t || '', ref: log.ref || ref || '', cat: log.cat || '' });
-  if (who !== 'App') _logs.push(log);
+  if (who !== 'App' && who !== 'AI assistant') _logs.push(log);   // AI notes notify only their chosen audience (aiPosts_)
 }
 
 // ---------- notifications ----------
@@ -679,6 +686,7 @@ function jobs_(fromTrigger) {
   if (t.slice(8) === '01' && once_('monthcard', t)) monthCard_(t);
   if (!fromTrigger) return;
   flushQueues_();
+  if (setting_('app|ai.on', '') === '1' && hour >= Number(setting_('app|ai.hour', '7')) && once_('ai', t)) aiSafe_(t);   // hourly tick only: never slows down opening the app
   if (hour >= 7 && once_('digest', t)) digest_(t);
   if (hour >= 20 && once_('gaps', t)) gaps_(t);
   if (hour >= 6 && once_('wx_am', t)) wxAlerts_(0, 'morning');
@@ -817,6 +825,75 @@ function kidList_(a) { return a.length < 2 ? a.join('') : a.slice(0, -1).join(',
 /** "3 PM CHS pickup (Clara and Conrad): Shana, changed from Lina" */
 function runLine_(r) { return t12_(r.time) + ' ' + r.name + ' ' + RUN_WORD_[r.kind] + ' (' + kidList_(r.kids) + '): ' +
   (r.who ? r.who + (r.changed ? ', changed' + (r.usual ? ' from ' + r.usual : '') : '') : 'NO ONE SET'); }
+
+// ---------- AI assistant ----------
+var AI_TOPICS_ = { meals: 'Meals and recipes', birthdays: 'Birthdays and gift ideas (counts only)', todos: 'To-dos and bills', rides: 'School runs, activity rides and caretakers', week: 'The week ahead', house: 'House upkeep' };
+function aiSafe_(t) { try { aiPosts_(t, false); } catch (e) { console.error(e); put_('Settings', { id: 'app|ai.last', value: now_() + ' · error: ' + String(e && e.message || e).slice(0, 200) }); } }
+/** A compact, plain summary of what's coming up, limited to the chosen topics. Gift ideas themselves are never included. */
+function aiContext_(t) {
+  var topics = list_(setting_('app|ai.topics', Object.keys(AI_TOPICS_).join(', '))), on = function (k) { return topics.indexOf(k) >= 0; }, c = { today: nice_(t), topics: topics };
+  var people = rows_('People'), kids = people.filter(function (p) { return p.kind === 'kid'; }).map(function (p) { return p.name; });
+  c.family = people.map(function (p) { return p.name + (p.kind === 'kid' ? ' (kid)' : ''); });
+  if (on('meals') || on('week')) {
+    c.dinners = []; for (var i = 0; i < 8; i++) { var d = addDays_(t, i), m = get_('Menus', monday_(d) + '-' + DAYS[dow_(d)]);
+      c.dinners.push(nice_(d) + ': ' + (m ? (m.skipped === '1' ? 'skipped' : dishName_(m) || 'nothing planned') + (m.cook ? ', ' + m.cook + ' cooking' : '') + (m.away ? ', ' + m.away + ' not home' : '') : 'nothing planned')); }
+  }
+  if (on('meals')) { var st = recipeStats_();
+    c.recipes = rows_('Recipes').filter(function (r) { return r.name && r.status !== 'archived'; }).map(function (r) { var s = st[r.id] || {};
+      return r.name + ' | rating ' + (avg_(r.ratings) ? avg_(r.ratings).toFixed(1) : 'none') + ' | ' + (s.last ? 'last made ' + s.last : 'never made') + (s.n ? ', made ' + s.n + 'x' : '') + (r.pausedUntil && r.pausedUntil >= t ? ' | paused' : '') + (r.tags ? ' | #' + list_(r.tags).join(' #') : ''); }).slice(0, 60); }
+  if (on('birthdays')) { var gifts = rows_('gifts');
+    c.birthdays = birthdays_().map(function (b) { var y = Number(t.slice(0, 4)), nx = y + '-' + b.md; if (nx < t) nx = (y + 1) + '-' + b.md; return { name: b.name, date: nx }; })
+      .filter(function (b) { return b.date <= addDays_(t, 45); })
+      .map(function (b) { var n = gifts.filter(function (g) { return g.recipient === b.name; }).length, kid = kids.indexOf(b.name) >= 0;
+        return b.name + ' on ' + nice_(b.date) + (kid ? ' | gift ideas saved: ' + n : ''); }); }
+  if (on('todos')) { var open = rows_('Todos').filter(function (x) { return x.status !== 'Done'; });
+    c.todos = open.filter(function (x) { return x.due && x.due <= addDays_(t, 7); }).sort(function (a, b) { return a.due < b.due ? -1 : 1; }).slice(0, 25)
+      .map(function (x) { return x.title + ' | due ' + x.due + (x.due < t ? ' (OVERDUE)' : '') + (x.assignee ? ' | ' + x.assignee : '') + (x.amount ? ' | $' + x.amount : ''); });
+    c.openTodos = open.length; }
+  if (on('rides') || on('week')) {
+    c.days = []; for (var j = 0; j < (on('week') ? 7 : 3); j++) { var dd = addDays_(t, j), bits = [];
+      schoolRuns_(dd).forEach(function (r) { bits.push(runLine_(r)); });
+      kidOcc_(dd).forEach(function (o) { bits.push(t12_(o.start) + ' ' + o.title + ' (' + o.kids + ') drop-off ' + (o.dropoff || 'NOT SET') + ', pickup ' + (o.pickup || 'NOT SET')); });
+      rows_('Events').forEach(function (e) { if (e.date === dd) bits.push((e.start ? t12_(e.start) + ' ' : '') + e.title + (e.people ? ' (' + e.people + ')' : '')); });
+      rows_('Childcare').forEach(function (cc) { if (cc.date === dd) { var ct = get_('Caretakers', cc.confirmedId); bits.push('Caretaker ' + t12_(cc.start) + '–' + t12_(cc.end) + ': ' + (ct ? ct.name : 'NOT CONFIRMED')); } });
+      rows_('SchoolCal').forEach(function (s) { if (s.date && dd >= s.date && dd <= (s.endDate || s.date)) bits.push('School calendar: ' + s.title); });
+      c.days.push(nice_(dd) + ': ' + (bits.join('; ') || 'nothing scheduled')); } }
+  if (on('house')) c.house = rows_('HouseCards').filter(function (h) { return h.kind === 'upkeep' && h.nextDue && h.nextDue <= addDays_(t, 30); }).map(function (h) { return h.title + ' (' + (h.house || '') + ') due ' + h.nextDue; });
+  c.recentNotes = rows_('Activity').filter(function (a) { return a.type === 'ai' && a.time >= addDays_(t, -10); }).map(function (a) { return a.time.slice(0, 10) + ': ' + a.text; }).slice(-15);
+  return c;
+}
+/** Asks Claude for 0 to 3 notes and posts them to the Feed. Returns the notes (or why there are none). */
+function aiPosts_(t, manual) {
+  var key = PropertiesService.getScriptProperties().getProperty('ANTHROPIC_API_KEY');
+  if (!key) { put_('Settings', { id: 'app|ai.last', value: now_() + ' · no API key: add ANTHROPIC_API_KEY in Script properties' }); return { error: 'No API key yet. In Apps Script: Project Settings, Script properties, add ANTHROPIC_API_KEY.' }; }
+  var ctx = aiContext_(t);
+  var system = 'You are the AI assistant inside a family\'s shared home app (parents Paul and Shana, and their kids). Each morning you read a summary of the family\'s plans and write 0 to 3 short notes for the app\'s Feed.\n' +
+    'Write only notes that help: something to act on, a gap in the plan, a timely idea or a useful heads-up. If nothing is worth saying, return no notes; that is often the right answer.\n' +
+    'Each note: one or two plain sentences, under 220 characters, warm and practical, first names only, no emoji, no greeting, no sign-off. Use dates like "Thu" or "Nov 20".\n' +
+    'Do not repeat or rephrase anything in recentNotes. Stay within the listed topics. Never name or describe gift ideas; at most say how many are saved. Do not invent facts that are not in the summary.';
+  var body = { model: PropertiesService.getScriptProperties().getProperty('AI_MODEL') || 'claude-opus-5-5', max_tokens: 4000,
+    output_config: { effort: 'medium', format: { type: 'json_schema', schema: { type: 'object', additionalProperties: false, required: ['notes'],
+      properties: { notes: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['text', 'topic'],
+        properties: { text: { type: 'string' }, topic: { type: 'string', enum: Object.keys(AI_TOPICS_) } } } } } } } },
+    fallbacks: 'default',
+    system: system,
+    messages: [{ role: 'user', content: 'Family summary (JSON):\n' + JSON.stringify(ctx) + '\n\nWrite today\'s notes.' }] };
+  var res = UrlFetchApp.fetch('https://api.anthropic.com/v1/messages', { method: 'post', contentType: 'application/json', muteHttpExceptions: true,
+    headers: { 'x-api-key': key, 'anthropic-version': '2026-10-21', 'anthropic-beta': 'server-side-fallback-2026-07-01' }, payload: JSON.stringify(body) });
+  var code = res.getResponseCode(), j = {};
+  try { j = JSON.parse(res.getContentText()); } catch (e) {}
+  if (code !== 200) { var msg = 'Claude API error ' + code + (j.error && j.error.message ? ': ' + j.error.message : ''); put_('Settings', { id: 'app|ai.last', value: now_() + ' · ' + msg.slice(0, 200) }); return { error: msg }; }
+  if (j.stop_reason === 'refusal') { put_('Settings', { id: 'app|ai.last', value: now_() + ' · declined' }); return { notes: [] }; }
+  var text = (j.content || []).filter(function (b) { return b.type === 'text'; }).map(function (b) { return b.text; }).join('');
+  var notes = []; try { notes = (JSON.parse(text).notes || []).filter(function (n) { return n && n.text; }).slice(0, 3); } catch (e) { notes = []; }
+  var who = list_(setting_('app|ai.who', 'Paul'));
+  notes.forEach(function (n) {
+    log_('AI assistant', { type: 'ai', text: String(n.text).slice(0, 400), cat: 'ai', ref: n.topic });
+    who.forEach(function (p) { if (pref_(p, 'ai')) notify_(p, 'AI assistant', String(n.text).slice(0, 400)); });
+  });
+  put_('Settings', { id: 'app|ai.last', value: now_() + ' · ' + notes.length + ' note' + (notes.length === 1 ? '' : 's') + (manual ? ' (Post now)' : '') });
+  return { notes: notes };
+}
 
 function digest_(t) {
   ADULTS.forEach(function (p) {
