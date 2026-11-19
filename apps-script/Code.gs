@@ -1,6 +1,7 @@
 /**
  * Momnie Family app backend
- * Version 3.39 (2026-11-19)
+ * Version 3.40 (2026-11-19)
+ *   3.40: Cards break at sentence ends (no split after Dr., Mr.; no tiny last card); source_post can replace an earlier post.
  *   3.39: Posts from outside sources can be limited to some people (audience), for a preview before the whole family sees them.
  *   3.38: Annual events (Annuals tab): things we like to do every year, kept off the Planner.
  *   3.37: source_post says when SOURCE_KEY is missing (vs a wrong key).
@@ -416,16 +417,24 @@ function log_(who, log, t, ref) {
 
 // ---------- stacked posts ----------
 var STACK_CARD_MAX = 280;   // characters per card; longer text continues on the next card
-/** Splits text into card-sized pieces at sentence (or word) boundaries. */
+/** Splits text into card-sized pieces at sentence boundaries. A card may run a little long (up to 40% over) to finish a
+ *  sentence or to avoid a tiny last card; abbreviations such as "Dr." do not end a sentence; a single very long sentence
+ *  is cut at a word. */
 function stackSplit_(text, max) {
   max = max || STACK_CARD_MAX;
-  var t = String(text || '').replace(/\s+\n/g, '\n').trim(), out = [];
-  while (t.length > max) {
-    var cut = Math.max(t.lastIndexOf('. ', max), t.lastIndexOf('! ', max), t.lastIndexOf('? ', max), t.lastIndexOf('\n', max));
-    if (cut < max * 0.5) cut = t.lastIndexOf(' ', max);
-    if (cut < max * 0.5) cut = max - 1;
-    out.push(t.slice(0, cut + 1).trim());
-    t = t.slice(cut + 1).trim();
+  var slack = Math.round(max * 0.4), t = String(text || '').replace(/[ \t]+\n/g, '\n').trim(), out = [];
+  var ends = function (str) {
+    var r = [], m, re = /(?<!\b(?:Mr|Mrs|Ms|Dr|St|Jr|Sr|Prof|vs|etc|No))[.!?]+["'”)]*(?=\s)|\n/g;
+    while ((m = re.exec(str))) r.push(m.index + m[0].length);
+    return r;
+  };
+  while (t.length > max + slack) {
+    var e = ends(t), cut = 0, i;
+    for (i = 0; i < e.length; i++) if (e[i] <= max) cut = e[i];                                           // the last sentence end within the limit
+    if (cut < max * 0.5) for (i = 0; i < e.length; i++) if (e[i] > max && e[i] <= max + slack) { cut = e[i]; break; }   // else the first one just past it
+    if (cut < max * 0.5) { cut = t.lastIndexOf(' ', max); if (cut < max * 0.5) cut = max; }              // else a word boundary
+    out.push(t.slice(0, cut).trim());
+    t = t.slice(cut).trim();
   }
   if (t) out.push(t);
   return out;
@@ -461,7 +470,8 @@ function stackPost_(cards, o) {
 /**
  * o: { source: school id (e.g. 'chs') or a plain name, key: unique id for this update (e.g. 'wir|Clara|2026-11-06'),
  *      title, intro, cards: [{ title, text }], time (optional, YYYY-MM-DDTHH:MM:SS),
- *      audience (optional, e.g. 'Paul': only those people see it, for a preview; blank = the whole family) }
+ *      audience (optional, e.g. 'Paul': only those people see it, for a preview; blank = the whole family),
+ *      replace (optional): if this key was posted before, delete that post and post this one instead }
  * The same key is only ever posted once (it is kept as the post's subject). Returns { stack, ids } or { skipped }.
  */
 function sourcePost_(o) {
@@ -469,7 +479,9 @@ function sourcePost_(o) {
   var key = txt_(o.key, 120);
   if (!key) return { error: 'A key is needed so the same update is never posted twice.' };
   var subj = 'src|' + key;
-  if (rows_('Activity').some(function (a) { return a.subject === subj; })) return { skipped: true, key: key };
+  var old = rows_('Activity').filter(function (a) { return a.subject === subj; })[0];
+  if (old && !o.replace) return { skipped: true, key: key };
+  if (old) rows_('Activity').filter(function (a) { return a.stack === old.stack; }).forEach(function (a) { del_('Activity', a.id); });   // replace the earlier post
   var school = get_('Schools', String(o.source || '')), who = school ? school.name : txt_(o.source, 60) || 'Outside source';
   var id = 'src' + Utilities.getUuid().replace(/-/g, '').slice(0, 10), t = isTime_(o.time) ? o.time : now_(), ids = [], n = 0;
   var cards = [{ title: o.title, text: o.intro }].concat(o.cards || []);
