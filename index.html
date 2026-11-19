@@ -353,9 +353,9 @@
 // Momnie Family app v6.0
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'], DAYN = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'], ADULTS = ['Paul', 'Shana'];
 // Shown at the bottom of Home. Bump it together with VERSION in sw.js on every release.
-const APP_VERSION = '15.0 · Nov 18, 2026';
+const APP_VERSION = '15.1 · Nov 18, 2026';
 const TABLES = ['People', 'Schools', 'SchoolCal', 'Activities', 'Overrides', 'Events', 'Caretakers', 'Childcare', 'Birthdays', 'Todos', 'TodoTypes', 'Recipes', 'DinnerRules', 'Weeks', 'Menus',
-  'Groceries', 'GroceryList', 'HouseCards', 'Houses', 'WeatherRules', 'Quotes', 'Memories', 'Updates', 'Messages', 'Activity', 'Comments', 'Reactions', 'Links', 'Settings', 'Photos', 'gifts', 'ai_rules', 'ai_requests', 'notes', 'daily_items', 'daily_completions'];
+  'Groceries', 'GroceryList', 'HouseCards', 'Houses', 'WeatherRules', 'Quotes', 'Memories', 'Updates', 'Messages', 'Activity', 'Comments', 'Reactions', 'Links', 'Settings', 'Photos', 'gifts', 'ai_rules', 'ai_requests', 'notes', 'places', 'daily_items', 'daily_completions'];
 const CAT = { School: '#3f6fb5', Kids: '#4f7cc2', Work: '#64748b', Family: '#5b6fa8', Dinner: '#b08a4f', Caretaker: '#3e9aa6', Shared: '#94a3b8', Birthday: '#c9806a' }, SCHOOL_C = ['#5a72b8', '#7a8597', '#4a6fb0'];
 // Muted person colors (Outlook-style): Clara pink, Conrad green, Charlie blue, Shana purple, Paul grey.
 const PCOL = { Clara: '#c8578f', Conrad: '#3d9a62', Charlie: '#3a7fd5', Shana: '#8b62c7', Paul: '#6b7280' }, PCOL_X = ['#b07a3c', '#3e9aa6', '#a65f5f'];
@@ -435,6 +435,40 @@ function paintSeen() {
   document.querySelectorAll('[data-seen-txt]').forEach(el => { const t = seenTxt(el.dataset.seenTxt); el.textContent = t ? ' · ' + t : ''; });
 }
 // ----- People pages and @mentions -----
+// ----- Known locations and "last seen at" -----
+// Each person can share where they are when they open the app (Settings <name>|shareLoc = 1). Only the latest spot is kept,
+// in Settings person|<id>|loc = {lat, lon, acc, time}. It is matched to the family's known places (the places tab).
+const kmBetween = (a, b, c, d) => { const R = 6371, r = x => x * Math.PI / 180, dLat = r(c - a), dLon = r(d - b), h = Math.sin(dLat / 2) ** 2 + Math.cos(r(a)) * Math.cos(r(c)) * Math.sin(dLon / 2) ** 2; return 2 * R * Math.asin(Math.sqrt(h)); };
+const lastLoc = p => { const r = byId('Settings', 'person|' + p.id + '|loc'); try { const o = JSON.parse((r && r.value) || 'null'); return o && o.lat && o.time ? o : null; } catch (e) { return null; } };
+const sharesLoc = p => ((byId('Settings', p.name + '|shareLoc') || {}).value || '') === '1';
+const locAgo = t => { const m = Math.round((Date.now() - new Date(t)) / 60000); if (isNaN(m)) return ''; if (m < 2) return 'just now'; if (m < 60) return m + ' min ago'; if (m < 1440) return Math.floor(m / 60) + ' hr ago'; const d = Math.floor(m / 1440); return d === 1 ? 'yesterday' : d + ' days ago'; };
+function placeOf(loc) {   // the known place someone is at, or the nearest one and how far
+  const ps = S.places.filter(x => x.lat && x.lon).map(x => ({ x, km: kmBetween(+loc.lat, +loc.lon, +x.lat, +x.lon) })).sort((a, b) => a.km - b.km);
+  if (!ps.length) return { at: null, near: null };
+  const slack = Math.min(+loc.acc || 0, 300) / 1000, n = ps[0];
+  return n.km <= (+n.x.radius || 200) / 1000 + slack ? { at: n.x, near: n } : { at: null, near: n };
+}
+const miTxt = km => { const mi = km * 0.621; return mi < 0.1 ? 'a few hundred ft' : mi < 10 ? mi.toFixed(1) + ' mi' : Math.round(mi) + ' mi'; };
+function locTxt(p) { if (!sharesLoc(p)) return ''; const l = lastLoc(p); if (!l) return '';
+  if (Date.now() - new Date(l.time) > 3 * 864e5) return '';   // older than 3 days is not worth showing
+  const w = placeOf(l), where = w.at ? 'Last seen at ' + w.at.name : w.near ? `Last seen ${miTxt(w.near.km)} from ${w.near.x.name}` : 'Location shared';
+  return `${where} · ${locAgo(l.time)}`; }
+const locLine = p => { const t = locTxt(p); return t ? `<div class="small muted" style="margin-top:2px">${ic('phone', 13)} ${esc(t)}</div>` : ''; };
+// Called when the app opens or comes back: saves this phone's spot if sharing is on and it moved or 10 minutes passed.
+let LOCBUSY = false;
+function shareLoc(force) {
+  const me = personOf(ME); if (!me || !sharesLoc(me) || !navigator.geolocation || LOCBUSY) return;
+  LOCBUSY = true;
+  navigator.geolocation.getCurrentPosition(pos => { LOCBUSY = false;
+    const lat = +pos.coords.latitude.toFixed(5), lon = +pos.coords.longitude.toFixed(5), acc = Math.round(pos.coords.accuracy || 0), old = lastLoc(me);
+    const moved = !old || kmBetween(+old.lat, +old.lon, lat, lon) > 0.08, stale = !old || Date.now() - new Date(old.time) > 10 * 60000;
+    if (force || moved || stale) write({ t: 'Settings', row: { id: 'person|' + me.id + '|loc', value: JSON.stringify({ lat, lon, acc, time: stamp() }) } }); },
+  () => { LOCBUSY = false; }, { enableHighAccuracy: true, maximumAge: 30000, timeout: 12000 });
+}
+// Coordinates from "42.33, -71.16" or a full Google Maps link (…/@42.33,-71.16,… or …!3d42.33!4d-71.16 or ?q=42.33,-71.16).
+function coordsFrom(text) { const t = String(text || '');
+  const m = t.match(/!3d(-?\d+\.\d+)!4d(-?\d+\.\d+)/) || t.match(/@(-?\d+\.\d+),\s*(-?\d+\.\d+)/) || t.match(/[?&](?:q|ll|query)=(-?\d+\.\d+),\s*(-?\d+\.\d+)/) || t.match(/^\s*(-?\d+\.\d+)\s*,\s*(-?\d+\.\d+)\s*$/);
+  if (!m) return null; const lat = +m[1], lon = +m[2]; return Math.abs(lat) <= 90 && Math.abs(lon) <= 180 ? { lat, lon } : null; }
 const personOf = name => S.People.find(p => p.name.toLowerCase() === String(name || '').toLowerCase());
 // "@Shana" or "@clara's" tags that person. Longer names are tried first; "@Clarabelle" does not match "Clara".
 const mentionRe = () => S.People.length ? new RegExp('@(' + S.People.map(p => p.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).sort((a, b) => b.length - a.length).join('|') + ')(?![A-Za-z0-9_])', 'gi') : null;
@@ -1160,6 +1194,9 @@ const FORMS = {
   Birthdays: [F('name', 'Name'), F('date', 'Birthday', 'date'), F('notes', 'Notes', 'area')],
   HouseCards: [F('house', 'House', 'sel', ['Boston', 'Cape']), F('kind', 'Kind', 'sel', [['info', 'Info (reference)'], ['upkeep', 'Upkeep (repeats)']], { re: 1 }), F('title', 'Title', 'text', null, { ph: 'e.g. Replace furnace filters' }),
     F('body', 'Details (which ones, where to buy, how)', 'area'), F('link', 'Link'), F('everyMonths', 'Repeats every __ months', 'num', null, { show: x => x.kind === 'upkeep' }), F('nextDue', 'Next due', 'date', null, { show: x => x.kind === 'upkeep' })],
+  places: [F('name', 'Name', 'text', null, { ph: 'e.g. Home, Paul\'s work, CHS' }), F('_here', 'Use where I am right now', 'chk', null, { re: 1 }),
+    F('_link', 'Or paste a Google Maps link or coordinates', 'text', null, { show: x => x._here !== '1', ph: 'e.g. 42.3318, -71.1662', hint: 'In Google Maps, open the place and copy the address-bar link (the long one), or long-press the spot and copy the numbers.' }),
+    F('radius', 'Counts as there within', 'sel', [['100', '100 m (one building)'], ['200', '200 m'], ['500', '500 m (a campus)'], ['1000', '1 km']])],
   Houses: [F('name', 'Name'), F('lat', 'Latitude', 'num'), F('lon', 'Longitude', 'num'), F('_here', 'Set to where I am right now', 'chk')],
   WeatherRules: [F('metric', 'If', 'sel', [['rain', 'Chance of rain (%)'], ['high', 'High temperature (°F)'], ['low', 'Low temperature (°F)'], ['uv', 'UV index'], ['snow', 'Snowfall (inches)']]), F('op', 'is', 'sel', [['>', 'above'], ['<', 'below']]),
     F('threshold', 'this number', 'num'), F('message', 'Show this reminder'), F('when', 'When', 'sel', [['night', 'From the evening before'], ['morning', 'The morning of']]), F('push', 'Also send a notification', 'chk'), F('urgent', 'Urgent (ignores quiet hours)', 'chk'), F('enabled', 'Turned on', 'chk')],
@@ -1293,6 +1330,15 @@ const SAVE = {
     return write(ops,
       { notify: v.id ? 'off' : mode === 'urgent' ? 'urgent' : other.length ? 'on' : mode || 'off' });
   },
+  async places(v) {
+    need(v.name && v.name.trim(), 'Give the place a name.');
+    let c = null;
+    if (v._here === '1') { const pos = await new Promise((res, rej) => navigator.geolocation ? navigator.geolocation.getCurrentPosition(res, () => rej(new Error("Couldn't get your location. Check that location is allowed for this app.")), { enableHighAccuracy: true, timeout: 12000 }) : rej(new Error('Location is not available.')));
+      c = { lat: +pos.coords.latitude.toFixed(5), lon: +pos.coords.longitude.toFixed(5) }; }
+    else if (v._link) { c = coordsFrom(v._link); need(c, "That link doesn't include the place's coordinates. Paste the long link from the address bar, or numbers like 42.33, -71.16."); }
+    need(c || (v.lat && v.lon), 'Tap "Use where I am right now", or paste a link or coordinates.');
+    const row = { id: v.id || nid(), name: v.name.trim(), radius: v.radius || '200' }; if (c) { row.lat = String(c.lat); row.lon = String(c.lon); }
+    return write({ t: 'places', row }); },
   async Houses(v) {
     if (v._here === '1') { const p = await new Promise((res, rej) => navigator.geolocation ? navigator.geolocation.getCurrentPosition(res, () => rej(new Error("Couldn't get your location.")), { timeout: 10000 }) : rej(new Error('Location is not available.'))); v.lat = p.coords.latitude.toFixed(3); v.lon = p.coords.longitude.toFixed(3); }
     need(v.name, 'Name the house.'); return write({ t: 'Houses', row: Object.assign({}, v, { id: v.id || nid() }) });
@@ -1304,7 +1350,7 @@ async function saveRow(t, v) {
   return write({ t, row: Object.assign({}, v, { id: v.id || nid() }) });
 }
 const DEFAULTS = { Todos: () => ({ type: 'task', assignee: '' }), Events: () => ({ category: 'Family', date: TODAY }), Childcare: () => ({ task: 'babysit', date: TODAY, start: '18:00', end: '22:00', roster: st('house', 'boston') === 'cape' ? 'Cape' : 'Boston' }),
-  WeatherRules: () => ({ enabled: '1', op: '>', when: 'night' }), HouseCards: () => ({ kind: 'info', house: 'Boston' }), People: () => ({ kind: 'kid' }), SchoolCal: () => ({ kind: 'event', date: TODAY }), Caretakers: () => ({ roster: 'Boston' }) };
+  WeatherRules: () => ({ enabled: '1', op: '>', when: 'night' }), places: () => ({ radius: '200' }), HouseCards: () => ({ kind: 'info', house: 'Boston' }), People: () => ({ kind: 'kid' }), SchoolCal: () => ({ kind: 'event', date: TODAY }), Caretakers: () => ({ roster: 'Boston' }) };
 function editForm(t, row, extra) {
   const isNew = !row || !row.id, v = Object.assign(isNew && DEFAULTS[t] ? DEFAULTS[t]() : {}, row || {}, extra || {});
   if (t === 'Activities' && !isNew) { const g = actGroup(row); v._grp = g.map(x => x.id); v._slots = g.flatMap(x => list(x.days).map(dd => ({ day: dd, start: x.start, end: x.end }))).sort((a, b) => DAYS.indexOf(a.day) - DAYS.indexOf(b.day)); }
@@ -1364,6 +1410,7 @@ function genericCard(r, d, t) {
     if (f.t === 'date') val = val.length >= 10 ? fmtDay(val) : val; if (f.t === 'time') val = fmtT(val); return f.k === 'link' || f.k === 'where' ? kvh(f.l, linkOr(val)) : kv(f.l, val); }).join('');
 }
 const CARD = {
+  places(r) { return `<h2>${esc(r.name)}</h2>` + kv('Counts as there within', (+r.radius || 200) + ' m') + kvh('Where', r.lat && r.lon ? `<a href="https://maps.google.com/?q=${esc(r.lat)},${esc(r.lon)}" target="_blank" rel="noopener">${esc((+r.lat).toFixed(4) + ', ' + (+r.lon).toFixed(4))} · open in Maps</a>` : 'Not set') + std(); },
   WeatherRules(r) { return `<h2>${esc(r.message || 'Weather rule')}</h2>` + kv('Rule', wxRuleTxt(r)) + kv('Notification', r.push === '1' ? (r.urgent === '1' ? 'Yes, urgent' : 'Yes') : 'No, it shows in the Today card') + kv('On', r.enabled === '0' ? 'Off' : 'On') + std(); },
   gifts(g) { if (!giftSeen(g)) return '<h2>Gift idea</h2><div class="empty">This one is a surprise.</div>'; const own = g.recipient === ME, img = giftPhoto(g, 1200);
     return (img ? `<img class="phbig" style="margin-top:28px;max-height:280px;object-fit:cover" src="${esc(img)}" alt="">` : '') + `<h2>${esc(g.name)}</h2>` +
@@ -1484,7 +1531,7 @@ function personPage(p) {
   const box = (title, body, more) => body ? `<div class="box pbox"><div class="boxh row"><span>${title}</span>${more || ''}</div>${body}</div>` : '';
   const link = (a, v, l) => `<button class="lnk" data-a="${a}" data-v="${esc(v)}">${l}</button>`;
   const head = `<div class="pad"><button class="lnk back" data-a="personBack">${ic('left', 18)}Back</button></div>
-    <div class="box pbox phero"><div class="phead">${avatar(p.name)}<div class="grow"><div class="pname">${esc(p.name)}</div><div class="small muted">${kid ? 'Kid' : 'Parent'}${age !== null ? ' · ' + age + ' years old' : ''}${!me && seenTxt(p.name) ? ' · ' + seenTxt(p.name) : ''}</div></div>
+    <div class="box pbox phero"><div class="phead">${avatar(p.name)}<div class="grow"><div class="pname">${esc(p.name)}</div><div class="small muted">${kid ? 'Kid' : 'Parent'}${age !== null ? ' · ' + age + ' years old' : ''}${!me && seenTxt(p.name) ? ' · ' + seenTxt(p.name) : ''}</div>${locLine(p)}</div>
       <button class="icon-btn" data-a="personEdit" data-v="${p.id}" aria-label="Edit ${esc(p.name)}">${ic('pen', 19)}</button></div>
       ${flagLines(p)}<div class="pnow"><div class="lbl">Right now</div><div style="font-size:16px;font-weight:600">${esc(st.now)}</div>${st.next ? `<div class="small muted">${ic('clock', 13)} Next: ${esc(st.next)}</div>` : ''}</div></div>
     <div class="ptabs" role="tablist">${PTABS.map(([k, l]) => `<button role="tab" aria-selected="${PTAB === k}" class="${PTAB === k ? 'on' : ''}" data-a="ptab" data-v="${k}">${l}${k === 'todos' && open.length ? `<i class="${late.length ? 'bad' : ''}">${open.length}</i>` : k === 'mentions' && ment.length ? `<i>${ment.length}</i>` : ''}</button>`).join('')}</div>`;
@@ -1574,6 +1621,13 @@ function vHH() {
   if (HH === 'Activities') return back + (actGroups().map(g => { const a = g[0];
       return hhCard('Activities', a.id, a.name, [esc(joinNames(list(a.kids))), esc(schedTxt(g)), a.kids && (a.dropoff || a.pickup) ? rideHTML(a) : '', esc([a.location, a.until ? 'until ' + fmtDay(a.until) : ''].filter(Boolean).join(' · '))], '', 'act:' + a.id); }).join('') || '<div class="empty">No activities yet.</div>') +
       `<div style="height:90px"></div><button class="fab" data-a="add" data-v="Activities" aria-label="Add an activity">${ic('plus', 20)}Activity</button>`;
+  if (HH === 'places') { const me = personOf(ME), on = me && sharesLoc(me), adults = S.People.filter(x => x.kind !== 'kid');
+    return back + `<div class="box pbox"><label class="check-row" style="margin-top:0"><input type="checkbox" data-c="shareLocSet" ${on ? 'checked' : ''}> Share where I am when I open the app</label>
+        <div class="small muted" style="margin-top:6px">Only when the app is open: your phone notes your spot, and the family sees it as “Last seen at School · 20 min ago”. Just the latest spot is kept. Turning this off removes it.</div>
+        <div class="small muted" style="margin-top:8px">${adults.map(x => `${esc(x.name)}: ${sharesLoc(x) ? (locTxt(x) || 'sharing, nothing yet') : 'not sharing'}`).join('<br>')}</div></div>` +
+      (S.places.slice().sort((a, b) => a.name.localeCompare(b.name)).map(x => { const here = me && lastLoc(me), d = here ? kmBetween(+here.lat, +here.lon, +x.lat, +x.lon) : null;
+        return acard(`data-a="open" data-t="places" data-id="${esc(x.id)}"`, esc(x.name), [`Counts as there within ${(+x.radius || 200) >= 1000 ? (+x.radius / 1000) + ' km' : (+x.radius || 200) + ' m'}`, d !== null ? `${miTxt(d)} from where you last opened the app` : '', x.added_by ? 'Added by ' + esc(x.added_by) : '']); }).join('') || '<div class="empty">No known locations yet. Add Home, work, school…</div>') +
+      `<div style="height:90px"></div><button class="fab" data-a="add" data-v="places" aria-label="Add a known location">${ic('plus', 20)}Location</button>`; }
   if (HH === 'Caretakers') { const up = S.Childcare.filter(c => c.date >= TODAY && c.confirmedId).sort((a, b) => (a.date + a.start).localeCompare(b.date + b.start));
     return back + (S.Caretakers.slice().sort((a, b) => a.name.localeCompare(b.name)).map(k => { const nx = up.find(c => c.confirmedId === k.id), pay = k.unpaid === '1' || k.pay === 'unpaid' ? 'Unpaid' : k.pay === 'weekly' ? `Paid weekly${k.payDay ? ' on ' + k.payDay : ''}${k.weekly ? ' · $' + k.weekly : ''}` : k.rate ? '$' + k.rate + '/hr' : '';
       return acard(`data-a="open" data-t="Caretakers" data-id="${esc(k.id)}"`, esc(k.name), [esc([k.relationship, list(k.roster).join(' and ')].filter(Boolean).join(' · ')), esc([pay, k.phone].filter(Boolean).join(' · ')), nx ? `${ic('clock', 13)} Next: ${esc(fmtDay(nx.date))}, ${esc(fmtT(nx.start))}` : ''], k.drive === '1' ? 'Drives' : ''); }).join('') || '<div class="empty">No caretakers yet.</div>') +
@@ -1769,6 +1823,9 @@ A.gcalHide = async (v, el) => { const c = ctx(el), r = CAL.find(x => x.id === c.
   A.close(null, el); CAL = CAL.filter(x => r.recurring && r.series ? x.series !== r.series : x.id !== r.id); render();
   try { await api('gcal_hide', { gcalId: r.id, series: r.recurring ? '1' : '', title: r.title }); toast('Hidden from the planner'); } catch (e) { toast(e.message); load(); } };
 A.flagInfo = v => toast(v);
+A.shareLocSet = on => { const me = personOf(ME); if (!me) return;
+  if (on === '1') { write({ t: 'Settings', row: { id: ME + '|shareLoc', value: '1' } }); setTimeout(() => shareLoc(true), 50); }
+  else write([{ t: 'Settings', row: { id: ME + '|shareLoc', value: '' } }, { t: 'Settings', row: { id: 'person|' + me.id + '|loc', value: '' } }]); };   // turning it off forgets the last spot
 A.gcalUnhide = async id => { try { await api('gcal_unhide', { id }); toast('Back in the planner'); await load(); } catch (e) { toast(e.message); } };
 A.resolve = (v, el) => { const m = byId('Messages', ctx(el).id), res = m.resolved !== '1'; write([{ t: 'Messages', row: { id: m.id, resolved: res ? '1' : '', resolvedBy: res ? ME : '' } }, sys('Messages', m.id, res ? 'resolved this message' : 'reopened this message')]); };
 A.msgTodo = (v, el) => { const m = byId('Messages', ctx(el).id); editForm('Todos', null, { title: m.text.slice(0, 120), _link: ['Messages', m.id] }); };
@@ -1781,7 +1838,7 @@ A.pause = (v, el) => { const r = byId('Recipes', ctx(el).id); if (r.pausedUntil 
 A.archive = (v, el) => { const r = byId('Recipes', ctx(el).id); write({ t: 'Recipes', row: { id: r.id, status: r.status === 'archived' ? '' : 'archived' } }); };
 // ---------- views ----------
 const TITLES = { feed: 'Feed', planner: 'Planner', meals: 'Meals', todo: 'To-Do', home: 'Home' };
-const HH_TITLES = { Schools: 'Schools', Activities: 'Activities', houses: 'House', Caretakers: 'Caretakers', birthdays: 'Birthdays', WeatherRules: 'Weather rules', Groceries: 'Grocery library', TodoTypes: 'To-do types' };
+const HH_TITLES = { Schools: 'Schools', Activities: 'Activities', houses: 'House', places: 'Known locations', Caretakers: 'Caretakers', birthdays: 'Birthdays', WeatherRules: 'Weather rules', Groceries: 'Grocery library', TodoTypes: 'To-do types' };
 let HH = '';
 function render() {
   const pv = view === 'person' && byId('People', PERSON);
@@ -2618,7 +2675,7 @@ A.dlEdit = id => { const it = byId('daily_items', id); if (it) dailyForm(it); };
 // ----- Home -----
 const SETTINGS = [['Caretakers', 'care', 'Caretakers', 'Boston and Cape rosters, rates, driving'], ['birthdays', 'cake', 'Birthdays', 'Friends and family'], ['WeatherRules', 'weather', 'Weather rules', 'If-then reminders based on the forecast'],
   ['Groceries', 'cart', 'Grocery library', 'Saved items with brands and notes'], ['TodoTypes', 'tag', 'To-do types', 'Types and who they go to by default'], ['memories', 'quote', 'Quotes and memories', 'The morning splash screen'],
-  ['hiddencal', 'x', 'Hidden calendar entries', 'Calendar items you hid from the planner'], ['settings', 'bell', 'Notifications and Feed', 'Push alerts, bundling, quiet hours, what shows in your Feed'], ['device', 'phone', 'This phone', 'Your personal link and sign-in']];
+  ['hiddencal', 'x', 'Hidden calendar entries', 'Calendar items you hid from the planner'], ['places', 'pin', 'Known locations', 'Home, work, school… for "last seen at"'], ['settings', 'bell', 'Notifications and Feed', 'Push alerts, bundling, quiet hours, what shows in your Feed'], ['device', 'phone', 'This phone', 'Your personal link and sign-in']];
 // Muted section colors for the Home icons.
 const HC = { gift: '#b0567a', users: '#5b6fa8', school: '#4a7fb5', activity: '#3d9a62', house: '#b07a3c', book: '#a65f5f', gear: '#6b7280', care: '#3e9aa6', cake: '#c8578f', weather: '#4f8fbf', cart: '#8a7a3d', tag: '#7a6aa8', quote: '#9a6b8a', bell: '#b08a4f', phone: '#64748b' };
 const hrow = (a, v, icon, l, sub) => `<div class="li" data-a="${a}" data-v="${v}"><div class="hicon" style="--hc:${HC[icon] || 'var(--accent)'}">${ic(icon)}</div><div class="grow"><div class="ti">${l}</div>${sub ? `<div class="small muted">${sub}</div>` : ''}</div><span class="chev">›</span></div>`;
@@ -2629,7 +2686,7 @@ function vHome() {
   return `<div class="pad small muted b" style="padding-top:12px">${fmtLong(TODAY).toUpperCase()} · ${fmtT(nowHM())}</div>` +
     `<div class="box"><div class="boxh row" style="justify-content:space-between;align-items:center"><span>Family</span></div>` + order.map(p => { const x = statusOf(p);
       return `<div class="li" style="align-items:flex-start" data-a="open" data-t="People" data-id="${p.id}">${avatar(p.name)}<div class="grow"><div class="row"><span class="ti">${esc(p.name)}${ADULTS.includes(p.name) && p.name !== ME ? `<span class="small muted" style="font-weight:500" data-seen-txt="${esc(p.name)}">${seenTxt(p.name) ? ' · ' + seenTxt(p.name) : ''}</span>` : ''}</span>${x.warn ? '<span class="chip bad">Ride not set</span>' : ''}</div>
-        <div style="font-size:15px;margin-top:2px">${x.busy ? ic('pin', 15) + ' ' : ''}${esc(x.now)}</div>${x.next ? `<div class="small muted" style="margin-top:2px">${ic('clock', 13)} Next: ${esc(x.next)}</div>` : ''}${flagsHTML(p)}</div></div>`; }).join('') + `</div>` +
+        <div style="font-size:15px;margin-top:2px">${x.busy ? ic('pin', 15) + ' ' : ''}${esc(x.now)}</div>${x.next ? `<div class="small muted" style="margin-top:2px">${ic('clock', 13)} Next: ${esc(x.next)}</div>` : ''}${locLine(p)}${flagsHTML(p)}</div></div>`; }).join('') + `</div>` +
     (care.length ? `<div class="sect">Caretakers today</div>` + care.map(c => `<div class="li" data-a="open" data-t="Childcare" data-id="${c.id}"><div class="hicon" style="--hc:${HC.care}">${ic('care')}</div><div class="grow"><div class="ti">${esc(c.confirmedId ? careName(c.confirmedId) : 'Not confirmed yet')}</div><div class="small ${c.confirmedId ? 'muted' : 'red'}">${fmtT(c.start)}–${fmtT(c.end)} · ${esc(careTitle(c))}</div></div><span class="chev">›</span></div>`).join('') : '') +
     `<div class="sect">Household</div>` +
     hrow('homeOpen', 'Schools', 'school', 'Schools', S.Schools.map(x => x.short || x.name).join(', ') || 'Hours, contacts and school calendars') +
@@ -2797,7 +2854,7 @@ async function boot() {
   const cached = readCache();
   if (cached) { render(); $('sync').classList.add('on'); }
   try { await load(); } catch (e) { if (!PIN) return; if (cached) toast("Couldn't refresh. Showing the last copy."); else $('view').innerHTML = `<div class="empty">${esc(e.message)}<br><br><button class="btn" data-a="reload">Try again</button></div>`; $('sync').classList.remove('on'); return; }
-  $('sync').classList.remove('on'); splash(); geo(); pushInit();
+  $('sync').classList.remove('on'); splash(); geo(); shareLoc(); pushInit();
 }
 A.reload = async () => { try { await load(); toast('Up to date'); } catch (e) { toast(e.message); } };
 // While the app is open, check in every minute so the other person sees you as active (and you see them).
@@ -2817,7 +2874,8 @@ A.mentionPick = n => { const el = mentionEl; if (!el) return; const pos = el.sel
   el.value = pre + el.value.slice(pos); el.focus(); el.setSelectionRange(pre.length, pre.length); el.dispatchEvent(new Event('input', { bubbles: true })); };
 document.addEventListener('visibilitychange', () => {
   if (document.hidden) return;
-  if (ME && Date.now() - lastLoad > 60000 && !sheets.length) load().catch(() => {}); });
+  if (ME && Date.now() - lastLoad > 60000 && !sheets.length) load().catch(() => {});
+  if (ME) shareLoc(); });
 // swipe an upcoming dinner: right = change it (Random or Select), left = clear it (no meal set)
 (function () { let x0 = null, y0 = 0, el = null;
   // While the finger moves the card follows it directly (no transition); it eases back on release.

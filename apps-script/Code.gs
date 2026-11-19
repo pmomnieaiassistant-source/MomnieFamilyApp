@@ -1,6 +1,7 @@
 /**
  * Momnie Family app backend
- * Version 3.28 (2026-11-18)
+ * Version 3.29 (2026-11-19)
+ *   3.29: Known locations (places tab) for "last seen at".
  *   3.28: Work location wording is "in office" and "working from home".
  *   3.27: Activity.subject, so the Feed shows only the newest post when something changes back and forth.
  *   3.26: A kid can have days they don't go to school (kid|<id>|schedule {"Mon":{"off":"1"}}): no runs or ride reminders those days.
@@ -105,6 +106,7 @@ var T = {
   ai_rules: 'id,text,audience,area,active,created_by,created_at',   // plain-English rules the assistant follows
   ai_requests: 'id,time,who,text,source,status,summary,question,answer,refs',   // everything asked of the Assistant, and what it made
   notes: 'id,time,who,text',   // shared notes at the bottom of Home
+  places: 'id,name,lat,lon,radius,added_by,created_at',   // known locations (Home, work, school) for "last seen at"
   daily_items: 'id,title,days,time_of_day,for_person,visible_to,created_by,active',
   daily_completions: 'id,item_id,date,completed_by,completed_at',   // id = item_id|date, so each item is checked once per day
   ideas: 'id,time,who,text'   // feedback sent from the Home screen; read it in the Sheet
