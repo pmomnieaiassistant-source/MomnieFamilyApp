@@ -32,10 +32,11 @@ jobs:
           [ -z "$SCRIPT_ID" ] && ready=false
           [ -z "$DEPLOY_ID" ] && ready=false
           [ ! -f apps-script/appsscript.json ] && ready=false
+          [ ! -f apps-script/Push.js ] && ready=false
           if [ "$ready" = true ]; then
             echo "ready=true" >> "$GITHUB_OUTPUT"
           else
-            echo "::notice::Apps Script deploy is not set up yet (secrets or apps-script/appsscript.json missing). Skipping."
+            echo "::notice::Apps Script deploy is not set up yet (secrets, apps-script/appsscript.json or apps-script/Push.js missing). Skipping."
             echo "ready=false" >> "$GITHUB_OUTPUT"
           fi
 
