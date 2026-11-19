@@ -1,0 +1,75 @@
+name: Deploy Apps Script
+
+# When Code.gs changes on main, push it to the Google Apps Script project
+# and update the existing web app deployment to a new version (same URL).
+# Does nothing until the secrets below are set (see docs/APPS-SCRIPT-DEPLOY.md).
+
+on:
+  push:
+    branches: [main]
+    paths: ['apps-script/**', '.github/workflows/deploy-apps-script.yml']
+  workflow_dispatch:
+
+concurrency:
+  group: apps-script-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check setup
+        id: check
+        env:
+          CLASP_RC: ${{ secrets.CLASP_RC }}
+          SCRIPT_ID: ${{ secrets.APPS_SCRIPT_ID }}
+          DEPLOY_ID: ${{ secrets.APPS_SCRIPT_DEPLOYMENT_ID }}
+        run: |
+          ready=true
+          [ -z "$CLASP_RC" ] && ready=false
+          [ -z "$SCRIPT_ID" ] && ready=false
+          [ -z "$DEPLOY_ID" ] && ready=false
+          [ ! -f apps-script/appsscript.json ] && ready=false
+          if [ "$ready" = true ]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::Apps Script deploy is not set up yet (secrets or apps-script/appsscript.json missing). Skipping."
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/setup-node@v4
+        if: steps.check.outputs.ready == 'true'
+        with:
+          node-version: '22'
+
+      - name: Install clasp
+        if: steps.check.outputs.ready == 'true'
+        run: npm install -g @google/clasp@2
+
+      - name: Sign in to Google and point at the project
+        if: steps.check.outputs.ready == 'true'
+        env:
+          CLASP_RC: ${{ secrets.CLASP_RC }}
+          SCRIPT_ID: ${{ secrets.APPS_SCRIPT_ID }}
+        run: |
+          umask 077
+          printf '%s' "$CLASP_RC" > "$HOME/.clasprc.json"
+          printf '{"scriptId":"%s","rootDir":"."}\n' "$SCRIPT_ID" > apps-script/.clasp.json
+
+      - name: Push code to Apps Script
+        if: steps.check.outputs.ready == 'true'
+        working-directory: apps-script
+        run: clasp push --force
+
+      - name: New version of the web app deployment
+        if: steps.check.outputs.ready == 'true'
+        working-directory: apps-script
+        env:
+          DEPLOY_ID: ${{ secrets.APPS_SCRIPT_DEPLOYMENT_ID }}
+        run: clasp deploy -i "$DEPLOY_ID" -d "GitHub ${GITHUB_SHA::7}"
+
+      - name: Clean up credentials
+        if: always()
+        run: rm -f "$HOME/.clasprc.json"
