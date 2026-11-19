@@ -95,7 +95,7 @@ var T = {
   Caretakers: 'id,name,relationship,phone,roster,birthday,drive,rate,unpaid,notes,pay,payDay,weekly',
   Childcare: 'id,date,start,end,task,place,kids,roster,notes,asks,confirmedId,payTodoId,paidAmount,paidOn,createdBy',
   Birthdays: 'id,name,date,notes',
-  Annuals: 'id,name,from,to,when,where,link,notes,years,remind',   // annual events: things we like to do each year (month and day repeat); years = the years we went
+  Annuals: 'id,name,from,to,when,where,link,notes,years,remind',   // annual traditions: things we like to do each year (month and day repeat); years = the years we went
   Todos: 'id,created,type,title,amount,where,due,status,assignee,addedBy,doneOn,doneBy,notes,house,kid,repeat,link,source',
   TodoTypes: 'id,name,emoji,assignee,builtin,fields',
   Recipes: 'id,name,description,unique,pantry,steps,tags,link,ratings,status,pausedUntil,addedBy,created',
