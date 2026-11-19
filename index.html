@@ -162,6 +162,36 @@
   header { border-bottom:0; }
   .btn { background:var(--accent); color:var(--onacc); } .btn.gray { background:var(--soft); color:var(--text); } .btn.dark { background:var(--text); color:var(--bg); }
   .btn .ic, .chip .ic, .alert .ic { vertical-align:-3px; }
+  /* Stacked posts: several posts shown as one pile of cards. The front card is a normal post; the next two peek out
+     underneath; cards already seen have slid off to the left. Swipe (or the arrows) to shuffle through. */
+  .stk { position:relative; margin:0 12px 12px; }
+  .stkdeck { display:grid; padding-bottom:16px; touch-action:pan-y; outline:none; }
+  .stkdeck:focus-visible .sc[data-d="0"] .scin { box-shadow:0 0 0 3px color-mix(in srgb, var(--accent) 45%, transparent); }
+  .stk.stkdrag .stkdeck { user-select:none; -webkit-user-select:none; }
+  .stkdeck img { -webkit-user-drag:none; }
+  .sc { grid-area:1 / 1; display:flex; min-width:0; transform-origin:50% 100%; transition:transform .32s cubic-bezier(.2,.8,.25,1), opacity .26s ease; }
+  .scin { flex:1; min-width:0; border:1px solid var(--line); border-radius:var(--r-card, 20px); background:var(--card); box-shadow:var(--shadow); overflow:hidden; }
+  .scin > .post { background:var(--card); border-bottom:0; padding:14px; height:100%; box-sizing:border-box; transition:opacity .2s ease; }
+  .scin > .post.asst { background:var(--asstbg); }
+  .sc[data-d="0"] { z-index:10; }
+  .sc[data-d="1"] { z-index:9; transform:translateY(8px) scale(.955); }
+  .sc[data-d="2"] { z-index:8; transform:translateY(16px) scale(.91); }
+  .sc[data-d="3"] { z-index:7; transform:translateY(16px) scale(.91); opacity:0; }
+  .sc[data-d="-1"] { z-index:12; transform:translateX(-118%) rotate(-9deg); opacity:0; }
+  .sc:not([data-d="0"]) { pointer-events:none; }
+  .sc[data-d="1"] .scin, .sc[data-d="2"] .scin { box-shadow:0 1px 3px rgba(15,23,42,.10); }
+  .sc[data-d="1"] .scin > *, .sc[data-d="2"] .scin > *, .sc[data-d="3"] .scin > * { opacity:0; }   /* only the front card's content shows */
+  .stkcount { position:absolute; top:10px; right:10px; z-index:20; padding:3px 9px; border-radius:999px; background:color-mix(in srgb, var(--card) 88%, transparent);
+              border:1px solid var(--line); color:var(--muted); font-size:12px; font-weight:800; letter-spacing:.2px; pointer-events:none; font-variant-numeric:tabular-nums; }
+  .stkfoot { display:flex; align-items:center; gap:6px; padding:2px 2px 0; }
+  .stkfoot button { border:0; background:none; color:var(--muted); font:inherit; font-size:13px; font-weight:700; padding:6px 8px; border-radius:10px; display:flex; align-items:center; }
+  .stkfoot button:disabled { opacity:.35; }
+  .stkfoot .stkdots { display:flex; gap:5px; align-items:center; }
+  .stkfoot .stkdots i { width:6px; height:6px; border-radius:50%; background:var(--line); transition:background .2s, width .2s; }
+  .stkfoot .stkdots i.on { width:16px; border-radius:3px; background:var(--accent); }
+  .sctitle { font-weight:800; margin-bottom:4px; }
+  .scin > .post .pbody > div:first-child { padding-right:62px; }   /* keep the header clear of the "1 of 5" counter */
+  @media (prefers-reduced-motion:reduce) { .sc, .scin > .post, .stkfoot .stkdots i { transition:none; } }
   /* Feed + button: a round plus that turns into an X and raises a short list of things to add */
   .fabx { position:fixed; z-index:8; right:18px; bottom:calc(76px + env(safe-area-inset-bottom)); width:56px; height:56px; padding:0; border-radius:50%; border:0; background:var(--accent); color:var(--onacc);
           display:flex; align-items:center; justify-content:center; box-shadow:0 8px 22px rgba(15,23,42,.28); }
@@ -381,7 +411,7 @@ a.alink { color: inherit; text-decoration: underline; text-decoration-color: col
 // Momnie Family app v6.0
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'], DAYN = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'], ADULTS = ['Paul', 'Shana'];
 // Shown at the bottom of Home. Bump it together with VERSION in sw.js on every release.
-const APP_VERSION = '15.8 · Nov 19, 2026';
+const APP_VERSION = '15.9 · Nov 19, 2026';
 const TABLES = ['People', 'Schools', 'SchoolCal', 'Activities', 'Overrides', 'Events', 'Caretakers', 'Childcare', 'Birthdays', 'Todos', 'TodoTypes', 'Recipes', 'DinnerRules', 'Weeks', 'Menus',
   'Groceries', 'GroceryList', 'HouseCards', 'Houses', 'WeatherRules', 'Quotes', 'Memories', 'Updates', 'Messages', 'Activity', 'Comments', 'Reactions', 'Links', 'Settings', 'Photos', 'gifts', 'ai_rules', 'ai_requests', 'notes', 'places', 'daily_items', 'daily_completions'];
 const CAT = { School: '#3f6fb5', Kids: '#4f7cc2', Work: '#64748b', Family: '#5b6fa8', Dinner: '#b08a4f', Caretaker: '#3e9aa6', Shared: '#94a3b8', Birthday: '#c9806a' }, SCHOOL_C = ['#5a72b8', '#7a8597', '#4a6fb0'];
@@ -2091,7 +2121,7 @@ function vFeed() {
     .sort((x, y) => (y.pin ? 1 : 0) - (x.pin ? 1 : 0) || y.time.localeCompare(x.time)).slice(0, 70);
   // Bundle bursts: several changes by the same person within a few minutes become one post.
   const win = (+st('bundleMin', '5') || 0) * 60000, out = [];
-  stream.forEach(e => { const p = out[out.length - 1], solo = x => x.r || x.m || x.pin || x.a.type === 'ai' || taggedMe(x.a.text, x.a.who) || x.a.table === 'Photos' || String(x.a.subject || '').startsWith('dinners|') || x.a.type === 'daily' || x.a.type.startsWith('summary') || x.a.who === 'App';
+  stream.forEach(e => { const p = out[out.length - 1], solo = x => x.r || x.m || x.pin || x.a.stack || x.a.type === 'ai' || taggedMe(x.a.text, x.a.who) || x.a.table === 'Photos' || String(x.a.subject || '').startsWith('dinners|') || x.a.type === 'daily' || x.a.type.startsWith('summary') || x.a.who === 'App';
     if (win && p && !solo(e) && !solo(p.items ? p.items[0] : p) && p.who === e.a.who && new Date(p.t0) - new Date(e.time) <= win) { p.items = p.items || [{ time: p.time, a: p.a }]; p.items.push(e); p.t0 = e.time; return; }
     out.push(Object.assign({ who: e.a ? e.a.who : '', t0: e.time }, e)); });
   const fOff = FKINDS().filter(([k]) => !fOn(k)).map(x => x[1]);
@@ -2100,7 +2130,7 @@ function vFeed() {
       ${FKINDS().map(([k, l]) => `<label class="check-row" style="margin-top:8px"><input type="checkbox" data-c="feedTog" data-k="${k}" ${fOn(k) ? 'checked' : ''}>${esc(l)}</label>`).join('')}
       <div class="actions"><button class="btn gray sm" data-a="feedAll">Show everything</button><button class="btn sm" data-a="feedMenu">Done</button></div>
       <div class="small muted" style="margin-top:10px">Only changes your Feed. Same as Home, Settings, Show in my Feed.</div></div>` : ''}
-    ${fOff.length ? `<div class="small muted rapplied" style="padding:2px 0 0">Hiding ${esc(fOff.join(', '))} · <a data-a="feedAll">Show everything</a></div>` : ''}</div>` + (out.length ? out.map(e => swipeWrap(e.items ? e.items.map(x => 'A:' + x.a.id) : e.r ? ['R:' + e.r.id] : e.m ? ['M:' + e.m.id] : ['A:' + e.a.id], e.items ? bundlePost(e) : e.r ? askPost(e.r) : e.m ? msgPost(e.m, e.pin) : actPost(e.a))).join('') : '<div class="empty">Nothing yet. Changes either of you make will show up here.</div>');
+    ${fOff.length ? `<div class="small muted rapplied" style="padding:2px 0 0">Hiding ${esc(fOff.join(', '))} · <a data-a="feedAll">Show everything</a></div>` : ''}</div>` + (out.length ? groupStacks(out).map(e => e.cards ? stackHTML(e) : swipeWrap(e.items ? e.items.map(x => 'A:' + x.a.id) : e.r ? ['R:' + e.r.id] : e.m ? ['M:' + e.m.id] : ['A:' + e.a.id], e.items ? bundlePost(e) : e.r ? askPost(e.r) : e.m ? msgPost(e.m, e.pin) : actPost(e.a))).join('') : '<div class="empty">Nothing yet. Changes either of you make will show up here.</div>');
   return html + feedFab();
 }
 // What the Feed's + button offers: [label, icon, action]. Add a line here to add an option.
@@ -2121,6 +2151,9 @@ let FMENU = false, fPend = {}, fT = 0;
 function feedSet(k, v) { const id = ME + '|f.' + k, r = byId('Settings', id); if (r) r.value = v; else S.Settings.push({ id, value: v }); fPend[id] = v; clearTimeout(fT); fT = setTimeout(feedSave, 700); }
 function feedSave() { if (busy) { fT = setTimeout(feedSave, 500); return; } const ops = Object.keys(fPend).map(id => ({ t: 'Settings', row: { id, value: fPend[id] } })); fPend = {}; if (ops.length) write(ops); }
 A.feedMenu = () => { FMENU = !FMENU; render(); };
+A.stkNext = (v, el) => { const st = el.closest('.stk'); stackShow(st, +st.dataset.i + 1); };
+A.stkPrev = (v, el) => { const st = el.closest('.stk'); stackShow(st, +st.dataset.i - 1); };
+A.stkDel = (v, el) => A.feedDel(el.closest('.stk').dataset.ids);
 A.fabFeed = () => fabSet(!FABON);
 A.fabClose = () => fabSet(false);
 A.fabEvent = () => { fabSet(false); editForm('Events', null); };
@@ -2144,6 +2177,46 @@ A.feedTog = (on, el) => { feedSet(el.dataset.k, on ? '1' : '0'); render(); };
 A.feedAll = () => { FKINDS().forEach(([k]) => { if (!fOn(k)) feedSet(k, '1'); }); FMENU = false; render(); };
 // Swipe a Feed post left to delete it. Paul can delete for everyone; Shana removes it from her own Feed.
 const feedHidden = () => new Set(list(st('feedHidden', '')));
+// ----- Stacked posts -----
+// Posts (Messages or Activity) that share a stack id show as one pile of cards in the Feed, at the place of the
+// newest card. Cards are ordered by stackIdx. Each card is drawn exactly like the post it is.
+const STK = {};                                    // stack id -> card the viewer is on (kept through redraws)
+const feedId = e => e.r ? 'R:' + e.r.id : e.m ? 'M:' + e.m.id : 'A:' + e.a.id;
+const stackOf = e => e.items ? '' : String((e.m && e.m.stack) || (e.a && e.a.stack) || '');
+function groupStacks(rows) {
+  const at = {}, res = [];
+  rows.forEach(e => { const k = stackOf(e); if (!k) return res.push(e);
+    if (at[k]) at[k].cards.push(e); else res.push(at[k] = { stack: k, cards: [e] }); });
+  return res.map(g => { if (!g.cards) return g;
+    if (g.cards.length === 1) return g.cards[0];   // the rest were removed or aren't for this person: a normal post
+    g.cards.sort((x, y) => (+(x.m || x.a).stackIdx || 0) - (+(y.m || y.a).stackIdx || 0) || String(x.time).localeCompare(String(y.time)));
+    return g; });
+}
+const aiCardText = a => { const m = a.stack && String(a.text || '').match(/^\*\*(.+?)\*\*\s*\n?/);
+  return m ? `<div class="sctitle">${esc(m[1])}</div>${withMentions(String(a.text).slice(m[0].length))}` : withMentions(a.text); };
+const stackD = (k, i) => k < i ? -1 : Math.min(k - i, 3);
+function stackHTML(g) {
+  const n = g.cards.length, i = Math.max(0, Math.min(STK[g.stack] || 0, n - 1));
+  return `<div class="stk" data-stk="${esc(g.stack)}" data-i="${i}" data-ids="${esc(g.cards.map(feedId).join(' '))}">
+    <div class="stkdeck" tabindex="0" role="group" aria-roledescription="stack of cards" aria-label="${n} cards. Swipe or use the arrow keys to move through them.">
+      ${g.cards.map((c, k) => `<div class="sc" data-d="${stackD(k, i)}" role="group" aria-roledescription="card" aria-label="${k + 1} of ${n}" ${k === i ? '' : 'aria-hidden="true" inert'}><div class="scin">${c.m ? msgPost(c.m, c.pin) : c.r ? askPost(c.r) : actPost(c.a)}</div></div>`).join('')}
+    </div>
+    <span class="stkcount" aria-live="polite">${i + 1} of ${n}</span>
+    <div class="stkfoot"><button data-a="stkPrev" aria-label="Previous card" ${i === 0 ? 'disabled' : ''}>${ic('left', 18)}</button>
+      <span class="stkdots" aria-hidden="true">${n <= 12 ? g.cards.map((c, k) => `<i class="${k === i ? 'on' : ''}"></i>`).join('') : ''}</span>
+      <button data-a="stkNext" aria-label="Next card" ${i === n - 1 ? 'disabled' : ''}>${ic('chev', 18)}</button>
+      <span class="grow"></span><button data-a="stkDel">${ME === 'Paul' ? 'Delete' : 'Remove'}</button></div></div>`;
+}
+/** Shows card i of a stack. Clearing the inline drag styles lets the CSS ease every card to its new place. */
+function stackShow(st, i) {
+  const cards = [...st.querySelectorAll('.sc')], n = cards.length; i = Math.max(0, Math.min(n - 1, i));
+  cards.forEach((c, k) => { c.dataset.d = stackD(k, i); c.style.transition = ''; c.style.transform = ''; c.querySelectorAll('.scin > *').forEach(x => x.style.opacity = '');
+    if (k === i) { c.removeAttribute('aria-hidden'); c.inert = false; } else { c.setAttribute('aria-hidden', 'true'); c.inert = true; } });
+  st.dataset.i = i; STK[st.dataset.stk] = i;
+  st.querySelector('.stkcount').textContent = (i + 1) + ' of ' + n;
+  st.querySelector('[data-a="stkPrev"]').disabled = i === 0; st.querySelector('[data-a="stkNext"]').disabled = i === n - 1;
+  st.querySelectorAll('.stkdots i').forEach((d, k) => d.classList.toggle('on', k === i));
+}
 const swipeWrap = (ids, html) => `<div class="swipe" data-fid="${esc(ids.join(' '))}"><div class="under">${ME === 'Paul' ? 'Delete' : 'Remove'}</div>${html}</div>`;
 A.feedDel = fid => { const ids = fid.split(' ').filter(Boolean); if (!ids.length) return;
   const n = ids.length > 1 ? `these ${ids.length} updates` : 'this post', hideMine = () => setSt('feedHidden', [...feedHidden()].concat(ids).slice(-400).join(','));
@@ -2317,7 +2390,7 @@ function actPost(a) {
     if (p) return `<div class="post" data-a="photoView" data-v="${p.id}">${avatar(a.who)}<div class="pbody"><div><b>${esc(a.who)}</b> added a photo${ti ? ` to <b>${esc(ti)}</b>` : ''} <span class="muted">· ${ago(a.time)}</span></div>
       <img class="phpost" src="${esc(photoSrc(p.fileId, 1200))}" alt="" loading="lazy">${postFoot(p.table, p.ref, '')}</div></div>`; }
   if (a.type === 'ai') { const aud = aiNoteFor(a), rule = String(a.ref || '').startsWith('rule:') ? byId('ai_rules', a.ref.slice(5)) : null;
-    return `<div class="post"><span class="av aiav">${ic('spark', 18)}</span><div class="pbody"><div><b>Assistant</b> <span class="muted">· ${ago(a.time)}</span>${aud.length === 1 ? ' <span class="chip">Just for you</span>' : ''}</div>${rule ? `<div class="small muted" data-a="aiRuleEdit" data-v="${rule.id}" style="cursor:pointer">${ic('spark', 12)} Your rule: ${esc(rule.text.length > 70 ? rule.text.slice(0, 70) + '…' : rule.text)}</div>` : ''}<div class="ptext" style="font-weight:400">${withMentions(a.text)}</div></div></div>`; }
+    return `<div class="post"><span class="av aiav">${ic('spark', 18)}</span><div class="pbody"><div><b>Assistant</b> <span class="muted">· ${ago(a.time)}</span>${aud.length === 1 ? ' <span class="chip">Just for you</span>' : ''}</div>${rule ? `<div class="small muted" data-a="aiRuleEdit" data-v="${rule.id}" style="cursor:pointer">${ic('spark', 12)} Your rule: ${esc(rule.text.length > 70 ? rule.text.slice(0, 70) + '…' : rule.text)}</div>` : ''}<div class="ptext" style="font-weight:400">${aiCardText(a)}</div></div></div>`; }
   if (a.type === 'daily') return `<div class="post">${avatar('App')}<div class="pbody"><div><b>Today's memory</b> <span class="muted">· ${fmtDay(a.time)}</span></div><div class="ptext" style="font-weight:400">${dailyHTML(a)}</div></div></div>`;
   if (a.type.startsWith('summary')) { let extra = ''; if (a.type === 'summary_week' && a.ref) { const c = []; for (let i = 0; i < 7; i++) c.push(...conflictsFor(addDays(a.ref, i))); if (c.length) extra = '<div class="lbl">Conflicts to sort out</div>' + c.map(x => `<div class="alert amber" data-a="open" data-t="${x.open[0]}" data-id="${esc(x.open[1])}" data-d="${x.open[2]}">${esc(x.text)}</div>`).join(''); }
     return `<div class="post">${avatar('App')}<div class="pbody"><div><b>${a.type === 'summary_week' ? 'The week ahead' : 'This month'}</b> <span class="muted">· ${ago(a.time)}</span></div><div class="ptext" style="font-weight:400;white-space:normal">${md(stripEmo(a.text))}${extra}</div></div></div>`; }
@@ -3091,10 +3164,36 @@ A.dinClear = id => { const m = byId('Menus', id); if (!m || (!m.recipeId && !m.n
     if (dx < -8) { moved = true; post.style.transition = 'none'; post.style.transform = `translateX(${Math.max(dx, -140)}px)`; } }, { passive: true });
   document.addEventListener('touchend', e => { if (!el || x0 === null) return; const dx = e.changedTouches[0].clientX - x0, fid = el.dataset.fid, p = post; p.style.transition = ''; p.style.transform = ''; el = null; x0 = null;
     if (moved && dx < -80) { const stop = ev => { ev.stopPropagation(); ev.preventDefault(); }; document.addEventListener('click', stop, { capture: true, once: true }); setTimeout(() => document.removeEventListener('click', stop, { capture: true }), 400); A.feedDel(fid); } }); })();
+// swipe through a stacked post (pointer events; touch-action: pan-y leaves up and down scrolling to the browser)
+(function () { let d = null;
+  document.addEventListener('pointerdown', e => { if (e.pointerType === 'mouse' && e.button !== 0) return;  d = null;
+    const deck = e.target.closest('.stkdeck'); if (!deck) return; const st = deck.closest('.stk');
+    d = { st, i: +st.dataset.i, n: st.querySelectorAll('.sc').length, front: st.querySelector('.sc[data-d="0"]'), next: st.querySelector('.sc[data-d="1"]'),
+          prev: st.querySelector(`.sc:nth-child(${+st.dataset.i})`), x0: e.clientX, y0: e.clientY, dx: 0, on: false, id: e.pointerId, t: performance.now(), v: 0 }; });
+  document.addEventListener('pointermove', e => { if (!d || e.pointerId !== d.id) return;
+    const dx = e.clientX - d.x0, dy = e.clientY - d.y0;
+    if (!d.on) { if (Math.abs(dx) < 8 || Math.abs(dx) < Math.abs(dy) * 1.2) { if (Math.abs(dy) > 12) d = null; return; }
+      d.on = true; d.st.classList.add('stkdrag'); [d.front, d.next, d.prev].forEach(c => c && (c.style.transition = 'none'));
+      try { d.front.setPointerCapture(e.pointerId); } catch (x) {} }
+    const now = performance.now(); d.v = (dx - d.dx) / Math.max(1, now - d.t); d.t = now; d.dx = dx;
+    const edge = (dx < 0 && d.i === d.n - 1) || (dx > 0 && d.i === 0), x = edge ? dx * 0.22 : dx, p = Math.min(Math.abs(x) / 150, 1);
+    d.front.style.transform = `translateX(${x}px) rotate(${x / 24}deg)`;
+    if (d.next && dx < 0 && !edge) { d.next.style.transform = `translateY(${8 * (1 - p)}px) scale(${0.955 + 0.045 * p})`; d.next.querySelectorAll('.scin > *').forEach(x => x.style.opacity = p); }   // its content fades in as it rises
+    if (d.prev && dx > 0 && !edge) d.prev.style.transform = `translateX(calc(-118% + ${118 * p}%)) rotate(${-9 * (1 - p)}deg)`, d.prev.style.opacity = p;
+  });
+  const end = e => { if (!d || e.pointerId !== d.id) return; const o = d; d = null; if (!o.on) return;
+    o.st.classList.remove('stkdrag'); if (o.prev) o.prev.style.opacity = '';
+    const to = o.dx < 0 ? o.i + 1 : o.i - 1, go = e.type !== 'pointercancel' && (Math.abs(o.dx) > 70 || (Math.abs(o.dx) > 25 && Math.abs(o.v) > 0.45)) && to >= 0 && to < o.n;
+    stackShow(o.st, go ? to : o.i);
+    const stop = ev => { ev.stopPropagation(); ev.preventDefault(); };   // a swipe is not a tap on the card
+    document.addEventListener('click', stop, { capture: true, once: true }); setTimeout(() => document.removeEventListener('click', stop, { capture: true }), 350); };
+  document.addEventListener('pointerup', end); document.addEventListener('pointercancel', end);
+  document.addEventListener('keydown', e => { const deck = e.target.closest && e.target.closest('.stkdeck'); if (!deck || (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight')) return;
+    e.preventDefault(); const st = deck.closest('.stk'); stackShow(st, +st.dataset.i + (e.key === 'ArrowRight' ? 1 : -1)); }); })();
 // pull down to refresh
 (function () { const el = $('ptr'), ic = $('ptrIcon'), TRIG = 70; let y0 = null, d = 0, on = false;
   const set = (v, anim) => { el.style.transition = anim ? 'transform .25s, opacity .25s' : 'none'; el.style.transform = `translateY(${v - 50}px)`; el.style.opacity = Math.min(v / TRIG, 1); if (!on) ic.textContent = v >= TRIG ? '↻' : '↓'; };
-  document.addEventListener('touchstart', e => { y0 = (on || viewY() > 0 || sheets.length || e.target.closest('.dcard[data-swipe], .rcard')) ? null : e.touches[0].clientY; d = 0; }, { passive: true });
+  document.addEventListener('touchstart', e => { y0 = (on || viewY() > 0 || sheets.length || e.target.closest('.dcard[data-swipe], .rcard, .stkdeck')) ? null : e.touches[0].clientY; d = 0; }, { passive: true });
   document.addEventListener('touchmove', e => { if (y0 === null) return; if (viewY() > 0) { y0 = null; set(0, true); return; } d = Math.min(110, Math.max(0, e.touches[0].clientY - y0) * 0.5); set(d, false); }, { passive: true });
   document.addEventListener('touchend', async () => { if (y0 === null) return; y0 = null; if (d < TRIG) { set(0, true); return; } on = true; ic.textContent = '↻'; el.classList.add('spin'); set(60, true); try { await load(); } catch (e) { toast(e.message); } el.classList.remove('spin'); on = false; set(0, true); }); })();
 // If the iPhone keyboard nudged the page itself, put it back: only #view should ever scroll.
