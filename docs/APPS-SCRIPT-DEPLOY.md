@@ -4,6 +4,8 @@ When `apps-script/Code.gs` changes on `main`, GitHub pushes it to the Apps Scrip
 
 ## One-time setup
 
+The project has two files, `Code.gs` and `Push.js` (iPhone push notifications). Both must be in `apps-script/` in the repo. The deploy copies the repo over the project and removes anything not in the repo, so it refuses to run until `apps-script/Push.js` and `apps-script/appsscript.json` exist.
+
 1. **Turn on the Apps Script API.** Go to https://script.google.com/home/usersettings and switch on "Google Apps Script API".
 
 2. **Get the project ID.** Open the project at script.google.com, then Project Settings (gear). Copy the **Script ID**.
