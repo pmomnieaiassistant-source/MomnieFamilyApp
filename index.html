@@ -415,7 +415,7 @@ a.alink { color: inherit; text-decoration: underline; text-decoration-color: col
 // Momnie Family app v6.0
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'], DAYN = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'], ADULTS = ['Paul', 'Shana'];
 // Shown at the bottom of Home. Bump it together with VERSION in sw.js on every release.
-const APP_VERSION = '16.9 · Nov 19, 2026';
+const APP_VERSION = '16.10 · Nov 19, 2026';
 const TABLES = ['People', 'Schools', 'SchoolCal', 'Activities', 'Overrides', 'Events', 'Caretakers', 'Childcare', 'Birthdays', 'Annuals', 'Todos', 'TodoTypes', 'Recipes', 'DinnerRules', 'Weeks', 'Menus',
   'Groceries', 'GroceryList', 'HouseCards', 'Houses', 'WeatherRules', 'Quotes', 'Memories', 'Updates', 'Messages', 'Activity', 'Comments', 'Reactions', 'Links', 'Settings', 'Photos', 'gifts', 'ai_rules', 'ai_requests', 'notes', 'places', 'daily_items', 'daily_completions'];
 const CAT = { School: '#3f6fb5', Kids: '#4f7cc2', Work: '#64748b', Family: '#5b6fa8', Dinner: '#b08a4f', Caretaker: '#3e9aa6', Shared: '#94a3b8', Birthday: '#c9806a' }, SCHOOL_C = ['#5a72b8', '#7a8597', '#4a6fb0'];
@@ -2696,7 +2696,7 @@ A.aiRuleEdit = id => { const r = byId('ai_rules', id); if (r) aiRuleForm(r); };
 const aiRuleRow = r => `<div class="li" style="padding:12px 0" data-a="aiRuleEdit" data-v="${r.id}"><div class="grow"><div class="ti">${esc(r.text)}</div>
   <div class="small muted">${ic('spark', 13)} Assistant · ${esc((AI_AREAS.find(x => x[0] === r.area) || AI_AREAS[0])[1])} · tells ${esc(joinNames(list(r.audience)) || 'everyone')}${list(r.audience).length === 1 ? ' (private)' : ''}${r.active === '0' ? ' · off' : ''}${r.created_by ? ' · added by ' + esc(r.created_by) : ''}</div></div><span class="chev">›</span></div>`;
 const aiAskBtn = area => `<button class="btn gray" data-a="aiRuleNew" data-v="${area}" aria-label="Create a rule with the assistant" title="Create a rule with the assistant" style="flex:0 0 auto;padding-left:16px;padding-right:16px">${ic('spark', 20)}</button>`;
-const AI_TOPICS = [['meals', 'Meals and recipes'], ['birthdays', 'Birthdays and gift-idea counts'], ['todos', 'To-dos and bills'], ['rides', 'Rides and caretakers'], ['week', 'The week ahead'], ['house', 'House upkeep']];
+const AI_TOPICS = [['meals', 'Meals and recipes'], ['birthdays', 'Birthdays'], ['todos', 'To-dos and bills'], ['rides', 'Rides and caretakers'], ['week', 'The week ahead'], ['house', 'House upkeep']];
 A.aiEdit = (v, el) => { if (ME !== 'Paul') return; const g = k => (byId('Settings', 'app|ai.' + k) || {}).value;
   form('Assistant', [F('on', 'Turn on the assistant (daily notes in the Feed)', 'chk'), F('who', 'Who sees the AI posts', 'multi', ADULTS, { hint: 'Only these people see its notes in the Feed and get its notifications.' }),
       F('topics', 'Topics', 'multi', AI_TOPICS.map(x => x[1])),
@@ -3090,7 +3090,7 @@ const PAGES = {
       (S.ai_rules.map(aiRuleRow).join('') || '<div class="empty">No rules yet.</div>') + `<div class="actions">${aiAskBtn('general')}</div>`;
     if (ME !== 'Paul') return '<h2>Assistant</h2>' + (aiOn() ? '' : '<div class="alert amber" style="margin-top:10px">The assistant is off, so rules are not being checked yet. Paul can turn it on here.</div>') + rules + '<div class="small muted" style="margin-top:12px">Only Paul can change the other assistant settings.</div>';
     const on = (byId('Settings', 'app|ai.on') || {}).value === '1', last = (byId('Settings', 'app|ai.last') || {}).value, topics = list((byId('Settings', 'app|ai.topics') || {}).value || AI_TOPICS.map(x => x[0]).join(', '));
-    return `<h2>Assistant</h2><div class="small muted">Every couple of hours Claude reads a summary of the family's plans and posts a few short notes to the Feed (up to 3 a day): gaps to fill, ideas, heads-ups. It also keeps the Today cards fresh and reads conversations. It is never sent what the gift ideas are.</div>
+    return `<h2>Assistant</h2><div class="small muted">Every couple of hours Claude reads a summary of the family's plans and posts a few short notes to the Feed (up to 3 a day): gaps to fill, ideas, heads-ups. It also keeps the Today cards fresh and reads conversations.</div>
       <div class="kv"><span>Status</span>${on ? 'On' : 'Off'}${on ? ' · reviews every 2 hours, 5 AM to 1 AM' : ''}</div>
       <div class="kv"><span>Seen by</span>${esc(joinNames(aiWho()))}</div>
       <div class="kv"><span>Topics</span>${esc(AI_TOPICS.filter(x => topics.includes(x[0])).map(x => x[1]).join(', ') || 'None')}</div>
@@ -3099,8 +3099,7 @@ const PAGES = {
       <div class="kv"><span>Conversations</span>${((byId('Settings', 'app|ai.convo') || {}).value || '1') === '1' ? 'Turns settled plans into app items' : 'Off'}</div>
       <div class="kv"><span>Assistant button</span>${esc(joinNames(aiUseFor()) || 'No one')}</div>
       <div class="kv"><span>AI Today card</span>${esc(joinNames(aiCardFor()) || 'No one')}</div>
-      <div class="actions"><button class="btn" data-a="aiEdit">${ic('pen', 16)}Change</button><button class="btn gray" data-a="aiRun">${ic('refresh', 16)}Run the assistant now</button></div>
-      <div class="small muted" style="margin-top:12px">Needs an Anthropic API key in Apps Script: Project Settings, Script properties, ANTHROPIC_API_KEY. Each person can mute its notifications under Notifications and Feed.</div>` + rules; },
+      <div class="actions"><button class="btn" data-a="aiEdit">${ic('pen', 16)}Change</button><button class="btn gray" data-a="aiRun">${ic('refresh', 16)}Run the assistant now</button></div>` + rules; },
   settings: () => { const q = k => st(k, ''), chk = (c, k, def, l) => `<label class="check-row"><input type="checkbox" data-c="${c}" data-k="${k}" ${st(k, def) === '1' ? 'checked' : ''}> ${l}</label>`;
     return `<h2>Notifications and Feed</h2><h3>Push on this phone</h3>${pushHTML()}<h3>Notifications for ${esc(ME)}</h3>` + Object.keys(NCATS).map(c => chk('setFlag', 'n.' + c, c === 'dinner' ? '0' : '1', NCATS[c])).join('') +
       `<h3>Bundling</h3><div class="small muted">When several things happen close together, you get one notification that sums them up instead of a string of buzzes. Urgent alerts always come right away.</div><label>Bundle alerts that arrive within</label><select data-c="setVal" data-k="bundleMin">${[['0', 'Off (send each one)'], ['5', '5 minutes'], ['15', '15 minutes'], ['30', '30 minutes'], ['60', '1 hour']].map(([v, l]) => `<option value="${v}" ${st('bundleMin', '5') === v ? 'selected' : ''}>${l}</option>`).join('')}</select>` +
