@@ -1,6 +1,8 @@
 /**
  * Momnie Family app backend
- * Version 3.34 (2026-11-19)
+ * Version 3.35 (2026-11-19)
+ *   3.35: The assistant curates the Feed on each review: groups related change posts into stacks under an overview it writes
+ *         (its own order), updates its stacks, and hides moot posts (state 'moot', reversible). Never touches people's messages.
  *   3.34: Stacked posts: Messages and Activity carry stack and stackIdx; stackPost_() writes a pile of cards as one Feed post
  *         (long cards continue on the next card); Sheet menu adds a sample.
  *   3.33: ideas tab gets a status column (filled in by hand).
@@ -1014,7 +1016,7 @@ function aiContext_(t) {
     .map(function (q) { return q.who + ' asked on ' + String(q.time).slice(0, 10) + ': "' + q.text + '" | ' + (q.status === 'question' ? 'still waiting for their answer to: ' + q.question : 'could not be done: ' + q.summary); });
   c.note = 'Everything listed is today or later, except overdue to-dos. Past events and meals are history: do not write about them.';
   c.generalNotesLeftToday = Math.max(0, 3 - freeToday_(t));
-  c.recentNotes = rows_('Activity').filter(function (a) { return a.type === 'ai' && a.time >= addDays_(t, -10); }).map(function (a) { return a.time.slice(0, 10) + ': ' + a.text; }).slice(-15);
+  c.recentNotes = rows_('Activity').filter(function (a) { return a.type === 'ai' && !a.stack && a.time >= addDays_(t, -10); }).map(function (a) { return a.time.slice(0, 10) + ': ' + a.text; }).slice(-15);
   return c;
 }
 /** One structured call to Claude. Returns { data } (the parsed JSON), { refused: true } or { error }. */
@@ -1057,7 +1059,7 @@ function claudeErr_(msg) {
 }
 /** Asks Claude for 0 to 3 notes and posts them to the Feed. Returns the notes (or why there are none). */
 /** How many general (not rule) notes the assistant has posted today. */
-function freeToday_(t) { return rows_('Activity').filter(function (a) { return a.type === 'ai' && String(a.time).slice(0, 10) === t && String(a.ref || '').indexOf('rule:') !== 0; }).length; }
+function freeToday_(t) { return rows_('Activity').filter(function (a) { return a.type === 'ai' && !a.stack && String(a.time).slice(0, 10) === t && String(a.ref || '').indexOf('rule:') !== 0; }).length; }
 function aiPosts_(t, manual) {
   var ctx = aiContext_(t);
   var system = 'You are the AI assistant inside a family\'s shared home app (parents Paul and Shana, and their kids). Each morning you read a summary of the family\'s plans and write 0 to 3 short notes for the app\'s Feed.\n' +
@@ -1103,14 +1105,95 @@ function aiReview_(t, hour) {
   if (minsSince_('job|ai_review_at') >= gap) { stamp_('job|ai_review_at'); aiSafe_(t); aiCardsSafe_(t, hour); }
   if (setting_('app|ai.convo', '1') === '1') aiConvoSafe_(t, false);   // every tick; only calls Claude when there is something new
   if (minsSince_('job|ai_tidy_at') >= gap) { stamp_('job|ai_tidy_at'); aiTidySafe_(t); }
+  if (minsSince_('job|ai_feed_at') >= gap) { stamp_('job|ai_feed_at'); aiFeedSafe_(t); }
 }
 /** Today cards: tomorrow's from 7 PM, today's before that. */
 function aiCardsSafe_(t, hour) { try { if (hour >= 19) briefAll_(addDays_(t, 1), 'night'); else briefAll_(t, 'day'); } catch (e) { console.error(e); } }
+// ---------- The assistant curates the Feed ----------
+// On each review the assistant looks at the last few days of automatic change posts ("set dinner for Tue", "added
+// Dentist", ...) and uses its judgment to make the Feed clearer: it groups related posts into a stack under an overview
+// card it writes (in the order that reads best), updates stacks it made earlier, and hides posts that are moot (an
+// item changed again, or deleted). Hiding is reversible (state 'moot'; the app has "Show what the assistant tidied
+// away"). People's own messages and comments are never touched. Assistant stacks have ids starting with "ai"; the app
+// applies the stacks and hiding only for people in the assistant's audience (app|ai.who).
+var FEED_SKIP = { message: 1, answer: 1, ai: 1, daily: 1, summary_week: 1, summary_month: 1 };
+/** One line on what an item looks like now, so the assistant can tell which posts are out of date. */
+function itemNow_(table, ref) {
+  if (!table || !ref) return '';
+  var r = T[table] ? get_(table, ref) : null;
+  if (!r) return 'no longer exists';
+  if (table === 'Menus') { var rec = r.recipeId ? get_('Recipes', r.recipeId) : null;
+    return 'dinner ' + r.date + ' (' + r.day + '): ' + (r.skipped === '1' ? 'skipped' : rec ? rec.name : r.note || 'nothing set'); }
+  if (table === 'Events') return 'event "' + r.title + '" on ' + r.date + (r.start ? ' at ' + r.start : '') + (r.dropoff || r.pickup ? ', drop-off ' + (r.dropoff || 'not set') + ', pickup ' + (r.pickup || 'not set') : '');
+  if (table === 'Todos') return 'to-do "' + r.title + '"' + (r.due ? ' due ' + r.due : '') + (r.status ? ', ' + r.status : '') + (r.assignee ? ', for ' + r.assignee : '');
+  if (table === 'Childcare') return 'caretaker ' + (r.task || 'babysit') + ' on ' + r.date + (r.start ? ' at ' + r.start : '') + (r.confirmedId ? ', confirmed' : ', not confirmed yet');
+  if (table === 'Overrides') return 'ride change: ' + JSON.stringify(r).slice(0, 120);
+  return txt_(r.name || r.title || r.text || '', 100);
+}
+function aiFeedSafe_(t) { try { return aiFeed_(t); } catch (e) { console.error(e); return { error: String(e && e.message || e) }; } }
+function aiFeed_(t) {
+  if (setting_('app|ai.on', '') !== '1') return { off: true };
+  var since = addDays_(t, -3), all = rows_('Activity');
+  var posts = all.filter(function (a) { return String(a.time).slice(0, 10) >= since && a.state !== 'cleared' && !FEED_SKIP[a.type] && (!a.stack || a.stack.indexOf('ai') === 0); }).slice(-60);
+  var overviews = all.filter(function (a) { return a.type === 'ai' && a.stackIdx === '0' && String(a.stack || '').indexOf('ai') === 0 && a.state !== 'cleared'; });
+  if (posts.length < 2) return { stacks: 0, hidden: 0 };
+  var cand = posts.map(function (a) { return { id: a.id, when: a.time, who: a.who, what: a.text, item: a.table ? a.table + ':' + a.ref : '', itemNow: itemNow_(a.table, a.ref),
+    inStack: a.stack || '', hidden: a.state === 'moot' }; });
+  var mine = overviews.map(function (o) { var m = String(o.text).match(/^\*\*(.+?)\*\*\n?/);
+    return { stack: o.stack, title: m ? m[1] : '', overview: m ? String(o.text).slice(m[0].length) : o.text, posts: posts.filter(function (a) { return a.stack === o.stack; })
+      .sort(function (x, y) { return Number(x.stackIdx) - Number(y.stackIdx); }).map(function (a) { return a.id; }) }; });
+  var S = { type: 'string' }, ids = { type: 'array', items: S }, obj = function (props) { return { type: 'object', additionalProperties: false, required: Object.keys(props), properties: props }; };
+  var schema = obj({ stacks: { type: 'array', items: obj({ existing: S, title: S, overview: S, posts: ids }) }, hide: { type: 'array', items: obj({ id: S, why: S }) },
+    unhide: ids, dissolve: ids });
+  var system = 'You are the Assistant inside a family\'s home app. The Feed gets an automatic post each time someone changes the plan (dinners, events, rides, ' +
+    'to-dos, caretakers). Use your judgment to make the Feed streamlined and informational:\n' +
+    '1. Stacks. Group related posts into a stack: an overview card you write, followed by the posts that matter, in the order that reads best ' +
+    '(usually by the day or time they are about, not when they were posted). Example: several dinner changes during the day that settled on five meals ' +
+    'become one stack titled "Dinners this week" with an overview like "Dinner is set Mon-Fri: tacos, salmon, chili, pasta, pizza. Saturday is still open." ' +
+    'and then the posts that set each night. Only stack posts that belong together (one topic, such as the week\'s dinners, a trip, a day\'s rides). ' +
+    'A stack needs at least 2 posts. title: up to 40 characters. overview: one or two plain sentences, at most 220 characters, saying where things stand now.\n' +
+    '2. Hide moot posts: a post about an item that was changed again later (keep the post that matches "itemNow", hide the earlier ones), about an item that ' +
+    'no longer exists, or that no longer means anything. When unsure, keep it. Hidden posts can be shown again by the family.\n' +
+    '3. Your earlier stacks are in "myStacks". To change one (new posts, new order, new overview), return it with "existing" set to its id and the full ' +
+    'list of posts it should hold now. Leave out stacks that are fine as they are. To undo a stack, put its id in "dissolve". For a new stack, "existing" is "".\n' +
+    '4. "unhide" lists posts you hid before that matter again.\n' +
+    'Use only ids from the input. Never invent details. Most runs should change little or nothing.';
+  var r = claude_(system, JSON.stringify({ today: t, posts: cand, myStacks: mine }), schema, 'low');
+  if (r.error || r.refused || !r.data) return { error: r.error || 'declined' };
+  var d = r.data, byId = {}, used = {}, made = 0, hid = 0, shown = 0, gone = 0;
+  posts.forEach(function (a) { byId[a.id] = a; });
+  var mineIds = {}; mine.forEach(function (x) { mineIds[x.stack] = true; });
+  (d.dissolve || []).forEach(function (sid) {
+    if (!mineIds[sid]) return;
+    overviews.filter(function (o) { return o.stack === sid; }).forEach(function (o) { put_('Activity', { id: o.id, state: 'cleared' }); });
+    posts.filter(function (a) { return a.stack === sid; }).forEach(function (a) { put_('Activity', { id: a.id, stack: '', stackIdx: '' }); });
+    delete mineIds[sid]; gone++;
+  });
+  (d.stacks || []).forEach(function (st) {
+    var list = (st.posts || []).filter(function (id) { return byId[id] && !used[id]; });
+    if (list.length < 2) return;
+    list.forEach(function (id) { used[id] = true; });
+    var sid = st.existing && mineIds[st.existing] ? st.existing : 'ai' + Utilities.getUuid().replace(/-/g, '').slice(0, 10);
+    var newest = list.map(function (id) { return byId[id].time; }).sort().pop();
+    var text = (st.title ? '**' + txt_(st.title, 60) + '**\n' : '') + txt_(st.overview, 260);
+    var ov = overviews.filter(function (o) { return o.stack === sid; })[0];
+    if (ov) put_('Activity', { id: ov.id, text: text, time: newest });
+    else put_('Activity', { time: newest, who: 'Assistant', type: 'ai', text: text, cat: 'ai', audience: '', subject: '', stack: sid, stackIdx: '0' });
+    posts.forEach(function (a) { if (a.stack === sid && list.indexOf(a.id) < 0) put_('Activity', { id: a.id, stack: '', stackIdx: '' }); });   // posts that left the stack
+    list.forEach(function (id, k) { put_('Activity', { id: id, stack: sid, stackIdx: String(k + 1) }); });   // may move a post out of another stack
+    made++;
+  });
+  (d.hide || []).forEach(function (x) { var a = byId[x.id]; if (a && a.state !== 'moot') { put_('Activity', { id: a.id, state: 'moot' }); hid++; } });
+  (d.unhide || []).forEach(function (id) { var a = byId[id]; if (a && a.state === 'moot') { put_('Activity', { id: a.id, state: '' }); shown++; } });
+  put_('Settings', { id: 'app|ai.feedLast', value: now_() + ' · ' + made + ' stack(s), ' + hid + ' hidden' + (shown ? ', ' + shown + ' shown again' : '') + (gone ? ', ' + gone + ' undone' : '') });
+  return { stacks: made, hidden: hid, unhidden: shown, dissolved: gone };
+}
+
 // ---------- The assistant tidies up its own posts ----------
 function aiTidySafe_(t) { try { return aiTidy_(t); } catch (e) { console.error(e); return { error: String(e && e.message || e) }; } }
 /** Clears the assistant's notes and questions that are no longer relevant. Nothing is deleted: cleared posts just leave the Feed. */
 function aiTidy_(t) {
-  var cleared = [], notes = rows_('Activity').filter(function (a) { return a.type === 'ai' && a.state !== 'cleared'; }),
+  var cleared = [], notes = rows_('Activity').filter(function (a) { return a.type === 'ai' && !a.stack && a.state !== 'cleared'; }),
       asks = rows_('ai_requests').filter(function (q) { return q.status === 'question'; });
   // Old ones simply expire: notes after 3 days, unanswered questions after 7.
   notes.forEach(function (a) { if (String(a.time).slice(0, 10) < addDays_(t, -3)) { put_('Activity', { id: a.id, state: 'cleared' }); cleared.push(a.id); } });
@@ -1146,7 +1229,8 @@ function aiAfter_(t) {
 /** Everything the assistant does, now: notes for the Feed, the AI Today cards, and plans from conversations. */
 function aiAll_(t) {
   stamp_('job|ai_review_at'); var night = Number(now_().slice(11, 13)) >= 19, notes = aiPosts_(t, true), cards = briefAll_(night ? addDays_(t, 1) : t, night ? 'night' : 'day'), convo = setting_('app|ai.convo', '1') === '1' ? aiConvoSafe_(t, true) : {}, tidy = aiTidySafe_(t);
-  return { notes: notes, cards: cards.done, cardError: cards.error, convo: convo.actions || [], tidied: tidy.cleared || 0 };
+  stamp_('job|ai_feed_at'); var feed = aiFeedSafe_(t);
+  return { notes: notes, cards: cards.done, cardError: cards.error, convo: convo.actions || [], tidied: tidy.cleared || 0, stacked: feed.stacks || 0, hidden: feed.hidden || 0 };
 }
 /** Everything on person p's plate for date d, each with a ref the app can open. Gift ideas are never included. */
 function briefCands_(p, d, mode) {
@@ -1328,7 +1412,7 @@ function aiConvo_(t, manual) {
     .concat(rows_('Todos').filter(function (x) { return x.status !== 'Done'; }).slice(0, 40).map(function (x) { return 'To-do: ' + x.title + (x.assignee ? ' (' + x.assignee + ')' : ''); }));
   var done = rows_('ai_requests').filter(function (q) { return q.source === 'Conversation' && q.time >= since; }).map(function (q) { return q.summary; });
   var dinners = []; for (var di = 0; di < 4; di++) { var dd2 = addDays_(t, di), mm = get_('Menus', monday_(dd2) + '-' + DAYS[dow_(dd2)]); dinners.push({ date: dd2, dinner: mm ? (dishName_(mm) || 'nothing planned') : 'nothing planned', cook: mm && mm.cook || '', notHome: mm && mm.away || '' }); }
-  var myPosts = rows_('Activity').filter(function (a) { return a.type === 'ai' && a.state !== 'cleared' && a.time >= since; }).map(function (a) { return { id: a.id, kind: 'note', text: a.text }; })
+  var myPosts = rows_('Activity').filter(function (a) { return a.type === 'ai' && !a.stack && a.state !== 'cleared' && a.time >= since; }).map(function (a) { return { id: a.id, kind: 'note', text: a.text }; })
     .concat(rows_('ai_requests').filter(function (q) { return q.status === 'question'; }).map(function (q) { return { id: q.id, kind: 'question', askedOf: q.who, question: q.question }; }));
   var S = { type: 'string' }, o = function (props) { return { type: 'object', additionalProperties: false, required: Object.keys(props), properties: props }; },
       strs = function (keys) { var x = {}; keys.forEach(function (k) { x[k] = S; }); return x; };

@@ -414,7 +414,7 @@ a.alink { color: inherit; text-decoration: underline; text-decoration-color: col
 // Momnie Family app v6.0
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'], DAYN = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'], ADULTS = ['Paul', 'Shana'];
 // Shown at the bottom of Home. Bump it together with VERSION in sw.js on every release.
-const APP_VERSION = '16.0 · Nov 19, 2026';
+const APP_VERSION = '16.1 · Nov 19, 2026';
 const TABLES = ['People', 'Schools', 'SchoolCal', 'Activities', 'Overrides', 'Events', 'Caretakers', 'Childcare', 'Birthdays', 'Todos', 'TodoTypes', 'Recipes', 'DinnerRules', 'Weeks', 'Menus',
   'Groceries', 'GroceryList', 'HouseCards', 'Houses', 'WeatherRules', 'Quotes', 'Memories', 'Updates', 'Messages', 'Activity', 'Comments', 'Reactions', 'Links', 'Settings', 'Photos', 'gifts', 'ai_rules', 'ai_requests', 'notes', 'places', 'daily_items', 'daily_completions'];
 const CAT = { School: '#3f6fb5', Kids: '#4f7cc2', Work: '#64748b', Family: '#5b6fa8', Dinner: '#b08a4f', Caretaker: '#3e9aa6', Shared: '#94a3b8', Birthday: '#c9806a' }, SCHOOL_C = ['#5a72b8', '#7a8597', '#4a6fb0'];
@@ -2118,19 +2118,23 @@ function vFeed() {
   const gone = feedHidden();
   const kindHidden = a => a.type === 'answer' ? true : a.table === 'Photos' ? !fOn('photos') : a.type === 'daily' ? !fOn('daily') : hide(a.cat);
   // When the same thing changes back and forth (office, home, office), only the newest post about it shows.
+  // Posts the assistant found moot (an item changed again or was deleted) leave the Feed for people in its audience,
+  // unless they tick "Show what the assistant tidied away" in the Feed menu.
+  const tidyOn = aiWho().includes(ME) && st('f.moot', '0') !== '1';
   const latestSub = new Map(); S.Activity.forEach(a => { if (!a.subject) return; const pr = latestSub.get(a.subject); if (!pr || (a.time || '') >= (pr.time || '')) latestSub.set(a.subject, a); });
-  const stream = S.Activity.filter(a => a.type !== 'message' && a.state !== 'cleared' && (!a.subject || latestSub.get(a.subject) === a) && (a.type !== 'ai' || aiNoteFor(a).includes(ME)) && !kindHidden(a) && !gone.has('A:' + a.id)).map(a => ({ time: a.time, a })).concat(S.Messages.filter(mm => fOn('messages') && !gone.has('M:' + mm.id)).map(mm => ({ time: mm.time, m: mm, pin: pinnedNow(mm) && mm.resolved !== '1' })))
+  const stream = S.Activity.filter(a => a.type !== 'message' && a.state !== 'cleared' && !(a.state === 'moot' && tidyOn) && (!a.subject || latestSub.get(a.subject) === a) && (a.type !== 'ai' || aiNoteFor(a).includes(ME)) && !kindHidden(a) && !gone.has('A:' + a.id)).map(a => ({ time: a.time, a })).concat(S.Messages.filter(mm => fOn('messages') && !gone.has('M:' + mm.id)).map(mm => ({ time: mm.time, m: mm, pin: pinnedNow(mm) && mm.resolved !== '1' })))
     .concat(S.ai_requests.filter(q => !hide('ai') && q.status !== 'filled' && q.status !== 'cleared' && (q.status !== 'error' || q.who === ME) && !gone.has('R:' + q.id)).map(q => ({ time: q.time || '', r: q })))
     .sort((x, y) => (y.pin ? 1 : 0) - (x.pin ? 1 : 0) || y.time.localeCompare(x.time)).slice(0, 70);
   // Bundle bursts: several changes by the same person within a few minutes become one post.
   const win = (+st('bundleMin', '5') || 0) * 60000, out = [];
-  stream.forEach(e => { const p = out[out.length - 1], solo = x => x.r || x.m || x.pin || x.a.stack || x.a.type === 'ai' || taggedMe(x.a.text, x.a.who) || x.a.table === 'Photos' || String(x.a.subject || '').startsWith('dinners|') || x.a.type === 'daily' || x.a.type.startsWith('summary') || x.a.who === 'App';
+  stream.forEach(e => { const p = out[out.length - 1], solo = x => x.r || x.m || x.pin || stackOf(x) || x.a.type === 'ai' || taggedMe(x.a.text, x.a.who) || x.a.table === 'Photos' || String(x.a.subject || '').startsWith('dinners|') || x.a.type === 'daily' || x.a.type.startsWith('summary') || x.a.who === 'App';
     if (win && p && !solo(e) && !solo(p.items ? p.items[0] : p) && p.who === e.a.who && new Date(p.t0) - new Date(e.time) <= win) { p.items = p.items || [{ time: p.time, a: p.a }]; p.items.push(e); p.t0 = e.time; return; }
     out.push(Object.assign({ who: e.a ? e.a.who : '', t0: e.time }, e)); });
   const fOff = FKINDS().filter(([k]) => !fOn(k)).map(x => x[1]);
   html += `<div class="rbar" style="padding:14px 8px 6px 16px"><div class="row"><span class="sect" style="padding:0">Activity</span><button class="rmbtn ${fOff.length ? 'on' : ''}" data-a="feedMenu" aria-label="Choose what shows in the Feed" aria-expanded="${FMENU}">${ic('menu', 22)}${fOff.length ? `<i>${fOff.length}</i>` : ''}</button></div>
     ${FMENU ? `<div class="rshade" data-a="feedMenu"></div><div class="rmenu" role="dialog" aria-label="Show in the Feed" style="top:58px;right:8px"><div class="lbl" style="margin-top:0">Show in my Feed</div>
       ${FKINDS().map(([k, l]) => `<label class="check-row" style="margin-top:8px"><input type="checkbox" data-c="feedTog" data-k="${k}" ${fOn(k) ? 'checked' : ''}>${esc(l)}</label>`).join('')}
+      ${aiWho().includes(ME) ? `<label class="check-row" style="margin-top:12px"><input type="checkbox" data-c="feedTog" data-k="moot" ${st('f.moot', '0') === '1' ? 'checked' : ''}>${ic('spark', 14)} Show what the assistant tidied away</label>` : ''}
       <div class="actions"><button class="btn gray sm" data-a="feedAll">Show everything</button><button class="btn sm" data-a="feedMenu">Done</button></div>
       <div class="small muted" style="margin-top:10px">Only changes your Feed. Same as Home, Settings, Show in my Feed.</div></div>` : ''}
     ${fOff.length ? `<div class="small muted rapplied" style="padding:2px 0 0">Hiding ${esc(fOff.join(', '))} · <a data-a="feedAll">Show everything</a></div>` : ''}</div>` + (out.length ? groupStacks(out).map(e => e.cards ? stackHTML(e) : swipeWrap(e.items ? e.items.map(x => 'A:' + x.a.id) : e.r ? ['R:' + e.r.id] : e.m ? ['M:' + e.m.id] : ['A:' + e.a.id], e.items ? bundlePost(e) : e.r ? askPost(e.r) : e.m ? msgPost(e.m, e.pin) : actPost(e.a))).join('') : '<div class="empty">Nothing yet. Changes either of you make will show up here.</div>');
@@ -2184,7 +2188,8 @@ const feedHidden = () => new Set(list(st('feedHidden', '')));
 // newest card. Cards are ordered by stackIdx. Each card is drawn exactly like the post it is.
 const STK = {};                                    // stack id -> card the viewer is on (kept through redraws)
 const feedId = e => e.r ? 'R:' + e.r.id : e.m ? 'M:' + e.m.id : 'A:' + e.a.id;
-const stackOf = e => e.items ? '' : String((e.m && e.m.stack) || (e.a && e.a.stack) || '');
+// Stacks the assistant made (ids starting "ai") apply only for people in the assistant's audience; others see the posts as before.
+const stackOf = e => { const k = e.items ? '' : String((e.m && e.m.stack) || (e.a && e.a.stack) || ''); return k.startsWith('ai') && !aiWho().includes(ME) ? '' : k; };
 function groupStacks(rows) {
   const at = {}, res = [];
   rows.forEach(e => { const k = stackOf(e); if (!k) return res.push(e);
