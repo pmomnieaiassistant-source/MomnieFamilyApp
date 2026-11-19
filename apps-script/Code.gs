@@ -1,6 +1,8 @@
 /**
  * Momnie Family app backend
- * Version 3.29 (2026-11-19)
+ * Version 3.30 (2026-11-19)
+ *   3.30: The Assistant shows the real reason when it fails (also saved as app|ai.error), retries once when Claude is busy,
+ *         and falls back to plain JSON if the request form is refused.
  *   3.29: Known locations (places tab) for "last seen at".
  *   3.28: Work location wording is "in office" and "working from home".
  *   3.27: Activity.subject, so the Feed shows only the newest post when something changes back and forth.
@@ -950,20 +952,42 @@ function aiContext_(t) {
   return c;
 }
 /** One structured call to Claude. Returns { data } (the parsed JSON), { refused: true } or { error }. */
-function claude_(system, content, schema, effort) {
+function claude_(system, content, schema, effort, maxTokens) {
   var key = PropertiesService.getScriptProperties().getProperty('ANTHROPIC_API_KEY');
   if (!key) return { error: 'No API key yet. In Apps Script: Project Settings, Script properties, add ANTHROPIC_API_KEY.', nokey: true };
-  var body = { model: PropertiesService.getScriptProperties().getProperty('AI_MODEL') || 'claude-opus-5-5', max_tokens: 4000,
-    output_config: { effort: effort || 'medium', format: { type: 'json_schema', schema: schema } }, fallbacks: 'default',
-    system: system, messages: [{ role: 'user', content: content }] };
-  var res = UrlFetchApp.fetch('https://api.anthropic.com/v1/messages', { method: 'post', contentType: 'application/json', muteHttpExceptions: true,
-    headers: { 'x-api-key': key, 'anthropic-version': '2026-10-21', 'anthropic-beta': 'server-side-fallback-2026-07-01' }, payload: JSON.stringify(body) });
-  var code = res.getResponseCode(), j = {};
-  try { j = JSON.parse(res.getContentText()); } catch (e) {}
-  if (code !== 200) return { error: 'Claude API error ' + code + (j.error && j.error.message ? ': ' + j.error.message : '') };
+  var model = PropertiesService.getScriptProperties().getProperty('AI_MODEL') || 'claude-opus-5-5';
+  var send = function (strict) {
+    var body = { model: model, max_tokens: maxTokens || 4000, fallbacks: 'default', system: system, messages: [{ role: 'user', content: content }],
+      output_config: strict ? { effort: effort || 'medium', format: { type: 'json_schema', schema: schema } } : { effort: effort || 'medium' } };
+    if (!strict) body.system = system + '\n\nReply with only one JSON object (no other text) that matches this JSON schema exactly:\n' + JSON.stringify(schema);
+    try {
+      return UrlFetchApp.fetch('https://api.anthropic.com/v1/messages', { method: 'post', contentType: 'application/json', muteHttpExceptions: true,
+        headers: { 'x-api-key': key, 'anthropic-version': '2026-10-21', 'anthropic-beta': 'server-side-fallback-2026-07-01' }, payload: JSON.stringify(body) });
+    } catch (e) { return { err: 'Could not reach Claude (' + String(e && e.message || e).slice(0, 120) + ')' }; }
+  };
+  var strict = true, res, code, j;
+  for (var tries = 0; tries < 3; tries++) {
+    res = send(strict); j = {};
+    if (res.err) { code = 0; if (tries === 0) { Utilities.sleep(1500); continue; } return claudeErr_(res.err); }
+    code = res.getResponseCode();
+    try { j = JSON.parse(res.getContentText()); } catch (e) {}
+    var msg = j.error && j.error.message ? j.error.message : '';
+    if (code === 200) break;
+    if (code === 400 && strict && /schema|grammar|format|output_config|too (many|complex|large)/i.test(msg)) { strict = false; continue; }   // the form was refused: ask for plain JSON instead
+    if ((code === 429 || code >= 500) && tries === 0) { Utilities.sleep(2000); continue; }   // busy: one more try
+    return claudeErr_('Claude API error ' + code + (msg ? ': ' + msg : ''));
+  }
+  if (code !== 200) return claudeErr_('Claude API error ' + code);
   if (j.stop_reason === 'refusal') return { refused: true };
+  if (j.stop_reason === 'max_tokens') return claudeErr_('The answer was too long and got cut off.');
   var text = (j.content || []).filter(function (b) { return b.type === 'text'; }).map(function (b) { return b.text; }).join('');
-  try { return { data: JSON.parse(text) }; } catch (e) { return { error: 'Could not read the answer.' }; }
+  if (!strict) { var i0 = text.indexOf('{'), i1 = text.lastIndexOf('}'); if (i0 >= 0 && i1 > i0) text = text.slice(i0, i1 + 1); }
+  try { return { data: JSON.parse(text) }; } catch (e) { return claudeErr_('Could not read the answer.'); }
+}
+/** Keeps the latest Claude problem in Settings (app|ai.error) so it can be seen from the Sheet and the app. */
+function claudeErr_(msg) {
+  try { put_('Settings', { id: 'app|ai.error', value: now_() + ' · ' + String(msg).slice(0, 300) }); } catch (e) {}
+  return { error: msg };
 }
 /** Asks Claude for 0 to 3 notes and posts them to the Feed. Returns the notes (or why there are none). */
 /** How many general (not rule) notes the assistant has posted today. */
@@ -1204,8 +1228,8 @@ function aiDo_(b, me) {
     system = 'You are the Assistant inside a family\'s home app. Someone typed a request; turn it into things to create in the app.\n' + setup + rules + '\nFor new items, ref is "".';
     content = txt_(b.text, 2000);
   }
-  var r = claude_(system, content, schema, 'low');
-  if (r.error) return { error: r.nokey ? r.error : 'The assistant is not available right now. Try again in a minute.' };
+  var r = claude_(system, content, schema, 'low', 8000);
+  if (r.error) return { error: r.nokey ? r.error : 'The assistant is not available right now. ' + r.error };
   if (r.refused || !r.data) return { error: 'The assistant could not help with that.' };
   var d = r.data, items = [], dropped = 0, allowed = {};
   if (b.action === 'ai_answer') jsonList_(get_('ai_requests', String(b.id)).refs).forEach(function (x) { allowed[x[0] + ':' + x[1]] = 1; });
@@ -1297,7 +1321,7 @@ function aiEvent_(text, t, now, me) {
     required: ['title', 'category', 'date', 'allDay', 'endDate', 'start', 'end', 'people', 'location', 'house', 'dropoff', 'pickup', 'notes'],
     properties: { title: str, category: { type: 'string', enum: cats }, date: str, allDay: { type: 'string', enum: ['1', ''] }, endDate: str, start: str, end: str, people: str, location: str, house: str, dropoff: str, pickup: str, notes: str } };
   var r = claude_(system, text, schema, 'low');
-  if (r.error) return { ok: false, error: r.nokey ? r.error : 'The assistant is not available right now.' };
+  if (r.error) return { ok: false, error: r.nokey ? r.error : 'The assistant is not available right now. ' + r.error };
   if (r.refused || !r.data) return { event: null };
   var e = evClean_(r.data, t);
   if (!e) return { event: null };
