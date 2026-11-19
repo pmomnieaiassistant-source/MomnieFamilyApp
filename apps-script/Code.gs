@@ -1,6 +1,7 @@
 /**
  * Momnie Family app backend
- * Version 3.43 (2026-11-19)
+ * Version 3.44 (2026-11-19)
+ *   3.44: The assistant can ask "Should this be an annual tradition?" about an event (yes/no question in the Feed); a Yes adds the tradition and posts a note. Messages gets a ref column.
  *   3.43: The assistant no longer sees gift-idea counts at all.
  *   3.42: The assistant reviews every two hours from 5 AM to 1 AM; the start-hour setting is gone.
  *   3.41: School posts put a whole section on one card (up to about 1,380 characters); a very large section splits into even pieces.
@@ -115,7 +116,7 @@ var T = {
   Quotes: 'id,quote,author,lastShown',
   Memories: 'id,date,note,photo',
   Updates: 'id,date,title,message,hiddenFrom,label',   // label: optional heading over a splash screen, e.g. "A bit from Paul"
-  Messages: 'id,time,from,text,tags,visibility,pinUntil,urgent,resolved,resolvedBy,kind,answerType,options,stack,stackIdx',   // kind 'question': answerType yesno / time / choice / text; stack: posts that share a stack id show as one pile of cards (stackIdx = card order)
+  Messages: 'id,time,from,text,tags,visibility,pinUntil,urgent,resolved,resolvedBy,kind,answerType,options,stack,stackIdx,ref',   // kind 'question': answerType yesno / time / choice / text; stack: posts that share a stack id show as one pile of cards (stackIdx = card order)
   Activity: 'id,time,who,type,text,amount,table,ref,cat,audience,state,subject,stack,stackIdx',   // audience: who sees an AI assistant note; state: 'cleared' = the assistant retired it; stack, stackIdx: as in Messages
   Comments: 'id,time,who,table,ref,text,system',
   Reactions: 'id,time,who,table,ref,emoji',
@@ -1197,9 +1198,11 @@ function aiReview_(t, hour) {
   var gap = Number(setting_('app|ai.every', '110'));   // minutes; a little under two hours so an hourly tick never skips a slot
   if (hour >= 2 && hour < 5) return;   // quiet from 2 AM to 5 AM; the window is fixed, there is no setting for it
   if (minsSince_('job|ai_review_at') >= gap) { stamp_('job|ai_review_at'); aiSafe_(t); aiCardsSafe_(t, hour); }
+  aiTradSafe_(t, false);   // adds a tradition the moment a yes has been given (no Claude call)
   if (setting_('app|ai.convo', '1') === '1') aiConvoSafe_(t, false);   // every tick; only calls Claude when there is something new
   if (minsSince_('job|ai_tidy_at') >= gap) { stamp_('job|ai_tidy_at'); aiTidySafe_(t); }
   if (minsSince_('job|ai_feed_at') >= gap) { stamp_('job|ai_feed_at'); aiFeedSafe_(t); }
+  if (minsSince_('job|ai_trad_at') >= gap) { stamp_('job|ai_trad_at'); aiTradSafe_(t, true); }
 }
 /** Today cards: tomorrow's from 7 PM, today's before that. */
 function aiCardsSafe_(t, hour) { try { if (hour >= 19) briefAll_(addDays_(t, 1), 'night'); else briefAll_(t, 'day'); } catch (e) { console.error(e); } }
@@ -1285,6 +1288,55 @@ function aiFeed_(t) {
 
 // ---------- The assistant tidies up its own posts ----------
 function aiTidySafe_(t) { try { return aiTidy_(t); } catch (e) { console.error(e); return { error: String(e && e.message || e) }; } }
+// ---------- The assistant spots annual traditions ----------
+// Each review it may notice an event that looks like something the family does every year (a holiday party, a festival,
+// a yearly outing) and post a yes/no question in the Feed: "Should X be an annual tradition?". The question is an ordinary
+// question post (Messages, kind 'question', answerType 'yesno') with ref "tradition|<event id>|<title>". On its next run,
+// if the answer is Yes it adds the tradition (Annuals) and posts a note saying so; No just closes it. Each event title is asked about once.
+var TRAD_REF = /^tradition\|([^|]*)\|(.*)$/;
+function aiTradSafe_(t, ask) { try { return aiTrad_(t, ask); } catch (e) { console.error(e); return { error: String(e && e.message || e) }; } }
+function aiTrad_(t, ask) {
+  if (setting_('app|ai.on', '') !== '1') return { off: true };
+  var made = [], who = list_(setting_('app|ai.who', 'Paul')), annuals = rows_('Annuals');
+  // 1. answered questions
+  rows_('Messages').forEach(function (m) {
+    var mt = TRAD_REF.exec(m.ref || ''); if (!mt) return;
+    var ans = rows_('Comments').filter(function (c) { return c.table === 'Messages' && c.ref === m.id && c.system === 'answer'; }).sort(function (a, b) { return String(a.time) < String(b.time) ? -1 : 1; }).pop();
+    if (!ans) return;
+    var yes = /^\s*yes/i.test(ans.text), title = mt[2], e = get_('Events', mt[1]) || {};
+    if (!yes) { put_('Messages', { id: m.id, ref: 'tradition-no|' + mt[1] + '|' + title }); return; }
+    var have = annuals.filter(function (a) { return norm_(a.name) === norm_(title); })[0], id = have ? have.id : id_();
+    if (!have) {
+      var from = e.date || t, yr = from.slice(0, 4);
+      put_('Annuals', { id: id, name: title, from: from, to: e.endDate && e.endDate > from ? e.endDate : '', where: e.location || '', notes: e.notes || '', remind: '14', years: from <= t ? yr : '', when: '', link: '' });
+      annuals.push({ id: id, name: title });
+    }
+    put_('Messages', { id: m.id, ref: 'tradition-yes|' + mt[1] + '|' + title });
+    log_('Assistant', { type: 'ai', text: (have ? '"' + title + '" is already an annual tradition.' : 'Created a new annual tradition: **' + title + '**' + (e.date ? ' (usually ' + nice_(e.date) + ')' : '') + '. You will get a reminder two weeks before it starts. Find it under Home, Annual traditions.'), cat: 'ai', table: 'Annuals', ref: id, audience: who.join(', ') });
+    made.push(title);
+  });
+  if (!ask) return { made: made };
+  // 2. maybe one new question
+  var asked = {}; rows_('Messages').forEach(function (m) { var mt = /^tradition[^|]*\|[^|]*\|(.*)$/.exec(m.ref || ''); if (mt) asked[norm_(mt[1])] = 1; });
+  annuals.forEach(function (a) { asked[norm_(a.name)] = 1; });
+  var open = rows_('Messages').filter(function (m) { return TRAD_REF.test(m.ref || ''); }).length;
+  if (open >= 2) return { made: made };   // never pile up questions
+  var evs = rows_('Events').filter(function (e) { return e.date >= addDays_(t, -45) && e.date <= addDays_(t, 75) && !asked[norm_(e.title)]; })
+    .map(function (e) { return { id: e.id, title: e.title, date: e.date, endDate: e.endDate || '', location: e.location || '', category: e.category || '' }; });
+  if (!evs.length) return { made: made };
+  var S = { type: 'string' }, schema = { type: 'object', additionalProperties: false, required: ['pick'], properties: { pick: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['id'], properties: { id: S } } } } };
+  var system = 'You are the Assistant inside a family\'s home app. Below are events from the family\'s Planner. Pick AT MOST ONE that looks like something a family does every year and would want to be reminded about: ' +
+    'a holiday or seasonal party, a festival, a yearly outing, a recurring tradition (for example a Christmas party, Oyster Fest, apple picking, meeting Santa). Do not pick ordinary appointments, school days, practices, birthdays, work, errands, ' +
+    'or anything routine or one-off. Most of the time pick nothing: return an empty list unless one is clearly a good fit. Use the id exactly as given.';
+  var r = claude_(system, JSON.stringify({ events: evs }), schema, 'low', 800);
+  if (r.error || r.refused || !r.data) return { made: made, error: r.error };
+  var pick = (r.data.pick || [])[0], e = pick && evs.filter(function (x) { return x.id === pick.id; })[0];
+  if (!e) return { made: made };
+  var title = String(e.title).replace(/\|/g, ' ').trim();
+  put_('Messages', { id: id_(), time: now_(), from: 'Assistant', tags: who.join(', '), visibility: '', kind: 'question', answerType: 'yesno', ref: 'tradition|' + e.id + '|' + title,
+    text: 'Should "' + title + '" (' + nice_(e.date) + ') be an annual tradition? If yes, I will add it to Annual traditions and remind you two weeks before it each year.' });
+  return { made: made, asked: title };
+}
 /** Clears the assistant's notes and questions that are no longer relevant. Nothing is deleted: cleared posts just leave the Feed. */
 function aiTidy_(t) {
   var cleared = [], notes = rows_('Activity').filter(function (a) { return a.type === 'ai' && !a.stack && a.state !== 'cleared'; }),
@@ -1324,7 +1376,8 @@ function aiAfter_(t) {
 function aiAll_(t) {
   stamp_('job|ai_review_at'); var night = Number(now_().slice(11, 13)) >= 19, notes = aiPosts_(t, true), cards = briefAll_(night ? addDays_(t, 1) : t, night ? 'night' : 'day'), convo = setting_('app|ai.convo', '1') === '1' ? aiConvoSafe_(t, true) : {}, tidy = aiTidySafe_(t);
   stamp_('job|ai_feed_at'); var feed = aiFeedSafe_(t);
-  return { notes: notes, cards: cards.done, cardError: cards.error, convo: convo.actions || [], tidied: tidy.cleared || 0, stacked: feed.stacks || 0, hidden: feed.hidden || 0 };
+  stamp_('job|ai_trad_at'); var trad = aiTradSafe_(t, true);
+  return { traditions: (trad.made || []).length, tradAsked: trad.asked || '', notes: notes, cards: cards.done, cardError: cards.error, convo: convo.actions || [], tidied: tidy.cleared || 0, stacked: feed.stacks || 0, hidden: feed.hidden || 0 };
 }
 /** Everything on person p's plate for date d, each with a ref the app can open. Gift ideas are never included. */
 function briefCands_(p, d, mode) {
@@ -1494,7 +1547,7 @@ function aiConvoSafe_(t, manual) { try { return aiConvo_(t, manual); } catch (e)
 function aiConvo_(t, manual) {
   var last = setting_('app|ai.convoLast', ''), since = addDays_(t, -3), people = rows_('People');
   var cmt = rows_('Comments').filter(function (c) { return c.system !== '1' && c.time >= since; });
-  var threads = rows_('Messages').filter(function (m) { return m.time >= since || cmt.some(function (c) { return c.table === 'Messages' && c.ref === m.id; }); }).map(function (m) {
+  var threads = rows_('Messages').filter(function (m) { return !/^tradition/.test(m.ref || '') && (m.time >= since || cmt.some(function (c) { return c.table === 'Messages' && c.ref === m.id; })); }).map(function (m) {
     var cs = cmt.filter(function (c) { return c.table === 'Messages' && c.ref === m.id; }), newest = [m.time].concat(cs.map(function (c) { return c.time; })).sort().pop();
     return { id: m.id, time: m.time, from: m.from, text: m.text, asked: m.kind === 'question' ? (m.tags || 'the other parent') : '', answerKind: m.kind === 'question' ? m.answerType : '', isNew: newest > last,
       replies: cs.map(function (c) { return { who: c.who, time: c.time, text: c.system === 'answer' && m.answerType === 'time' ? t12_(c.text) : c.text, isAnswer: c.system === 'answer' }; }) };

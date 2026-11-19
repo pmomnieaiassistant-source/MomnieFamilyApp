@@ -416,7 +416,7 @@ a.alink { color: inherit; text-decoration: underline; text-decoration-color: col
 // Momnie Family app v6.0
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'], DAYN = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'], ADULTS = ['Paul', 'Shana'];
 // Shown at the bottom of Home. Bump it together with VERSION in sw.js on every release.
-const APP_VERSION = '16.11 · Nov 19, 2026';
+const APP_VERSION = '16.12 · Nov 19, 2026';
 const TABLES = ['People', 'Schools', 'SchoolCal', 'Activities', 'Overrides', 'Events', 'Caretakers', 'Childcare', 'Birthdays', 'Annuals', 'Todos', 'TodoTypes', 'Recipes', 'DinnerRules', 'Weeks', 'Menus',
   'Groceries', 'GroceryList', 'HouseCards', 'Houses', 'WeatherRules', 'Quotes', 'Memories', 'Updates', 'Messages', 'Activity', 'Comments', 'Reactions', 'Links', 'Settings', 'Photos', 'gifts', 'ai_rules', 'ai_requests', 'notes', 'places', 'daily_items', 'daily_completions'];
 const CAT = { School: '#3f6fb5', Kids: '#4f7cc2', Work: '#64748b', Family: '#5b6fa8', Dinner: '#b08a4f', Caretaker: '#3e9aa6', Shared: '#94a3b8', Birthday: '#c9806a' }, SCHOOL_C = ['#5a72b8', '#7a8597', '#4a6fb0'];
@@ -587,6 +587,7 @@ const personMentions = (name, n) => S.Messages.filter(m => list(m.tags).includes
   .concat(S.Comments.filter(c => c.system !== '1' && c.table !== 'gifts' && mentionsIn(c.text).includes(name)).map(c => ({ time: c.time, who: c.who, text: c.text, open: [c.table, c.ref], kind: 'comment' })))
   .sort((a, b) => String(b.time || '').localeCompare(String(a.time || ''))).slice(0, n || 10);
 const avatar = who => who === 'App' ? `<span class="av"><i data-p="App">${ic('home', 16)}</i></span>`
+  : who === 'Assistant' ? `<span class="av aiav">${ic('spark', 18)}</span>`
   : `<span class="av ${seenCls(who)}" ${ADULTS.includes(who) ? `data-seen="${esc(who)}"` : ''} ${personOf(who) ? `data-a="person" data-v="${esc(who)}"` : ''} style="background:${pcol(who)}"><i style="background:color-mix(in srgb, ${pcol(who)} 22%, var(--card));color:${pcol(who)}">${esc((who || '?').charAt(0))}</i></span>`;
 const whoDots = names => names.length ? `<span class="who">${names.map(n => `<i style="--pc:${pcol(n)}" title="${esc(n)}">${esc(n.slice(0, 2))}</i>`).join('')}</span>` : '';
 // Recipe ingredients are stored as "name (amount unit)", e.g. "chicken breast (1 lb)", so the Sheet and backend keep working.
@@ -2078,7 +2079,7 @@ A.nav = v => { FABON = false; if (v === 'dailyGo') { view = 'todo'; render(); sc
   if (v === 'planner') { PW = mondayOf(TODAY); view = v; render(); return plannerToToday(); }
   view = v; render(); scrollToY(0); };
 /** Puts today at the top of the screen (earlier days stay above, a scroll away). */
-function plannerToToday() { const el = $('day-' + TODAY); if (!el) return scrollToY(0); scrollToY(elTop(el) - 6); }
+function plannerToToday() { const el = $('day-' + TODAY); if (!el) return scrollToY(0); scrollToY(Math.max(0, elTop(el) - Math.round($('view').clientHeight * 0.2))); }   // today sits about a fifth of the way down, where the eye lands
 function pcard(i) {
   const n = cmts(i.t, i.id).filter(c => c.system !== '1').length;
   const sub = [i.sub && esc(i.sub), i.ride && rideHTML(i)].filter(Boolean).join(' · ');
