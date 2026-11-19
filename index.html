@@ -415,8 +415,8 @@ a.alink { color: inherit; text-decoration: underline; text-decoration-color: col
 // Momnie Family app v6.0
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'], DAYN = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'], ADULTS = ['Paul', 'Shana'];
 // Shown at the bottom of Home. Bump it together with VERSION in sw.js on every release.
-const APP_VERSION = '16.2 · Nov 19, 2026';
-const TABLES = ['People', 'Schools', 'SchoolCal', 'Activities', 'Overrides', 'Events', 'Caretakers', 'Childcare', 'Birthdays', 'Todos', 'TodoTypes', 'Recipes', 'DinnerRules', 'Weeks', 'Menus',
+const APP_VERSION = '16.3 · Nov 19, 2026';
+const TABLES = ['People', 'Schools', 'SchoolCal', 'Activities', 'Overrides', 'Events', 'Caretakers', 'Childcare', 'Birthdays', 'Annuals', 'Todos', 'TodoTypes', 'Recipes', 'DinnerRules', 'Weeks', 'Menus',
   'Groceries', 'GroceryList', 'HouseCards', 'Houses', 'WeatherRules', 'Quotes', 'Memories', 'Updates', 'Messages', 'Activity', 'Comments', 'Reactions', 'Links', 'Settings', 'Photos', 'gifts', 'ai_rules', 'ai_requests', 'notes', 'places', 'daily_items', 'daily_completions'];
 const CAT = { School: '#3f6fb5', Kids: '#4f7cc2', Work: '#64748b', Family: '#5b6fa8', Dinner: '#b08a4f', Caretaker: '#3e9aa6', Shared: '#94a3b8', Birthday: '#c9806a' }, SCHOOL_C = ['#5a72b8', '#7a8597', '#4a6fb0'];
 // Muted person colors (Outlook-style): Clara pink, Conrad green, Charlie blue, Shana purple, Paul grey.
@@ -782,6 +782,25 @@ const typeOf = r => byId('TodoTypes', r.type) || { name: r.type || 'Task', emoji
 const avgRating = r => { try { const v = Object.values(JSON.parse(r.ratings || '{}')).map(Number).filter(x => x > 0); return v.length ? v.reduce((a, b) => a + b, 0) / v.length : 0; } catch (e) { return 0; } };
 const groc = n => { const k = norm(n); return S.Groceries.find(g => norm(g.name) === k || list(g.altNames).some(a => norm(a) === k)); };
 function recipeStats(id) { const past = S.Menus.filter(m => m.recipeId === id && m.skipped !== '1' && m.date < TODAY).map(m => m.date).sort(); return { n: past.length, last: past[past.length - 1] || '' }; }
+// ----- Annual events -----
+// Stored with a start and an optional end date; only the month and day count, so each one repeats every year.
+const annMD = d => String(d || '').slice(5, 10);
+/** The current or next time this comes around: { s, e, now, days, year } (a window that wraps the new year works). */
+function annNext(a) {
+  const f = annMD(a.from); if (!/^\d\d-\d\d$/.test(f)) return null;
+  const t = /^\d\d-\d\d$/.test(annMD(a.to)) ? annMD(a.to) : f, y = +TODAY.slice(0, 4);
+  for (const yr of [y - 1, y, y + 1]) { const s0 = yr + '-' + f; let e0 = yr + '-' + t; if (e0 < s0) e0 = (yr + 1) + '-' + t;
+    if (e0 >= TODAY) return { s: s0, e: e0, now: s0 <= TODAY, days: Math.round((parse(s0) - parse(TODAY)) / 864e5), year: yr }; }
+  return null;
+}
+const annWent = (a, yr) => list(a.years).includes(String(yr));
+const annWin = a => { const f = a.from ? fmtDate(a.from) : '', t = a.to && annMD(a.to) !== annMD(a.from) ? fmtDate(a.to) : ''; return f ? f + (t ? ' – ' + t : '') : ''; };
+const annRemind = a => ({ 7: 'A week before it starts', 14: 'Two weeks before it starts', 30: 'A month before it starts' }[a.remind] || '');
+/** Reminders on the Today card: in season, or starting within the days chosen, and not already done this year. */
+function annReminders() {
+  return S.Annuals.map(a => { const w = a.remind ? annNext(a) : null; if (!w || annWent(a, w.year) || !(w.now || w.days <= +a.remind)) return null;
+    return { lvl: 'plain', icon: 'sun', open: ['Annuals', a.id], text: w.now ? `${a.name} is on now · until ${fmtDate(w.e)}` : `${a.name} starts ${fmtDate(w.s)} · in ${w.days} day${w.days === 1 ? '' : 's'}` }; }).filter(Boolean);
+}
 function allBirthdays() {
   const out = S.Birthdays.filter(b => b.date).map(b => ({ name: b.name, date: b.date, t: 'Birthdays', id: b.id }));
   S.People.concat(S.Caretakers).forEach(p => { if (p.birthday) out.push({ name: p.name, date: p.birthday, t: S.People.includes(p) ? 'People' : 'Caretakers', id: p.id }); });
@@ -1327,6 +1346,13 @@ const FORMS = {
   SchoolCal: [F('schoolId', 'School', 'sel', () => S.Schools.map(s => [s.id, s.name])), F('title', 'What is it?', 'text', null, { ph: 'e.g. Teacher in-service' }), F('kind', 'Kind', 'sel', [['event', 'Event (school is on)'], ['off', 'No school'], ['half', 'Half day']]),
     F('date', 'Date', 'date'), F('endDate', 'Last day (optional)', 'date'), F('start', 'Starts (optional)', 'time'), F('end', 'Ends, or half-day pickup time', 'time', null, { dur: 'start' }), F('notes', 'Notes', 'area')],
   Birthdays: [F('name', 'Name'), F('date', 'Birthday', 'date'), F('notes', 'Notes', 'area')],
+  // Annual events: things that happen around the same time every year that we like to do. They are not on the Planner.
+  Annuals: [F('name', 'Event', 'text', null, { ph: 'e.g. Oyster Fest, Meet Santa, the butterfly exhibit' }),
+    F('from', 'Starts around (the year does not matter)', 'date'), F('to', 'Ends around (optional)', 'date'),
+    F('when', 'When, in words (optional)', 'text', null, { ph: 'e.g. first weekend of October, weekends in December' }),
+    F('where', 'Where'), F('link', 'Website'),
+    F('remind', 'Remind us', 'sel', [['', 'No reminder'], ['7', 'A week before it starts'], ['14', 'Two weeks before it starts'], ['30', 'A month before it starts']]),
+    F('years', 'Years we went', 'text', null, { ph: 'e.g. 2024, 2025' }), F('notes', 'Notes', 'area')],
   HouseCards: [F('house', 'House', 'sel', ['Boston', 'Cape']), F('kind', 'Kind', 'sel', [['info', 'Info (reference)'], ['upkeep', 'Upkeep (repeats)']], { re: 1 }), F('title', 'Title', 'text', null, { ph: 'e.g. Replace furnace filters' }),
     F('body', 'Details (which ones, where to buy, how)', 'area'), F('link', 'Link'), F('everyMonths', 'Repeats every __ months', 'num', null, { show: x => x.kind === 'upkeep' }), F('nextDue', 'Next due', 'date', null, { show: x => x.kind === 'upkeep' })],
   places: [F('name', 'Name', 'text', null, { ph: 'e.g. Home, Paul\'s work, CHS' }), F('_here', 'Use where I am right now', 'chk', null, { re: 1 }),
@@ -1353,7 +1379,7 @@ const FORMS = {
       F('tags', q ? 'Who are you asking?' : 'Tag people', 'multi', () => q ? ADULTS.filter(n => n !== ME) : S.People.map(p => p.name)),
       F('visibility', 'Who can see it', 'sel', [['', 'Everyone'], ['adults', 'Paul and Shana only']]), F('pinUntil', 'Pin to the top of the Feed until (optional)', 'date', null, { re: 1 }), F('_pinAt', 'Until what time (optional)', 'time', null, { show: x => !!x.pinUntil, hint: 'Leave blank to keep it pinned all day.' })]; },
 };
-const NAMES = { gifts: 'gift idea', daily_items: 'daily item', Todos: 'to-do', Events: 'event', Activities: 'activity', Childcare: 'caretaker card', Caretakers: 'caretaker', People: 'family member', Schools: 'school', SchoolCal: 'school calendar item', Birthdays: 'birthday', HouseCards: 'house card', Houses: 'house',
+const NAMES = { gifts: 'gift idea', daily_items: 'daily item', Todos: 'to-do', Events: 'event', Activities: 'activity', Childcare: 'caretaker card', Caretakers: 'caretaker', People: 'family member', Schools: 'school', SchoolCal: 'school calendar item', Birthdays: 'birthday', Annuals: 'annual event', HouseCards: 'house card', Houses: 'house',
   WeatherRules: 'weather rule', Groceries: 'grocery card', TodoTypes: 'to-do type', Recipes: 'recipe', Messages: 'message' };
 
 // ---------- saving ----------
@@ -1535,7 +1561,7 @@ A.del = async (v, el) => {
 const kv = (l, v) => v ? `<div class="kv"><span>${esc(l)}</span>${esc(v)}</div>` : '';
 const kvh = (l, h) => h ? `<div class="kv"><span>${esc(l)}</span>${h}</div>` : '';
 const linkOr = s => isUrl(s) ? `<a href="${esc(s)}" target="_blank" rel="noopener">${esc(s)}</a>` : esc(s);
-const std = o => `<div class="actions">${o && o.noEdit ? '' : `<button class="btn gray sm" data-a="edit">${ic('pen')}Edit</button>`}<button class="btn gray sm" data-a="link">${ic('link')}Link</button>${o && o.care ? `<button class="btn gray sm" data-a="careFor">${ic('care')}Add caretaker</button>` : ''}${o && o.noDel ? '' : `<button class="btn danger sm" data-a="del">${ic('trash')}Delete</button>`}</div>`;
+const std = o => `<div class="actions">${o && o.noEdit ? '' : `<button class="btn gray sm" data-a="edit">${ic('pen')}Edit</button>`}<button class="btn gray sm" data-a="link">${ic('link')}Link</button>${o && o.care ? `<button class="btn gray sm" data-a="careFor">${ic('care')}Add caretaker</button>` : ''}${o && o.ann ? `<button class="btn gray sm" data-a="evAnnual">${ic('sun', 16)}Add to annual events</button>` : ''}${o && o.noDel ? '' : `<button class="btn danger sm" data-a="del">${ic('trash')}Delete</button>`}</div>`;
 const rideSel = (cls, val) => `<select class="${cls}">${rideO().map(x => { const [a, b] = Array.isArray(x) ? x : [x, x]; return `<option value="${esc(a)}" ${a === (val || '') ? 'selected' : ''}>${esc(b)}</option>`; }).join('')}</select>`;
 const rideBox = (title, d, p, all) => `<h3>${esc(title)}</h3><div class="two"><div><label>Drop-off</label>${rideSel('rd', d)}</div><div><label>Pickup</label>${rideSel('rp', p)}</div></div>
   ${all ? '<label class="check-row"><input type="checkbox" class="rall"> Apply to all future weeks</label>' : ''}<div class="actions"><button class="btn sm" data-a="rideSave">Save rides</button>${all ? '<button class="btn gray sm" data-a="skipDay">Cancel just this day</button>' : ''}</div>`;
@@ -1550,6 +1576,11 @@ function genericCard(r, d, t) {
     if (f.t === 'date') val = val.length >= 10 ? fmtDay(val) : val; if (f.t === 'time') val = fmtT(val); return f.k === 'link' || f.k === 'where' ? kvh(f.l, linkOr(val)) : kv(f.l, val); }).join('');
 }
 const CARD = {
+  Annuals(r) { const w = annNext(r), ys = list(r.years).sort(), thisY = TODAY.slice(0, 4), went = ys.includes(thisY);
+    return `<h2>${esc(r.name)}</h2>` + kv('Usually', annWin(r)) + kv('In words', r.when) +
+      (w ? kv('Next', w.now ? `On now, until ${fmtDay(w.e)}` : `${fmtDay(w.s)}${w.days <= 120 ? ` · in ${w.days} day${w.days === 1 ? '' : 's'}` : ''}`) : '') + kv('Where', r.where) + kvh('Website', r.link && linkOr(r.link)) +
+      kv('We went', ys.length ? ys.join(', ') : 'Not yet') + kv('Remind us', annRemind(r)) + kv('Notes', r.notes) +
+      `<div class="actions"><button class="btn sm" data-a="annPlan">${ic('planner', 16)}Plan it</button><button class="btn gray sm" data-a="annWent">${went ? 'Undo: we went in ' + thisY : 'We went this year'}</button></div>` + std(); },
   places(r) { return `<h2>${esc(r.name)}</h2>` + kv('Counts as there within', (+r.radius || 200) + ' m') + kvh('Where', r.lat && r.lon ? `<a href="https://maps.google.com/?q=${esc(r.lat)},${esc(r.lon)}" target="_blank" rel="noopener">${esc((+r.lat).toFixed(4) + ', ' + (+r.lon).toFixed(4))} · open in Maps</a>` : 'Not set') + std(); },
   WeatherRules(r) { return `<h2>${esc(r.message || 'Weather rule')}</h2>` + kv('Rule', wxRuleTxt(r)) + kv('Notification', r.push === '1' ? (r.urgent === '1' ? 'Yes, urgent' : 'Yes') : 'No, it shows in the Today card') + kv('On', r.enabled === '0' ? 'Off' : 'On') + std(); },
   gifts(g) { if (!giftSeen(g)) return '<h2>Gift idea</h2><div class="empty">This one is a surprise.</div>'; const own = g.recipient === ME, img = giftPhoto(g, 1200);
@@ -1568,7 +1599,7 @@ const CARD = {
       `<div class="actions"><button class="btn ${done ? 'gray' : 'dark'}" data-a="todoDone" data-v="${r.id}">${done ? 'Reopen' : r.type === 'bill' || r.type === 'paycare' ? 'Mark paid' : 'Mark done'}</button>${r.type === 'appt' && !done ? '<button class="btn gray" data-a="toEvent">' + ic('planner', 16) + 'Add to Planner</button>' : ''}</div>` + std(); },
   Events(r, d) { const all = r.allDay === '1' || !r.start;
     return `<h2>${esc(r.title)}</h2>` + kv('When', fmtDay(r.date) + (r.endDate && r.endDate > r.date ? ' – ' + fmtDay(r.endDate) : '') + (all ? ' · all day' : ` · ${fmtT(r.start)}${r.end ? '–' + fmtT(r.end) : ''}`)) + kv('Type', r.category) + kv('Who', r.people) + kv('Where', r.location) + kv('House', r.house) + kv('Notes', r.notes) +
-      kv('Calendar', r.gcalId ? 'Copied to the shared calendar; change it here, not in Google Calendar' : '') + (r.category === 'Kids' && !all ? rideBox('Rides', r.dropoff, r.pickup) : '') + std({ care: 1 }); },
+      kv('Calendar', r.gcalId ? 'Copied to the shared calendar; change it here, not in Google Calendar' : '') + (r.category === 'Kids' && !all ? rideBox('Rides', r.dropoff, r.pickup) : '') + std({ care: 1, ann: 1 }); },
   GCal(r) { return `<h2>${esc(r.title)}</h2>` + kv('When', r.allDay ? fmtDay(r.start) + (addDays(r.end, -1) > r.start ? ' – ' + fmtDay(addDays(r.end, -1)) : '') + ' · all day' : `${fmtDay(r.start)} · ${fmtT(r.start.slice(11))}–${fmtT(r.end.slice(11))}`) + kv('Where', r.location) + kv('From', 'Shared calendar') +
       `<div class="kv muted small">${r.recurring ? 'A repeating entry from the shared calendar. Import it as an app activity to manage it here, with rides and the kids it is for.' : 'From the shared calendar. Import it to add who it is for, rides and caretakers, and edit it here.'}</div>` +
       `<div class="actions"><button class="btn sm" data-a="convert">${ic('plus', 16)}Import</button><button class="btn gray sm" data-a="link">${ic('link')}Link</button><button class="btn gray sm" data-a="careFor">${ic('care')}Add caretaker</button><button class="btn gray sm" data-a="gcalHide">${ic('x', 16)}${r.recurring ? 'Hide the series' : 'Hide from planner'}</button>${r.recurring ? '' : '<button class="btn danger sm" data-a="gcalDel">' + ic('trash') + 'Delete</button>'}</div>`; },
@@ -1772,6 +1803,17 @@ function vHH() {
     return back + (S.Caretakers.slice().sort((a, b) => a.name.localeCompare(b.name)).map(k => { const nx = up.find(c => c.confirmedId === k.id), pay = k.unpaid === '1' || k.pay === 'unpaid' ? 'Unpaid' : k.pay === 'weekly' ? `Paid weekly${k.payDay ? ' on ' + k.payDay : ''}${k.weekly ? ' · $' + k.weekly : ''}` : k.rate ? '$' + k.rate + '/hr' : '';
       return acard(`data-a="open" data-t="Caretakers" data-id="${esc(k.id)}"`, esc(k.name), [esc([k.relationship, list(k.roster).join(' and ')].filter(Boolean).join(' · ')), esc([pay, k.phone].filter(Boolean).join(' · ')), nx ? `${ic('clock', 13)} Next: ${esc(fmtDay(nx.date))}, ${esc(fmtT(nx.start))}` : ''], k.drive === '1' ? 'Drives' : ''); }).join('') || '<div class="empty">No caretakers yet.</div>') +
       `<div style="height:90px"></div><button class="fab" data-a="add" data-v="Caretakers" aria-label="Add a caretaker">${ic('plus', 20)}Caretaker</button>`; }
+  if (HH === 'annuals') {
+    const ws = S.Annuals.map(a => ({ a, w: annNext(a) })).sort((p, q) => (p.w ? p.w.days : 9999) - (q.w ? q.w.days : 9999) || p.a.name.localeCompare(q.a.name)), card = ({ a, w }) => {
+      const went = list(a.years).sort(), thisY = TODAY.slice(0, 4);
+      return acard(`data-a="open" data-t="Annuals" data-id="${esc(a.id)}"`, esc(a.name), [[annWin(a), a.when ? esc(a.when) : ''].filter(Boolean).join(' · '), a.where ? esc(a.where) : '',
+        went.length ? `Went ${esc(went.join(', '))}` : 'Not done yet'], !w ? '' : w.now ? 'On now' : w.days <= 60 ? `In ${w.days} day${w.days === 1 ? '' : 's'}` : '', went.includes(thisY) ? `<div class="small" style="margin-top:6px;color:var(--grn)">✓ Done this year</div>` : ''); };
+    const now = ws.filter(x => x.w && x.w.now), soon = ws.filter(x => x.w && !x.w.now && x.w.days <= 60), later = ws.filter(x => !x.w || (!x.w.now && x.w.days > 60));
+    return back + `<div class="pad small muted">Things we like to do around the same time every year. They are not on the Planner until you tap Plan it on one.</div>` +
+      (now.length ? `<div class="sect">On now</div>` + now.map(card).join('') : '') + (soon.length ? `<div class="sect">Coming up (next 60 days)</div>` + soon.map(card).join('') : '') +
+      (later.length ? `<div class="sect">${now.length || soon.length ? 'Later in the year' : 'On the list'}</div>` + later.map(card).join('') : '') +
+      (S.Annuals.length ? '' : '<div class="empty">Nothing yet. Add Oyster Fest, Meet Santa, a museum exhibit, anything you like to do every year.</div>') +
+      `<div style="height:90px"></div><button class="fab" data-a="add" data-v="Annuals" aria-label="Add an annual event">${ic('plus', 20)}Annual event</button>`; }
   if (HH === 'birthdays') { const next = b => { let n = TODAY.slice(0, 4) + '-' + b.md; if (n < TODAY) n = (+TODAY.slice(0, 4) + 1) + '-' + b.md; return n; }, days = d => Math.round((parse(d) - parse(TODAY)) / 864e5);
     const bs = allBirthdays().map(b => Object.assign({}, b, { next: next(b) })).sort((a, b) => a.next.localeCompare(b.next) || a.name.localeCompare(b.name));
     return back + (bs.map(b => { const n = days(b.next), turns = b.year ? ageOn(b, b.next) : null;
@@ -1937,6 +1979,15 @@ A.todoDone = async id => {
   if (done && (r.source || '').startsWith('upkeep:')) { const h = byId('HouseCards', r.source.slice(7)); if (h && +h.everyMonths) ops.push({ t: 'HouseCards', row: { id: h.id, nextDue: addMonths(h.nextDue && h.nextDue > TODAY ? h.nextDue : TODAY, +h.everyMonths) } }); }
   if (await write(ops)) toast(done ? (pay ? 'Marked paid' : 'Done ✓') : 'Reopened');
 };
+// "Plan it": an event on the Planner for this year's dates, linked back to the annual event.
+A.annPlan = (v, el) => { const r = byId('Annuals', ctx(el).id), w = annNext(r); if (!r) return;
+  editForm('Events', null, { title: r.name, date: w ? (w.now ? TODAY : w.s) : TODAY, location: r.where || '', notes: [r.notes, r.link].filter(Boolean).join('\n'), category: 'Family', allDay: '1', _link: ['Annuals', r.id] }); };
+A.annWent = (v, el) => { const r = byId('Annuals', ctx(el).id), yr = TODAY.slice(0, 4); if (!r) return; const ys = list(r.years);
+  write({ t: 'Annuals', row: { id: r.id, years: (ys.includes(yr) ? ys.filter(x => x !== yr) : ys.concat(yr)).sort().join(', ') } }); };
+// Something we did on the Planner, kept for next year.
+A.evAnnual = (v, el) => { const r = byId('Events', ctx(el).id); if (!r) return;
+  if (S.Annuals.some(a => norm(a.name) === norm(r.title))) return toast('That is already on the annual list');
+  editForm('Annuals', null, { name: r.title, from: r.date, to: r.endDate && r.endDate > r.date ? r.endDate : '', where: r.location || '', notes: r.notes || '', years: r.date <= TODAY ? r.date.slice(0, 4) : '' }); };
 A.toEvent = (v, el) => { const r = byId('Todos', ctx(el).id); editForm('Events', null, { title: r.title, category: r.kid ? 'Kids' : 'Family', people: r.kid, _todoDone: r.id, _link: ['Todos', r.id] }); };
 A.careAsk = (k, el) => { const c = byId('Childcare', ctx(el).id); let asks = {}; try { asks = JSON.parse(c.asks || '{}'); } catch (e) {} if (!asks[k] && c.confirmedId !== k) { asks[k] = 'asked'; setTimeout(() => write({ t: 'Childcare', row: { id: c.id, asks: JSON.stringify(asks) } }), 400); } };
 A.careSet = async (stt, el) => { const c = byId('Childcare', ctx(el).id), k = el.dataset.k, name = careName(k); let asks = {}; try { asks = JSON.parse(c.asks || '{}'); } catch (e) {}
@@ -1997,7 +2048,7 @@ A.pause = (v, el) => { const r = byId('Recipes', ctx(el).id); if (r.pausedUntil 
 A.archive = (v, el) => { const r = byId('Recipes', ctx(el).id); write({ t: 'Recipes', row: { id: r.id, status: r.status === 'archived' ? '' : 'archived' } }); };
 // ---------- views ----------
 const TITLES = { feed: 'Feed', planner: 'Planner', meals: 'Meals', todo: 'To-Do', home: 'Home' };
-const HH_TITLES = { Schools: 'Schools', Activities: 'Activities', houses: 'House', places: 'Known locations', Caretakers: 'Caretakers', birthdays: 'Birthdays', WeatherRules: 'Weather rules', Groceries: 'Grocery library', TodoTypes: 'To-do types' };
+const HH_TITLES = { Schools: 'Schools', Activities: 'Activities', houses: 'House', places: 'Known locations', Caretakers: 'Caretakers', birthdays: 'Birthdays', annuals: 'Annual events', WeatherRules: 'Weather rules', Groceries: 'Grocery library', TodoTypes: 'To-do types' };
 let HH = '';
 function render() {
   const pv = view === 'person' && byId('People', PERSON);
@@ -2096,7 +2147,7 @@ function vFeed() {
   const where = S.People.filter(p => p.kind !== 'kid' && p.name !== ME && workHours(p, sd).s && list(p.workDays).includes(DAYS[dowIdx(sd)])).map(p => { const home = workWhere(p, sd) === 'home', wh = workHours(p, sd);
     return { lvl: 'plain', icon: home ? 'house' : 'building', text: `${p.name} ${home ? 'working from home' : 'in office'} ${night ? 'tomorrow' : 'today'}${wh.e && wh.e !== wh.s ? ' · until ' + fmtT(wh.e) : ''}`, open: ['People', p.id] }; });
   const rem = where.concat(dinnerFlags(sd, night)).concat(al.map(a => ({ lvl: a.lvl || 'plain', icon: a.icon, text: a.text, open: a.open, sride: a.sride, nav: a.nav })))
-    .concat(bdays.map(b => ({ lvl: 'plain', icon: 'cake', text: b.title + (night ? ' tomorrow' : ' today'), open: [b.t, b.id] })),
+    .concat(annReminders()).concat(bdays.map(b => ({ lvl: 'plain', icon: 'cake', text: b.title + (night ? ' tomorrow' : ' today'), open: [b.t, b.id] })),
       todoSummary(mine, over, due, night));
   const remHTML = r => `<div class="alert ${r.lvl}${r.tag ? ' flag' : ''}" ${r.sride ? `data-a="schoolRide" data-v="${r.sride}"` : r.nav ? `data-a="nav" data-v="${r.nav}"` : r.open ? `data-a="open" data-t="${r.open[0]}" data-id="${esc(r.open[1])}" data-d="${r.open[2] || ''}"` : ''}>${r.ty ? tyIcon(r.ty, 16) : ic(r.icon || 'alert', 16)}<span class="grow">${esc(r.text)}</span>${r.tag ? `<span class="ftag">${esc(r.tag)}</span>` : ''}</div>`;
   const code = wd ? (night || WX.code === null ? wd.code : WX.code) : null;
@@ -2943,8 +2994,13 @@ const SETTINGS = [['Caretakers', 'care', 'Caretakers', 'Boston and Cape rosters,
   ['Groceries', 'cart', 'Grocery library', 'Saved items with brands and notes'], ['TodoTypes', 'tag', 'To-do types', 'Types and who they go to by default'], ['memories', 'quote', 'Quotes and memories', 'The morning splash screen'],
   ['hiddencal', 'x', 'Hidden calendar entries', 'Calendar items you hid from the planner'], ['places', 'pin', 'Known locations', 'Home, work, school… for "last seen at"'], ['settings', 'bell', 'Notifications and Feed', 'Push alerts, bundling, quiet hours, what shows in your Feed'], ['device', 'phone', 'This phone', 'Your personal link and sign-in']];
 // Muted section colors for the Home icons.
-const HC = { gift: '#b0567a', users: '#5b6fa8', school: '#4a7fb5', activity: '#3d9a62', house: '#b07a3c', book: '#a65f5f', gear: '#6b7280', care: '#3e9aa6', cake: '#c8578f', weather: '#4f8fbf', cart: '#8a7a3d', tag: '#7a6aa8', quote: '#9a6b8a', bell: '#b08a4f', phone: '#64748b' };
+const HC = { gift: '#b0567a', users: '#5b6fa8', school: '#4a7fb5', activity: '#3d9a62', house: '#b07a3c', book: '#a65f5f', gear: '#6b7280', care: '#3e9aa6', cake: '#c8578f', sun: '#c28a2c', weather: '#4f8fbf', cart: '#8a7a3d', tag: '#7a6aa8', quote: '#9a6b8a', bell: '#b08a4f', phone: '#64748b' };
 const hrow = (a, v, icon, l, sub) => `<div class="li" data-a="${a}" data-v="${v}"><div class="hicon" style="--hc:${HC[icon] || 'var(--accent)'}">${ic(icon)}</div><div class="grow"><div class="ti">${l}</div>${sub ? `<div class="small muted">${sub}</div>` : ''}</div><span class="chev">›</span></div>`;
+/** What the Home row says: what is on now, or what is next. */
+function annSub() {
+  const ws = S.Annuals.map(a => ({ a, w: annNext(a) })).filter(x => x.w), on = ws.filter(x => x.w.now), nx = ws.filter(x => !x.w.now).sort((p, q) => p.w.days - q.w.days)[0];
+  return on.length ? on.map(x => x.a.name).join(', ') + ' on now' : nx && nx.w.days <= 60 ? `${nx.a.name} in ${nx.w.days} day${nx.w.days === 1 ? '' : 's'}` : S.Annuals.length ? `${S.Annuals.length} on the list` : 'Things we like to do every year, not on the Planner';
+}
 function vHome() {
   const care = S.Childcare.filter(c => c.date === TODAY).sort((a, b) => a.start.localeCompare(b.start));
   const order = S.People.slice().sort((a, b) => (a.kind === 'kid') - (b.kind === 'kid'));
@@ -2957,6 +3013,7 @@ function vHome() {
     `<div class="sect">Household</div>` +
     hrow('homeOpen', 'Schools', 'school', 'Schools', S.Schools.map(x => x.short || x.name).join(', ') || 'Hours, contacts and school calendars') +
     hrow('homeOpen', 'Activities', 'activity', 'Activities', grp.length ? `${grp.length} repeating, for kids and parents` : 'Repeating activities like hockey or piano') +
+    hrow('homeOpen', 'annuals', 'sun', 'Annual events', annSub()) +
     hrow('homeOpen', 'houses', 'house', 'House', 'Info and upkeep · ' + houses) +
     hrow('openSettings', '', 'gear', 'Settings', 'Meals, assistant rules, caretakers, birthdays, notifications and more') +
     notesHTML() +
