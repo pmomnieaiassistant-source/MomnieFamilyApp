@@ -1,6 +1,7 @@
 /**
  * Momnie Family app backend
- * Version 3.36 (2026-11-19)
+ * Version 3.37 (2026-11-19)
+ *   3.37: source_post says when SOURCE_KEY is missing (vs a wrong key).
  *   3.36: Posts from outside sources: sourcePost_() posts a stack AS the school (type 'source'), once per key; the
  *         scraper calls action source_post with the SOURCE_KEY Script property. The assistant never curates them.
  *   3.35: The assistant curates the Feed on each review: groups related change posts into stacks under an overview it writes
@@ -485,7 +486,8 @@ function isTime_(v) { return /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?$/.test(Str
 /** The route an outside source calls: { action: 'source_post', sourceKey: the SOURCE_KEY Script property, post: {...} } */
 function sourceRoute_(b) {
   var want = PropertiesService.getScriptProperties().getProperty('SOURCE_KEY');
-  if (!want || String(b.sourceKey || '') !== want) return { ok: false, error: 'Wrong source key' };
+  if (!want) return { ok: false, error: 'Posting from outside sources is not set up: add SOURCE_KEY in Project Settings, Script properties.' };
+  if (String(b.sourceKey || '') !== want) return { ok: false, error: 'Wrong source key' };
   var lock = LockService.getScriptLock();
   lock.waitLock(25000);
   try {
