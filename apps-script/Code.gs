@@ -1,6 +1,7 @@
 /**
  * Momnie Family app backend
- * Version 3.41 (2026-11-19)
+ * Version 3.42 (2026-11-19)
+ *   3.42: The assistant reviews every two hours from 5 AM to 1 AM; the start-hour setting is gone.
  *   3.41: School posts put a whole section on one card (up to about 1,380 characters); a very large section splits into even pieces.
  *   3.40: Cards break at sentence ends (no split after Dr., Mr.; no tiny last card); source_post can replace an earlier post.
  *   3.39: Posts from outside sources can be limited to some people (audience), for a preview before the whole family sees them.
@@ -1191,10 +1192,10 @@ function minsSince_(key) { var v = setting_(key, ''); if (!v) return 99999;
   var ms = function (iso) { var m = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/.exec(String(iso)); return m ? Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5]) : NaN; };
   var d = (ms(now_()) - ms(v)) / 60000; return isNaN(d) ? 99999 : Math.round(d); }
 function stamp_(key) { put_('Settings', { id: key, value: now_() }); }
-/** The scheduled review (hourly tick): every two hours from 6 AM to 10 PM. Notes and rules, the Today cards, and conversations. */
+/** The scheduled review (hourly tick): every two hours from 5 AM to 1 AM (5, 7, ... 11 PM, 1). Notes and rules, the Today cards, and conversations. */
 function aiReview_(t, hour) {
   var gap = Number(setting_('app|ai.every', '110'));   // minutes; a little under two hours so an hourly tick never skips a slot
-  if (hour < Number(setting_('app|ai.hour', '6')) || hour >= 22) return;   // the "start at" hour is Paul's choice in Settings, Assistant
+  if (hour >= 2 && hour < 5) return;   // quiet from 2 AM to 5 AM; the window is fixed, there is no setting for it
   if (minsSince_('job|ai_review_at') >= gap) { stamp_('job|ai_review_at'); aiSafe_(t); aiCardsSafe_(t, hour); }
   if (setting_('app|ai.convo', '1') === '1') aiConvoSafe_(t, false);   // every tick; only calls Claude when there is something new
   if (minsSince_('job|ai_tidy_at') >= gap) { stamp_('job|ai_tidy_at'); aiTidySafe_(t); }
