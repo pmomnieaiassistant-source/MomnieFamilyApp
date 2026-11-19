@@ -108,7 +108,7 @@ To see detailed errors: in Apps Script open **Executions** in the left sidebar a
 
 ## How often the assistant runs
 
-- **Every two hours** from the start hour you choose (default 6 AM) until 10 PM, it reviews the plans, checks your
+- **Every two hours** from 5 AM until 1 AM (there is no setting for this), it reviews the plans, checks your
   rules, refreshes the AI Today cards and reads recent conversations. It posts at most 3 general notes a day, and
   rule notes as they apply.
 - **Right after** anyone uses the Assistant button, answers a question, or uses Fill it in, it does a quick extra

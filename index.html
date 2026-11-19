@@ -415,7 +415,7 @@ a.alink { color: inherit; text-decoration: underline; text-decoration-color: col
 // Momnie Family app v6.0
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'], DAYN = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'], ADULTS = ['Paul', 'Shana'];
 // Shown at the bottom of Home. Bump it together with VERSION in sw.js on every release.
-const APP_VERSION = '16.7 · Nov 19, 2026';
+const APP_VERSION = '16.8 · Nov 19, 2026';
 const TABLES = ['People', 'Schools', 'SchoolCal', 'Activities', 'Overrides', 'Events', 'Caretakers', 'Childcare', 'Birthdays', 'Annuals', 'Todos', 'TodoTypes', 'Recipes', 'DinnerRules', 'Weeks', 'Menus',
   'Groceries', 'GroceryList', 'HouseCards', 'Houses', 'WeatherRules', 'Quotes', 'Memories', 'Updates', 'Messages', 'Activity', 'Comments', 'Reactions', 'Links', 'Settings', 'Photos', 'gifts', 'ai_rules', 'ai_requests', 'notes', 'places', 'daily_items', 'daily_completions'];
 const CAT = { School: '#3f6fb5', Kids: '#4f7cc2', Work: '#64748b', Family: '#5b6fa8', Dinner: '#b08a4f', Caretaker: '#3e9aa6', Shared: '#94a3b8', Birthday: '#c9806a' }, SCHOOL_C = ['#5a72b8', '#7a8597', '#4a6fb0'];
@@ -2699,11 +2699,11 @@ A.aiEdit = (v, el) => { if (ME !== 'Paul') return; const g = k => (byId('Setting
       F('topics', 'Topics', 'multi', AI_TOPICS.map(x => x[1])),
       F('convo', 'Turn settled conversations into plans', 'chk', null, { hint: 'When a post or question in the app settles something ("home at 6:30", "yes, I\'ll get the kids"), the assistant adds it to the plan and posts what it did.' }),
       F('use', 'Who can use the Assistant button', 'multi', ADULTS, { hint: 'The sparkle button at the top of every tab, and Fill it in on new events. Everything it makes shows in the Feed.' }),
-      F('card', 'Who gets the AI Today card', 'multi', ADULTS, { hint: 'The assistant writes their card at the top of the Feed each morning and at 7 PM for tomorrow. Everyone else keeps the usual card. Leave it empty to turn it off.' }), F('hour', 'Start reviewing at', 'sel', [6, 7, 8, 9, 10, 12, 17, 19].map(h => [String(h), fmtT(pad(h) + ':00')]))],
-    { on: g('on') || '', who: aiWho().join(', '), topics: AI_TOPICS.filter(x => list(g('topics') || AI_TOPICS.map(y => y[0]).join(', ')).includes(x[0])).map(x => x[1]).join(', '), hour: g('hour') || '6', card: aiCardFor().join(', '), use: aiUseFor().join(', '), convo: (g('convo') || '1') === '1' ? '1' : '' },
+      F('card', 'Who gets the AI Today card', 'multi', ADULTS, { hint: 'The assistant writes their card at the top of the Feed each morning and at 7 PM for tomorrow. Everyone else keeps the usual card. Leave it empty to turn it off.' })],
+    { on: g('on') || '', who: aiWho().join(', '), topics: AI_TOPICS.filter(x => list(g('topics') || AI_TOPICS.map(y => y[0]).join(', ')).includes(x[0])).map(x => x[1]).join(', '), card: aiCardFor().join(', '), use: aiUseFor().join(', '), convo: (g('convo') || '1') === '1' ? '1' : '' },
     x => { need(list(x.who).length, 'Pick at least one person to see the posts.');
       const keys = AI_TOPICS.filter(t => list(x.topics).includes(t[1])).map(t => t[0]); need(keys.length, 'Pick at least one topic.');
-      return write(['on', 'who', 'topics', 'hour', 'card', 'use', 'convo'].map(k => ({ t: 'Settings', row: { id: 'app|ai.' + k, value: k === 'on' ? (x.on === '1' ? '1' : '') : k === 'convo' ? (x.convo === '1' ? '1' : '0') : k === 'who' ? ADULTS.filter(a => list(x.who).includes(a)).join(', ') : k === 'topics' ? keys.join(', ') : k === 'card' || k === 'use' ? ADULTS.filter(a => list(x[k]).includes(a)).join(', ') || 'none' : x.hour } }))); }); };
+      return write(['on', 'who', 'topics', 'card', 'use', 'convo'].map(k => ({ t: 'Settings', row: { id: 'app|ai.' + k, value: k === 'on' ? (x.on === '1' ? '1' : '') : k === 'convo' ? (x.convo === '1' ? '1' : '0') : k === 'who' ? ADULTS.filter(a => list(x.who).includes(a)).join(', ') : k === 'topics' ? keys.join(', ') : k === 'card' || k === 'use' ? ADULTS.filter(a => list(x[k]).includes(a)).join(', ') || 'none' : x.hour } }))); }); };
 // One button runs the whole assistant now: Feed notes, the AI Today cards, and the conversation check.
 A.aiRun = async (v, el) => { el.disabled = true; el.textContent = 'Running the assistant…'; let r = null; try { r = await api('ai_all', { today: TODAY }); } catch (e) { toast(e.message); }
   el.disabled = false; if (!r) return refresh(); await load().catch(() => {});
@@ -3087,9 +3087,8 @@ const PAGES = {
       (S.ai_rules.map(aiRuleRow).join('') || '<div class="empty">No rules yet.</div>') + `<div class="actions">${aiAskBtn('general')}</div>`;
     if (ME !== 'Paul') return '<h2>Assistant</h2>' + (aiOn() ? '' : '<div class="alert amber" style="margin-top:10px">The assistant is off, so rules are not being checked yet. Paul can turn it on here.</div>') + rules + '<div class="small muted" style="margin-top:12px">Only Paul can change the other assistant settings.</div>';
     const on = (byId('Settings', 'app|ai.on') || {}).value === '1', last = (byId('Settings', 'app|ai.last') || {}).value, topics = list((byId('Settings', 'app|ai.topics') || {}).value || AI_TOPICS.map(x => x[0]).join(', '));
-    const hour = (byId('Settings', 'app|ai.hour') || {}).value || '6';
     return `<h2>Assistant</h2><div class="small muted">Every couple of hours Claude reads a summary of the family's plans and posts a few short notes to the Feed (up to 3 a day): gaps to fill, ideas, heads-ups. It also keeps the Today cards fresh and reads conversations. It is never sent what the gift ideas are.</div>
-      <div class="kv"><span>Status</span>${on ? 'On' : 'Off'}${on ? ` · reviews every 2 hours, ${fmtT(pad(+hour) + ':00')} to 10 PM` : ''}</div>
+      <div class="kv"><span>Status</span>${on ? 'On' : 'Off'}${on ? ' · reviews every 2 hours, 5 AM to 1 AM' : ''}</div>
       <div class="kv"><span>Seen by</span>${esc(joinNames(aiWho()))}</div>
       <div class="kv"><span>Topics</span>${esc(AI_TOPICS.filter(x => topics.includes(x[0])).map(x => x[1]).join(', ') || 'None')}</div>
       ${last ? `<div class="kv"><span>Last run</span>${esc(last.replace('T', ' '))}</div>` : ''}
