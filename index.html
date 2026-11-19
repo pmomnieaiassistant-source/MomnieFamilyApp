@@ -186,6 +186,9 @@
   .stkfoot { display:flex; align-items:center; gap:6px; padding:2px 2px 0; }
   .stkfoot button { border:0; background:none; color:var(--muted); font:inherit; font-size:13px; font-weight:700; padding:6px 8px; border-radius:10px; display:flex; align-items:center; }
   .stkfoot button:disabled { opacity:.35; }
+  .stkunder { grid-area:1 / 1; z-index:5; display:flex; justify-content:flex-end; align-items:center; padding-right:22px; margin-bottom:0;
+               border-radius:var(--r-card, 20px); background:var(--redbg); color:var(--red); font-weight:700; font-size:14px; opacity:0; transition:opacity .15s; }
+  .stk.stkend .stkunder { opacity:1; }   /* only while the last card is being swiped away */
   .stkfoot .stkdots { display:flex; gap:5px; align-items:center; }
   .stkfoot .stkdots i { width:6px; height:6px; border-radius:50%; background:var(--line); transition:background .2s, width .2s; }
   .stkfoot .stkdots i.on { width:16px; border-radius:3px; background:var(--accent); }
@@ -411,7 +414,7 @@ a.alink { color: inherit; text-decoration: underline; text-decoration-color: col
 // Momnie Family app v6.0
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'], DAYN = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'], ADULTS = ['Paul', 'Shana'];
 // Shown at the bottom of Home. Bump it together with VERSION in sw.js on every release.
-const APP_VERSION = '15.9 · Nov 19, 2026';
+const APP_VERSION = '16.0 · Nov 19, 2026';
 const TABLES = ['People', 'Schools', 'SchoolCal', 'Activities', 'Overrides', 'Events', 'Caretakers', 'Childcare', 'Birthdays', 'Todos', 'TodoTypes', 'Recipes', 'DinnerRules', 'Weeks', 'Menus',
   'Groceries', 'GroceryList', 'HouseCards', 'Houses', 'WeatherRules', 'Quotes', 'Memories', 'Updates', 'Messages', 'Activity', 'Comments', 'Reactions', 'Links', 'Settings', 'Photos', 'gifts', 'ai_rules', 'ai_requests', 'notes', 'places', 'daily_items', 'daily_completions'];
 const CAT = { School: '#3f6fb5', Kids: '#4f7cc2', Work: '#64748b', Family: '#5b6fa8', Dinner: '#b08a4f', Caretaker: '#3e9aa6', Shared: '#94a3b8', Birthday: '#c9806a' }, SCHOOL_C = ['#5a72b8', '#7a8597', '#4a6fb0'];
@@ -2153,7 +2156,6 @@ function feedSave() { if (busy) { fT = setTimeout(feedSave, 500); return; } cons
 A.feedMenu = () => { FMENU = !FMENU; render(); };
 A.stkNext = (v, el) => { const st = el.closest('.stk'); stackShow(st, +st.dataset.i + 1); };
 A.stkPrev = (v, el) => { const st = el.closest('.stk'); stackShow(st, +st.dataset.i - 1); };
-A.stkDel = (v, el) => A.feedDel(el.closest('.stk').dataset.ids);
 A.fabFeed = () => fabSet(!FABON);
 A.fabClose = () => fabSet(false);
 A.fabEvent = () => { fabSet(false); editForm('Events', null); };
@@ -2199,13 +2201,14 @@ function stackHTML(g) {
   const n = g.cards.length, i = Math.max(0, Math.min(STK[g.stack] || 0, n - 1));
   return `<div class="stk" data-stk="${esc(g.stack)}" data-i="${i}" data-ids="${esc(g.cards.map(feedId).join(' '))}">
     <div class="stkdeck" tabindex="0" role="group" aria-roledescription="stack of cards" aria-label="${n} cards. Swipe or use the arrow keys to move through them.">
+      <div class="stkunder" aria-hidden="true">${ME === 'Paul' ? 'Delete' : 'Remove'}</div>
       ${g.cards.map((c, k) => `<div class="sc" data-d="${stackD(k, i)}" role="group" aria-roledescription="card" aria-label="${k + 1} of ${n}" ${k === i ? '' : 'aria-hidden="true" inert'}><div class="scin">${c.m ? msgPost(c.m, c.pin) : c.r ? askPost(c.r) : actPost(c.a)}</div></div>`).join('')}
     </div>
     <span class="stkcount" aria-live="polite">${i + 1} of ${n}</span>
     <div class="stkfoot"><button data-a="stkPrev" aria-label="Previous card" ${i === 0 ? 'disabled' : ''}>${ic('left', 18)}</button>
       <span class="stkdots" aria-hidden="true">${n <= 12 ? g.cards.map((c, k) => `<i class="${k === i ? 'on' : ''}"></i>`).join('') : ''}</span>
       <button data-a="stkNext" aria-label="Next card" ${i === n - 1 ? 'disabled' : ''}>${ic('chev', 18)}</button>
-      <span class="grow"></span><button data-a="stkDel">${ME === 'Paul' ? 'Delete' : 'Remove'}</button></div></div>`;
+    </div></div>`;
 }
 /** Shows card i of a stack. Clearing the inline drag styles lets the CSS ease every card to its new place. */
 function stackShow(st, i) {
@@ -3176,17 +3179,22 @@ A.dinClear = id => { const m = byId('Menus', id); if (!m || (!m.recipeId && !m.n
       d.on = true; d.st.classList.add('stkdrag'); [d.front, d.next, d.prev].forEach(c => c && (c.style.transition = 'none'));
       try { d.front.setPointerCapture(e.pointerId); } catch (x) {} }
     const now = performance.now(); d.v = (dx - d.dx) / Math.max(1, now - d.t); d.t = now; d.dx = dx;
-    const edge = (dx < 0 && d.i === d.n - 1) || (dx > 0 && d.i === 0), x = edge ? dx * 0.22 : dx, p = Math.min(Math.abs(x) / 150, 1);
-    d.front.style.transform = `translateX(${x}px) rotate(${x / 24}deg)`;
+    d.del = dx < 0 && d.i === d.n - 1;           // last card: swiping left reveals Delete/Remove, as on any post
+    d.st.classList.toggle('stkend', d.del);
+    const edge = dx > 0 && d.i === 0, x = d.del ? Math.max(dx, -140) : edge ? dx * 0.22 : dx, p = Math.min(Math.abs(x) / 150, 1);
+    d.front.style.transform = d.del ? `translateX(${x}px)` : `translateX(${x}px) rotate(${x / 24}deg)`;
     if (d.next && dx < 0 && !edge) { d.next.style.transform = `translateY(${8 * (1 - p)}px) scale(${0.955 + 0.045 * p})`; d.next.querySelectorAll('.scin > *').forEach(x => x.style.opacity = p); }   // its content fades in as it rises
     if (d.prev && dx > 0 && !edge) d.prev.style.transform = `translateX(calc(-118% + ${118 * p}%)) rotate(${-9 * (1 - p)}deg)`, d.prev.style.opacity = p;
   });
   const end = e => { if (!d || e.pointerId !== d.id) return; const o = d; d = null; if (!o.on) return;
     o.st.classList.remove('stkdrag'); if (o.prev) o.prev.style.opacity = '';
+    if (o.del) { setTimeout(() => o.st.classList.remove('stkend'), 200); }
     const to = o.dx < 0 ? o.i + 1 : o.i - 1, go = e.type !== 'pointercancel' && (Math.abs(o.dx) > 70 || (Math.abs(o.dx) > 25 && Math.abs(o.v) > 0.45)) && to >= 0 && to < o.n;
     stackShow(o.st, go ? to : o.i);
+    const remove = o.del && e.type !== 'pointercancel' && o.dx < -80;
     const stop = ev => { ev.stopPropagation(); ev.preventDefault(); };   // a swipe is not a tap on the card
-    document.addEventListener('click', stop, { capture: true, once: true }); setTimeout(() => document.removeEventListener('click', stop, { capture: true }), 350); };
+    document.addEventListener('click', stop, { capture: true, once: true }); setTimeout(() => document.removeEventListener('click', stop, { capture: true }), 350);
+    if (remove) A.feedDel(o.st.dataset.ids); };   // same Hide / Delete choice as any post, for the whole stack
   document.addEventListener('pointerup', end); document.addEventListener('pointercancel', end);
   document.addEventListener('keydown', e => { const deck = e.target.closest && e.target.closest('.stkdeck'); if (!deck || (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight')) return;
     e.preventDefault(); const st = deck.closest('.stk'); stackShow(st, +st.dataset.i + (e.key === 'ArrowRight' ? 1 : -1)); }); })();
