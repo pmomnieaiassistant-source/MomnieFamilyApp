@@ -20,7 +20,7 @@ The project has two files, `Code.gs` and `Push.js` (iPhone push notifications). 
    Then open the project folder: `clasp clone <Script ID>` and then `clasp pull`. This creates `appsscript.json` (time zone, scopes). Copy that file into `apps-script/appsscript.json` in the repo and commit it. The deploy is skipped until this file exists, so the project's time zone is never overwritten.
 
 5. **Store the secrets in GitHub.** Repo → Settings → Secrets and variables → Actions → New repository secret:
-   - `CLASP_RC`: the full contents of `~/.clasprc.json` (created by `clasp login`). This signs in as your Google account, so treat it like a password. Don't paste it in chat or commit it.
+   - `CLASP_RC_B64`: the contents of `~/.clasprc.json` as one line of base64 text. In Cloud Shell, run `base64 -w0 ~/.clasprc.json > ~/clasprc.b64`, download `clasprc.b64`, and paste its single line. This signs in as your Google account, so treat it like a password. Don't paste it in chat or commit it.
    - `APPS_SCRIPT_ID`: the Script ID from step 2.
    - `APPS_SCRIPT_DEPLOYMENT_ID`: the Deployment ID from step 3.
 
@@ -28,4 +28,4 @@ The project has two files, `Code.gs` and `Push.js` (iPhone push notifications). 
 
 Every merge to `main` that changes `apps-script/` deploys automatically. Check the run under the repo's Actions tab. To deploy without a change, run "Deploy Apps Script" from the Actions tab.
 
-If the login ever stops working (Google revokes it, or you change your password), run `clasp login --no-localhost` again and update the `CLASP_RC` secret.
+If the login ever stops working (Google revokes it, or you change your password), run `clasp login --no-localhost` again and update the `CLASP_RC_B64` secret.

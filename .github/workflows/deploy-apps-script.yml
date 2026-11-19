@@ -23,12 +23,12 @@ jobs:
       - name: Check setup
         id: check
         env:
-          CLASP_RC: ${{ secrets.CLASP_RC }}
+          CLASP_RC_B64: ${{ secrets.CLASP_RC_B64 }}
           SCRIPT_ID: ${{ secrets.APPS_SCRIPT_ID }}
           DEPLOY_ID: ${{ secrets.APPS_SCRIPT_DEPLOYMENT_ID }}
         run: |
           ready=true
-          [ -z "$CLASP_RC" ] && ready=false
+          [ -z "$CLASP_RC_B64" ] && ready=false
           [ -z "$SCRIPT_ID" ] && ready=false
           [ -z "$DEPLOY_ID" ] && ready=false
           [ ! -f apps-script/appsscript.json ] && ready=false
@@ -52,11 +52,11 @@ jobs:
       - name: Sign in to Google and point at the project
         if: steps.check.outputs.ready == 'true'
         env:
-          CLASP_RC: ${{ secrets.CLASP_RC }}
+          CLASP_RC_B64: ${{ secrets.CLASP_RC_B64 }}
           SCRIPT_ID: ${{ secrets.APPS_SCRIPT_ID }}
         run: |
           umask 077
-          printf '%s' "$CLASP_RC" > "$HOME/.clasprc.json"
+          printf '%s' "$CLASP_RC_B64" | base64 -d > "$HOME/.clasprc.json"
           printf '{"scriptId":"%s","rootDir":"."}\n' "$SCRIPT_ID" > apps-script/.clasp.json
 
       - name: Push code to Apps Script
