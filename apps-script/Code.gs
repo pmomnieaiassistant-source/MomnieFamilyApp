@@ -1,6 +1,7 @@
 /**
  * Momnie Family app backend
- * Version 3.30 (2026-11-19)
+ * Version 3.31 (2026-11-19)
+ *   3.31: Test of the automatic GitHub to Apps Script deploy (no behavior change).
  *   3.30: The Assistant shows the real reason when it fails (also saved as app|ai.error), retries once when Claude is busy,
  *         and falls back to plain JSON if the request form is refused.
  *   3.29: Known locations (places tab) for "last seen at".
