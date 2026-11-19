@@ -353,7 +353,7 @@
 // Momnie Family app v6.0
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'], DAYN = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'], ADULTS = ['Paul', 'Shana'];
 // Shown at the bottom of Home. Bump it together with VERSION in sw.js on every release.
-const APP_VERSION = '15.1 · Nov 18, 2026';
+const APP_VERSION = '15.2 · Nov 18, 2026';
 const TABLES = ['People', 'Schools', 'SchoolCal', 'Activities', 'Overrides', 'Events', 'Caretakers', 'Childcare', 'Birthdays', 'Todos', 'TodoTypes', 'Recipes', 'DinnerRules', 'Weeks', 'Menus',
   'Groceries', 'GroceryList', 'HouseCards', 'Houses', 'WeatherRules', 'Quotes', 'Memories', 'Updates', 'Messages', 'Activity', 'Comments', 'Reactions', 'Links', 'Settings', 'Photos', 'gifts', 'ai_rules', 'ai_requests', 'notes', 'places', 'daily_items', 'daily_completions'];
 const CAT = { School: '#3f6fb5', Kids: '#4f7cc2', Work: '#64748b', Family: '#5b6fa8', Dinner: '#b08a4f', Caretaker: '#3e9aa6', Shared: '#94a3b8', Birthday: '#c9806a' }, SCHOOL_C = ['#5a72b8', '#7a8597', '#4a6fb0'];
@@ -451,7 +451,7 @@ function placeOf(loc) {   // the known place someone is at, or the nearest one a
 const miTxt = km => { const mi = km * 0.621; return mi < 0.1 ? 'a few hundred ft' : mi < 10 ? mi.toFixed(1) + ' mi' : Math.round(mi) + ' mi'; };
 function locTxt(p) { if (!sharesLoc(p)) return ''; const l = lastLoc(p); if (!l) return '';
   if (Date.now() - new Date(l.time) > 3 * 864e5) return '';   // older than 3 days is not worth showing
-  const w = placeOf(l), where = w.at ? 'Last seen at ' + w.at.name : w.near ? `Last seen ${miTxt(w.near.km)} from ${w.near.x.name}` : 'Location shared';
+  const w = placeOf(l), where = w.at ? 'Last seen at ' + w.at.name : 'Last seen at an unknown location';   // not at any known place
   return `${where} · ${locAgo(l.time)}`; }
 const locLine = p => { const t = locTxt(p); return t ? `<div class="small muted" style="margin-top:2px">${ic('phone', 13)} ${esc(t)}</div>` : ''; };
 // Called when the app opens or comes back: saves this phone's spot if sharing is on and it moved or 10 minutes passed.
