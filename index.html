@@ -415,7 +415,7 @@ a.alink { color: inherit; text-decoration: underline; text-decoration-color: col
 // Momnie Family app v6.0
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'], DAYN = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'], ADULTS = ['Paul', 'Shana'];
 // Shown at the bottom of Home. Bump it together with VERSION in sw.js on every release.
-const APP_VERSION = '16.8 · Nov 19, 2026';
+const APP_VERSION = '16.9 · Nov 19, 2026';
 const TABLES = ['People', 'Schools', 'SchoolCal', 'Activities', 'Overrides', 'Events', 'Caretakers', 'Childcare', 'Birthdays', 'Annuals', 'Todos', 'TodoTypes', 'Recipes', 'DinnerRules', 'Weeks', 'Menus',
   'Groceries', 'GroceryList', 'HouseCards', 'Houses', 'WeatherRules', 'Quotes', 'Memories', 'Updates', 'Messages', 'Activity', 'Comments', 'Reactions', 'Links', 'Settings', 'Photos', 'gifts', 'ai_rules', 'ai_requests', 'notes', 'places', 'daily_items', 'daily_completions'];
 const CAT = { School: '#3f6fb5', Kids: '#4f7cc2', Work: '#64748b', Family: '#5b6fa8', Dinner: '#b08a4f', Caretaker: '#3e9aa6', Shared: '#94a3b8', Birthday: '#c9806a' }, SCHOOL_C = ['#5a72b8', '#7a8597', '#4a6fb0'];
@@ -2264,8 +2264,11 @@ function groupStacks(rows) {
     g.cards.sort((x, y) => (+(x.m || x.a).stackIdx || 0) - (+(y.m || y.a).stackIdx || 0) || String(x.time).localeCompare(String(y.time)));
     return g; });
 }
+/** Makes web addresses in (already escaped) text into tappable links. The text shown is shortened; the link is whole. */
+const linkify = h => h.replace(/\bhttps?:\/\/[^\s<]+/g, u => { let t = '', m; while ((m = /(&quot;|&#39;|&gt;|&amp;|[.,;:!?)\]])$/.exec(u)) && (m[1] !== '&amp;' || u.length === m[1].length)) { if (m[1] === '&amp;') break; t = m[1] + t; u = u.slice(0, -m[1].length); }
+  const shown = u.replace(/^https?:\/\/(www\.)?/, ''); return `<a href="${u}" target="_blank" rel="noopener" style="word-break:break-all">${shown.length > 42 ? shown.slice(0, 40) + '…' : shown}</a>${t}`; });
 const aiCardText = a => { const m = a.stack && String(a.text || '').match(/^\*\*(.+?)\*\*\s*\n?/);
-  return m ? `<div class="sctitle">${esc(m[1])}</div>${withMentions(String(a.text).slice(m[0].length))}` : withMentions(a.text); };
+  return m ? `<div class="sctitle">${esc(m[1])}</div>${linkify(withMentions(String(a.text).slice(m[0].length)))}` : linkify(withMentions(a.text)); };
 const stackD = (k, i) => k < i ? -1 : Math.min(k - i, 3);
 function stackHTML(g) {
   const n = g.cards.length, i = Math.max(0, Math.min(STK[g.stack] || 0, n - 1));
