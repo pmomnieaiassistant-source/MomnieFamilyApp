@@ -1,7 +1,8 @@
 /**
  * Momnie Family app backend
  * Version 3.32 (2026-11-19)
- *   3.32: Files on any card, not just photos: PDFs and documents go to the same "Momnie photos" Drive folder.
+ *   3.32: Files on any card, not just photos: PDFs and documents go to their own "Momnie documents" Drive folder
+ *         (photos stay in "Momnie photos").
  *         New Photos columns name and mime (blank mime = a photo, as before). Files up to 15 MB.
  *   3.31: Test of the automatic GitHub to Apps Script deploy (no behavior change).
  *   3.30: The Assistant shows the real reason when it fails (also saved as app|ai.error), retries once when Claude is busy,
@@ -463,13 +464,16 @@ function sendLogs_(me, mode) {
 }
 
 // ---------- photos ----------
-/** The Drive folder photos are saved in. Created on first use; its id is kept in Settings. */
-function photoFolder_() {
-  var id = setting_('app|photoFolder', ''), f = null;
+/** A Drive folder the app saves into. Created on first use; its id is kept in Settings (key), so renaming or moving it in Drive is fine. */
+function driveFolder_(key, name) {
+  var id = setting_(key, ''), f = null;
   if (id) { try { f = DriveApp.getFolderById(id); if (f.isTrashed()) f = null; } catch (e) { f = null; } }
-  if (!f) { f = DriveApp.createFolder('Momnie photos'); put_('Settings', { id: 'app|photoFolder', value: f.getId() }); }
+  if (!f) { f = DriveApp.createFolder(name); put_('Settings', { id: key, value: f.getId() }); }
   return f;
 }
+/** Photos go to "Momnie photos"; PDFs and other documents go to "Momnie documents". */
+function photoFolder_() { return driveFolder_('app|photoFolder', 'Momnie photos'); }
+function docFolder_() { return driveFolder_('app|docFolder', 'Momnie documents'); }
 /** Saves one photo (base64 JPEG from the app, already shrunk on the phone) or file (a PDF, document…) and attaches it to a card. */
 function photoAdd_(b, me) {
   if (!T[b.table] || b.table === 'Photos' || !b.ref) return { ok: false, error: 'Pick a card for the photo or file.' };
@@ -482,7 +486,7 @@ function photoAdd_(b, me) {
   var ext = mime === 'image/jpeg' ? '.jpg' : ((orig.match(/\.\w{1,6}$/) || [''])[0] || (mime === 'application/pdf' ? '.pdf' : ''));
   var stamp = now_().replace(/\D/g, '');
   var fname = pic ? b.table + '-' + b.ref + '-' + stamp + ext : (orig ? orig.replace(/\.\w{1,6}$/, '') : b.table + '-' + b.ref) + ' (' + stamp + ')' + ext;
-  var file = photoFolder_().createFile(Utilities.newBlob(Utilities.base64Decode(data), mime, fname));
+  var file = (pic ? photoFolder_() : docFolder_()).createFile(Utilities.newBlob(Utilities.base64Decode(data), mime, fname));
   try { file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW); } catch (e) { console.error(e); }
   var first = pic && !rows_('Photos').some(function (x) { return x.table === b.table && x.ref === String(b.ref) && (!x.mime || x.mime.indexOf('image/') === 0); });
   var r = put_('Photos', { time: now_(), who: me, table: b.table, ref: String(b.ref), fileId: file.getId(), caption: b.caption || '', cover: first ? '1' : '',
