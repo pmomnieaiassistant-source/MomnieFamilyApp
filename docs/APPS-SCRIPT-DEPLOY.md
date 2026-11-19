@@ -14,7 +14,7 @@ The project has two files, `Code.gs` and `Push.js` (iPhone push notifications). 
 
 4. **Sign in with clasp.** In Google Cloud Shell (shell.cloud.google.com) or any terminal:
    ```
-   npm install -g @google/clasp@2
+   npm install -g @google/clasp@3
    clasp login --no-localhost
    ```
    Then open the project folder: `clasp clone <Script ID>` and then `clasp pull`. This creates `appsscript.json` (time zone, scopes). Copy that file into `apps-script/appsscript.json` in the repo and commit it. The deploy is skipped until this file exists, so the project's time zone is never overwritten.
@@ -29,3 +29,5 @@ The project has two files, `Code.gs` and `Push.js` (iPhone push notifications). 
 Every merge to `main` that changes `apps-script/` deploys automatically. Check the run under the repo's Actions tab. To deploy without a change, run "Deploy Apps Script" from the Actions tab.
 
 If the login ever stops working (Google revokes it, or you change your password), run `clasp login --no-localhost` again and update the `CLASP_RC_B64` secret.
+
+The workflow uses clasp 3. A login made with clasp 2 (which saves `token` instead of `tokens.default`) will not work with it, so log in with clasp 3. Check with `clasp --version`.
