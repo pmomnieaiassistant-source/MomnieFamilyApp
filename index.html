@@ -165,15 +165,15 @@
   /* Stacked posts: several posts shown as one pile of cards. The front card is a normal post; the next two peek out
      underneath; cards already seen have slid off to the left. Swipe (or the arrows) to shuffle through. */
   .stk { position:relative; margin:0 12px 12px; isolation:isolate; }   /* its card layers stay inside it, so menus and sheets always draw on top */
-  .stkdeck { display:grid; padding-bottom:16px; touch-action:pan-y; outline:none; }
+  .stkdeck { display:grid; padding-bottom:16px; touch-action:pan-y; outline:none; align-items:start; height:var(--dh, auto); transition:height .28s ease; }   /* the deck is as tall as the card in front (set by stackFit) */
   .stkdeck:focus-visible .sc[data-d="0"] .scin { box-shadow:0 0 0 3px color-mix(in srgb, var(--accent) 45%, transparent); }
   .stk.stkdrag .stkdeck { user-select:none; -webkit-user-select:none; }
   .stkdeck img { -webkit-user-drag:none; }
-  .sc { grid-area:1 / 1; display:flex; min-width:0; transform-origin:50% 100%; transition:transform .32s cubic-bezier(.2,.8,.25,1), opacity .26s ease; }
+  .sc { grid-area:1 / 1; display:flex; min-width:0; height:var(--dh, auto); transform-origin:50% 100%; transition:transform .32s cubic-bezier(.2,.8,.25,1), opacity .26s ease; }
   .scin { flex:1; min-width:0; border:1px solid var(--line); border-radius:var(--r-card, 20px); background:var(--card); box-shadow:var(--shadow); overflow:hidden; }
-  .scin > .post { background:var(--card); border-bottom:0; padding:14px; height:100%; box-sizing:border-box; transition:opacity .2s ease; }
+  .scin > .post { background:var(--card); border-bottom:0; padding:14px; box-sizing:border-box; transition:opacity .2s ease; }
   .scin > .post.asst { background:var(--asstbg); }
-  .sc[data-d="0"] { z-index:10; }
+  .sc[data-d="0"] { z-index:10; height:auto; }
   .sc[data-d="1"] { z-index:9; transform:translateY(8px) scale(.955); }
   .sc[data-d="2"] { z-index:8; transform:translateY(16px) scale(.91); }
   .sc[data-d="3"] { z-index:7; transform:translateY(16px) scale(.91); opacity:0; }
@@ -187,7 +187,7 @@
   .stkfoot button { border:0; background:none; color:var(--muted); font:inherit; font-size:13px; font-weight:700; padding:6px 8px; border-radius:10px; display:flex; align-items:center; }
   .stkfoot button:disabled { opacity:.35; }
   .stkunder { grid-area:1 / 1; z-index:5; display:flex; justify-content:flex-end; align-items:center; padding-right:22px; margin-bottom:0;
-               border-radius:var(--r-card, 20px); background:var(--redbg); color:var(--red); font-weight:700; font-size:14px; opacity:0; transition:opacity .15s; }
+               align-self:stretch; border-radius:var(--r-card, 20px); background:var(--redbg); color:var(--red); font-weight:700; font-size:14px; opacity:0; transition:opacity .15s; }
   .stk.stkend .stkunder { opacity:1; }   /* only while the last card is being swiped away */
   .stkfoot .stkdots { display:flex; gap:5px; align-items:center; }
   .stkfoot .stkdots i { width:6px; height:6px; border-radius:50%; background:var(--line); transition:background .2s, width .2s; }
@@ -415,7 +415,7 @@ a.alink { color: inherit; text-decoration: underline; text-decoration-color: col
 // Momnie Family app v6.0
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'], DAYN = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'], ADULTS = ['Paul', 'Shana'];
 // Shown at the bottom of Home. Bump it together with VERSION in sw.js on every release.
-const APP_VERSION = '16.6 · Nov 19, 2026';
+const APP_VERSION = '16.7 · Nov 19, 2026';
 const TABLES = ['People', 'Schools', 'SchoolCal', 'Activities', 'Overrides', 'Events', 'Caretakers', 'Childcare', 'Birthdays', 'Annuals', 'Todos', 'TodoTypes', 'Recipes', 'DinnerRules', 'Weeks', 'Menus',
   'Groceries', 'GroceryList', 'HouseCards', 'Houses', 'WeatherRules', 'Quotes', 'Memories', 'Updates', 'Messages', 'Activity', 'Comments', 'Reactions', 'Links', 'Settings', 'Photos', 'gifts', 'ai_rules', 'ai_requests', 'notes', 'places', 'daily_items', 'daily_completions'];
 const CAT = { School: '#3f6fb5', Kids: '#4f7cc2', Work: '#64748b', Family: '#5b6fa8', Dinner: '#b08a4f', Caretaker: '#3e9aa6', Shared: '#94a3b8', Birthday: '#c9806a' }, SCHOOL_C = ['#5a72b8', '#7a8597', '#4a6fb0'];
@@ -2071,6 +2071,7 @@ function render() {
   $('hdrAsk').style.display = aiCanUse() ? '' : 'none';
   $('view').innerHTML = ({ feed: vFeed, planner: vPlanner, meals: vDinner, todo: vTodo, home: vHome, person: vPerson, hh: vHH })[view]();
   if (view === 'person') document.documentElement.style.setProperty('--hdrh', document.querySelector('header').offsetHeight + 'px');
+  stackFitAll(); stackWatch();
 }
 A.nav = v => { FABON = false; if (v === 'dailyGo') { view = 'todo'; render(); scrollToY(0); return A.dailyOpen(); }
   if (v === 'planner') { PW = mondayOf(TODAY); view = v; render(); return plannerToToday(); }
@@ -2280,6 +2281,16 @@ function stackHTML(g) {
     </div></div>`;
 }
 /** Shows card i of a stack. Clearing the inline drag styles lets the CSS ease every card to its new place. */
+/** Sizes each stack to the card in front, so a short card is not stretched to the height of the longest one. */
+function stackFit(st) {
+  const deck = st.querySelector('.stkdeck'), f = st.querySelector('.sc[data-d="0"] .scin'); if (!deck || !f) return;
+  const h = f.offsetHeight; if (h > 0) deck.style.setProperty('--dh', h + 'px');
+}
+const stackFitAll = () => document.querySelectorAll('.stk').forEach(stackFit);
+let stkRO = null;
+function stackWatch() {   // refit when images load or the screen changes size
+  if (typeof ResizeObserver === 'undefined') return; if (stkRO) stkRO.disconnect();
+  stkRO = new ResizeObserver(stackFitAll); document.querySelectorAll('.stk .sc[data-d="0"] .scin').forEach(x => stkRO.observe(x)); }
 function stackShow(st, i) {
   const cards = [...st.querySelectorAll('.sc')], n = cards.length; i = Math.max(0, Math.min(n - 1, i));
   cards.forEach((c, k) => { c.dataset.d = stackD(k, i); c.style.transition = ''; c.style.transform = ''; c.querySelectorAll('.scin > *').forEach(x => x.style.opacity = '');
@@ -2288,6 +2299,7 @@ function stackShow(st, i) {
   st.querySelector('.stkcount').textContent = (i + 1) + ' of ' + n;
   st.querySelector('[data-a="stkPrev"]').disabled = i === 0; st.querySelector('[data-a="stkNext"]').disabled = i === n - 1;
   st.querySelectorAll('.stkdots i').forEach((d, k) => d.classList.toggle('on', k === i));
+  stackFit(st); stackWatch();
 }
 const swipeWrap = (ids, html) => `<div class="swipe" data-fid="${esc(ids.join(' '))}"><div class="under">${ME === 'Paul' ? 'Delete' : 'Remove'}</div>${html}</div>`;
 A.feedDel = fid => { const ids = fid.split(' ').filter(Boolean); if (!ids.length) return;
