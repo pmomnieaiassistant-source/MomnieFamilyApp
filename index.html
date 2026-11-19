@@ -164,7 +164,7 @@
   .btn .ic, .chip .ic, .alert .ic { vertical-align:-3px; }
   /* Stacked posts: several posts shown as one pile of cards. The front card is a normal post; the next two peek out
      underneath; cards already seen have slid off to the left. Swipe (or the arrows) to shuffle through. */
-  .stk { position:relative; margin:0 12px 12px; }
+  .stk { position:relative; margin:0 12px 12px; isolation:isolate; }   /* its card layers stay inside it, so menus and sheets always draw on top */
   .stkdeck { display:grid; padding-bottom:16px; touch-action:pan-y; outline:none; }
   .stkdeck:focus-visible .sc[data-d="0"] .scin { box-shadow:0 0 0 3px color-mix(in srgb, var(--accent) 45%, transparent); }
   .stk.stkdrag .stkdeck { user-select:none; -webkit-user-select:none; }
@@ -193,6 +193,7 @@
   .stkfoot .stkdots i { width:6px; height:6px; border-radius:50%; background:var(--line); transition:background .2s, width .2s; }
   .stkfoot .stkdots i.on { width:16px; border-radius:3px; background:var(--accent); }
   .sctitle { font-weight:800; margin-bottom:4px; }
+  .srcav { background:#fff; border:1px solid var(--line); padding:0; overflow:hidden; } .srcav img { width:100%; height:100%; object-fit:contain; display:block; }
   .scin > .post .pbody > div:first-child { padding-right:62px; }   /* keep the header clear of the "1 of 5" counter */
   @media (prefers-reduced-motion:reduce) { .sc, .scin > .post, .stkfoot .stkdots i { transition:none; } }
   /* Feed + button: a round plus that turns into an X and raises a short list of things to add */
@@ -414,7 +415,7 @@ a.alink { color: inherit; text-decoration: underline; text-decoration-color: col
 // Momnie Family app v6.0
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'], DAYN = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'], ADULTS = ['Paul', 'Shana'];
 // Shown at the bottom of Home. Bump it together with VERSION in sw.js on every release.
-const APP_VERSION = '16.1 · Nov 19, 2026';
+const APP_VERSION = '16.2 · Nov 19, 2026';
 const TABLES = ['People', 'Schools', 'SchoolCal', 'Activities', 'Overrides', 'Events', 'Caretakers', 'Childcare', 'Birthdays', 'Todos', 'TodoTypes', 'Recipes', 'DinnerRules', 'Weeks', 'Menus',
   'Groceries', 'GroceryList', 'HouseCards', 'Houses', 'WeatherRules', 'Quotes', 'Memories', 'Updates', 'Messages', 'Activity', 'Comments', 'Reactions', 'Links', 'Settings', 'Photos', 'gifts', 'ai_rules', 'ai_requests', 'notes', 'places', 'daily_items', 'daily_completions'];
 const CAT = { School: '#3f6fb5', Kids: '#4f7cc2', Work: '#64748b', Family: '#5b6fa8', Dinner: '#b08a4f', Caretaker: '#3e9aa6', Shared: '#94a3b8', Birthday: '#c9806a' }, SCHOOL_C = ['#5a72b8', '#7a8597', '#4a6fb0'];
@@ -2151,7 +2152,7 @@ const fabSet = on => { FABON = on; const w = document.querySelector('.fabwrap');
   w.querySelector('.fabx').setAttribute('aria-expanded', String(on)); w.querySelector('.fabm').setAttribute('aria-hidden', String(!on));
   w.querySelectorAll('.fabm button').forEach(b => on ? b.removeAttribute('tabindex') : b.setAttribute('tabindex', '-1')); };
 // Feed filter (three-line menu next to Activity). Uses the same per-person settings as Home > Settings > Show in my Feed.
-const FKINDS = () => [['messages', 'Messages'], ['photos', 'Photos and files']].concat(Object.keys(NCATS).map(c => [c, ({ convo: 'Comments and questions', summary: 'Weekly and monthly summaries' })[c] || NCATS[c].replace(/ \(.*\)/, '')]), [['daily', 'Memories and quotes']]);
+const FKINDS = () => [['messages', 'Messages'], ['photos', 'Photos and files'], ['school', 'School updates']].concat(Object.keys(NCATS).map(c => [c, ({ convo: 'Comments and questions', summary: 'Weekly and monthly summaries' })[c] || NCATS[c].replace(/ \(.*\)/, '')]), [['daily', 'Memories and quotes']]);
 const fOn = k => st('f.' + k, '1') !== '0';
 let FMENU = false, fPend = {}, fT = 0;
 // Checkboxes update right away; the changes are saved together a moment later.
@@ -2390,7 +2391,17 @@ function dinnerPost(a) {
     ${open.length ? `<div class="row" style="margin-top:8px;gap:8px"><span class="small grow">${esc(joinNames(open.map(m => DAYNAME[m.day])))} ${open.length === 1 ? 'is' : 'are'} still open.</span><button class="btn gray sm" data-a="dinPick" data-v="${wk}">Pick something</button></div>` : `<div class="small muted" style="margin-top:6px">${ic('check', 13)} Every night is planned.</div>`}</div></div>`;
 }
 A.dinPick = wk => { view = 'meals'; DT = 'menu'; MW = wk; render(); scrollToY(0); };
+// A post from an outside source (e.g. a school's Week in Review found by the scraper): shown as that source, with its
+// logo. Tapping the name or logo opens the school's page. Usually part of a stack.
+function sourcePost(a) {
+  const sc = a.table === 'Schools' ? byId('Schools', a.ref) : null, nm = sc ? sc.name : a.who, col = (sc && sc.color) || '#64748b';
+  const go = sc ? `data-a="hhGo" data-v="school:${esc(sc.id)}" style="cursor:pointer"` : '';
+  const av = sc && sc.logo ? `<span class="av srcav" ${go}><img src="${esc(sc.logo)}" alt=""></span>`
+    : `<span class="av srcav" ${go}><i style="background:color-mix(in srgb, ${col} 18%, var(--card));color:${col}">${esc((nm || '?').replace(/^The /, '').slice(0, 1))}</i></span>`;
+  return `<div class="post src">${av}<div class="pbody"><div><b ${go}>${esc(nm)}</b> <span class="muted">· ${ago(a.time)}</span></div><div class="ptext" style="font-weight:400">${aiCardText(a)}</div></div></div>`;
+}
 function actPost(a) {
+  if (a.type === 'source') return sourcePost(a);
   if (String(a.subject || '').startsWith('dinners|')) return dinnerPost(a);
   if (a.table === 'Photos') { const p = byId('Photos', a.ref), ti = p ? titleOf(p.table, p.ref) : '';
     if (p && !isImg(p)) return `<div class="post">${avatar(a.who)}<div class="pbody"><div><b>${esc(a.who)}</b> attached a file${ti ? ` to <b data-a="open" data-t="${p.table}" data-id="${esc(p.ref)}" style="cursor:pointer">${esc(ti)}</b>` : ''} <span class="muted">· ${ago(a.time)}</span></div>

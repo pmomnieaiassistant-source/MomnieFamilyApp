@@ -1,6 +1,8 @@
 /**
  * Momnie Family app backend
- * Version 3.35 (2026-11-19)
+ * Version 3.36 (2026-11-19)
+ *   3.36: Posts from outside sources: sourcePost_() posts a stack AS the school (type 'source'), once per key; the
+ *         scraper calls action source_post with the SOURCE_KEY Script property. The assistant never curates them.
  *   3.35: The assistant curates the Feed on each review: groups related change posts into stacks under an overview it writes
  *         (its own order), updates its stacks, and hides moot posts (state 'moot', reversible). Never touches people's messages.
  *   3.34: Stacked posts: Messages and Activity carry stack and stackIdx; stackPost_() writes a pile of cards as one Feed post
@@ -290,6 +292,7 @@ function auth_(pass) {
 function doPost(e) {
   var b;
   try { b = JSON.parse(e.postData.contents); } catch (err) { return json_({ ok: false, error: 'Bad request' }); }
+  if (b.action === 'source_post') return json_(sourceRoute_(b));   // outside sources (the school scraper) use their own key
   var me = auth_(b.passcode);
   if (!me) return json_({ ok: false, error: 'Wrong passcode' });
   seenMark_(me);
@@ -445,6 +448,59 @@ function stackPost_(cards, o) {
     });
   });
   return { stack: id, ids: ids };
+}
+// ---------- Posts from outside sources ----------
+// Information from outside the family, such as a school's Week in Review found by the scraper, posts AS THAT SOURCE:
+// the Feed shows "The Chestnut Hill School" with its logo, not the assistant. Each post is a stack: a cover card, then
+// one card per section (long sections continue on the next card). Stack ids start with "src". The assistant never
+// stacks, re-orders or hides these. Everyone in the family sees them (Feed filter: School updates).
+/**
+ * o: { source: school id (e.g. 'chs') or a plain name, key: unique id for this update (e.g. 'wir|Clara|2026-11-06'),
+ *      title, intro, cards: [{ title, text }], time (optional, YYYY-MM-DDTHH:MM:SS) }
+ * The same key is only ever posted once (it is kept as the post's subject). Returns { stack, ids } or { skipped }.
+ */
+function sourcePost_(o) {
+  o = o || {};
+  var key = txt_(o.key, 120);
+  if (!key) return { error: 'A key is needed so the same update is never posted twice.' };
+  var subj = 'src|' + key;
+  if (rows_('Activity').some(function (a) { return a.subject === subj; })) return { skipped: true, key: key };
+  var school = get_('Schools', String(o.source || '')), who = school ? school.name : txt_(o.source, 60) || 'Outside source';
+  var id = 'src' + Utilities.getUuid().replace(/-/g, '').slice(0, 10), t = isTime_(o.time) ? o.time : now_(), ids = [], n = 0;
+  var cards = [{ title: o.title, text: o.intro }].concat(o.cards || []);
+  cards.forEach(function (c, ci) {
+    var title = String(c.title || '').trim(), parts = stackSplit_(c.text, STACK_CARD_MAX - (title ? title.length + 8 : 0));
+    if (!parts.length) parts = [''];
+    if (ci > 0 && !title && !parts.join('')) return;
+    parts.forEach(function (part, k) {
+      var head = title ? title + (parts.length > 1 ? ' (' + (k + 1) + '/' + parts.length + ')' : '') : '';
+      var r = put_('Activity', { time: t, who: who, type: 'source', text: (head ? '**' + head + '**\n' : '') + part, cat: 'school',
+        table: school ? 'Schools' : '', ref: school ? school.id : '', audience: '', subject: n === 0 ? subj : '', stack: id, stackIdx: String(n++) });
+      ids.push(r.id);
+    });
+  });
+  return { stack: id, ids: ids, key: key };
+}
+function isTime_(v) { return /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?$/.test(String(v || '')); }
+/** The route an outside source calls: { action: 'source_post', sourceKey: the SOURCE_KEY Script property, post: {...} } */
+function sourceRoute_(b) {
+  var want = PropertiesService.getScriptProperties().getProperty('SOURCE_KEY');
+  if (!want || String(b.sourceKey || '') !== want) return { ok: false, error: 'Wrong source key' };
+  var lock = LockService.getScriptLock();
+  lock.waitLock(25000);
+  try {
+    var r = sourcePost_(b.post || {});
+    return r.error ? { ok: false, error: r.error } : { ok: true, result: r };
+  } finally { lock.releaseLock(); }
+}
+/** Sheet menu: a sample school post (made-up text), to see how it looks in the app. */
+function menuSourceDemo() {
+  var r = sourcePost_({ source: 'chs', key: 'sample|' + now_(), title: 'Sample: new Week in Review for Clara',
+    intro: 'Week ending Friday, November 6 · Grade 1. Swipe to read each section.',
+    cards: [{ title: 'Highlights', text: 'This is made-up sample text. The real posts will carry the school\'s own words, section by section.' },
+            { title: 'Literacy', text: 'Each section of the Week in Review becomes its own card, in the same order as the page.' },
+            { title: 'Math', text: 'Long sections continue on a second card, so every card stays short.' }] });
+  SpreadsheetApp.getUi().alert(r.skipped ? 'Already posted.' : 'Added a sample school post (' + r.ids.length + ' cards). Open the Feed in the app and pull down to refresh.');
 }
 /** Sheet menu: adds a sample stacked post so it can be tried in the app. */
 function menuStackDemo() {
@@ -1116,7 +1172,7 @@ function aiCardsSafe_(t, hour) { try { if (hour >= 19) briefAll_(addDays_(t, 1),
 // item changed again, or deleted). Hiding is reversible (state 'moot'; the app has "Show what the assistant tidied
 // away"). People's own messages and comments are never touched. Assistant stacks have ids starting with "ai"; the app
 // applies the stacks and hiding only for people in the assistant's audience (app|ai.who).
-var FEED_SKIP = { message: 1, answer: 1, ai: 1, daily: 1, summary_week: 1, summary_month: 1 };
+var FEED_SKIP = { message: 1, answer: 1, ai: 1, daily: 1, summary_week: 1, summary_month: 1, source: 1 };
 /** One line on what an item looks like now, so the assistant can tell which posts are out of date. */
 function itemNow_(table, ref) {
   if (!table || !ref) return '';
@@ -1525,6 +1581,7 @@ function onOpen() {
     .addItem('Run the assistant now (Feed notes)', 'menuAiNotes')
     .addItem('Write AI Today cards now', 'menuAiCards')
     .addItem('Add a sample stacked post', 'menuStackDemo')
+    .addItem('Add a sample school post', 'menuSourceDemo')
     .addToUi();
 }
 /**
