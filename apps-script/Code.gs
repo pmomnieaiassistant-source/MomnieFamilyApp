@@ -1,6 +1,7 @@
 /**
  * Momnie Family app backend
- * Version 3.40 (2026-11-19)
+ * Version 3.41 (2026-11-19)
+ *   3.41: School posts put a whole section on one card (up to about 1,380 characters); a very large section splits into even pieces.
  *   3.40: Cards break at sentence ends (no split after Dr., Mr.; no tiny last card); source_post can replace an earlier post.
  *   3.39: Posts from outside sources can be limited to some people (audience), for a preview before the whole family sees them.
  *   3.38: Annual events (Annuals tab): things we like to do every year, kept off the Planner.
@@ -417,19 +418,37 @@ function log_(who, log, t, ref) {
 
 // ---------- stacked posts ----------
 var STACK_CARD_MAX = 280;   // characters per card; longer text continues on the next card
+/** Where sentences end in a text (the index just after each one). "Dr." and similar do not end a sentence; a newline does. */
+function stackEnds_(str) {
+  var r = [], m, re = /(?<!\b(?:Mr|Mrs|Ms|Dr|St|Jr|Sr|Prof|vs|etc|No))[.!?]+["'”)]*(?=\s)|\n/g;
+  while ((m = re.exec(str))) r.push(m.index + m[0].length);
+  return r;
+}
+var SOURCE_CARD_MAX = 950;   // school posts: a whole section on one card; only a very large one is split
+/** For school posts: keeps a section whole up to about 45% over SOURCE_CARD_MAX; a larger one is split into EVEN pieces
+ *  (never a big card and a tiny one), each cut at a sentence end near its share, else at a word. */
+function stackSplitEven_(text, max) {
+  max = max || SOURCE_CARD_MAX;
+  var t = String(text || '').replace(/[ \t]+\n/g, '\n').trim(), slack = Math.round(max * 0.45);
+  if (t.length <= max + slack) return t ? [t] : [];
+  var n = Math.ceil(t.length / max), out = [];
+  while (n > 1) {
+    var target = Math.round(t.length / n), e = stackEnds_(t), cut = 0, best = 1e9, i;
+    for (i = 0; i < e.length; i++) if (e[i] >= target * 0.6 && e[i] <= target * 1.4 && Math.abs(e[i] - target) < best) { best = Math.abs(e[i] - target); cut = e[i]; }
+    if (!cut) { cut = t.lastIndexOf(' ', target); if (cut < target * 0.5) cut = target; }
+    out.push(t.slice(0, cut).trim()); t = t.slice(cut).trim(); n--;
+  }
+  if (t) out.push(t);
+  return out;
+}
 /** Splits text into card-sized pieces at sentence boundaries. A card may run a little long (up to 40% over) to finish a
  *  sentence or to avoid a tiny last card; abbreviations such as "Dr." do not end a sentence; a single very long sentence
  *  is cut at a word. */
 function stackSplit_(text, max) {
   max = max || STACK_CARD_MAX;
   var slack = Math.round(max * 0.4), t = String(text || '').replace(/[ \t]+\n/g, '\n').trim(), out = [];
-  var ends = function (str) {
-    var r = [], m, re = /(?<!\b(?:Mr|Mrs|Ms|Dr|St|Jr|Sr|Prof|vs|etc|No))[.!?]+["'”)]*(?=\s)|\n/g;
-    while ((m = re.exec(str))) r.push(m.index + m[0].length);
-    return r;
-  };
   while (t.length > max + slack) {
-    var e = ends(t), cut = 0, i;
+    var e = stackEnds_(t), cut = 0, i;
     for (i = 0; i < e.length; i++) if (e[i] <= max) cut = e[i];                                           // the last sentence end within the limit
     if (cut < max * 0.5) for (i = 0; i < e.length; i++) if (e[i] > max && e[i] <= max + slack) { cut = e[i]; break; }   // else the first one just past it
     if (cut < max * 0.5) { cut = t.lastIndexOf(' ', max); if (cut < max * 0.5) cut = max; }              // else a word boundary
@@ -486,7 +505,7 @@ function sourcePost_(o) {
   var id = 'src' + Utilities.getUuid().replace(/-/g, '').slice(0, 10), t = isTime_(o.time) ? o.time : now_(), ids = [], n = 0;
   var cards = [{ title: o.title, text: o.intro }].concat(o.cards || []);
   cards.forEach(function (c, ci) {
-    var title = String(c.title || '').trim(), parts = stackSplit_(c.text, STACK_CARD_MAX - (title ? title.length + 8 : 0));
+    var title = String(c.title || '').trim(), parts = stackSplitEven_(c.text, SOURCE_CARD_MAX);   // school cards are big: a whole section each
     if (!parts.length) parts = [''];
     if (ci > 0 && !title && !parts.join('')) return;
     parts.forEach(function (part, k) {
