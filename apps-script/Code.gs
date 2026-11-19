@@ -1,6 +1,7 @@
 /**
  * Momnie Family app backend
- * Version 3.42 (2026-11-19)
+ * Version 3.43 (2026-11-19)
+ *   3.43: The assistant no longer sees gift-idea counts at all.
  *   3.42: The assistant reviews every two hours from 5 AM to 1 AM; the start-hour setting is gone.
  *   3.41: School posts put a whole section on one card (up to about 1,380 characters); a very large section splits into even pieces.
  *   3.40: Cards break at sentence ends (no split after Dr., Mr.; no tiny last card); source_post can replace an earlier post.
@@ -1072,9 +1073,9 @@ function runLine_(r) { return t12_(r.time) + ' ' + r.name + ' ' + RUN_WORD_[r.ki
 
 // ---------- AI assistant ----------
 function aiRules_() { return rows_('ai_rules').filter(function (r) { return r.text && r.active !== '0'; }); }
-var AI_TOPICS_ = { meals: 'Meals and recipes', birthdays: 'Birthdays and gift ideas (counts only)', todos: 'To-dos and bills', rides: 'School runs, activity rides and caretakers', week: 'The week ahead', house: 'House upkeep' };
+var AI_TOPICS_ = { meals: 'Meals and recipes', birthdays: 'Birthdays', todos: 'To-dos and bills', rides: 'School runs, activity rides and caretakers', week: 'The week ahead', house: 'House upkeep' };
 function aiSafe_(t) { try { aiPosts_(t, false); } catch (e) { console.error(e); put_('Settings', { id: 'app|ai.last', value: now_() + ' · error: ' + String(e && e.message || e).slice(0, 200) }); } }
-/** A compact, plain summary of what's coming up, limited to the chosen topics. Gift ideas themselves are never included. */
+/** A compact, plain summary of what's coming up, limited to the chosen topics. Gift ideas are never included. */
 function aiContext_(t) {
   var topics = list_(setting_('app|ai.topics', Object.keys(AI_TOPICS_).join(', '))), rules = aiRules_(),
       on = function (k) { return rules.length || topics.indexOf(k) >= 0; }, c = { today: nice_(t), topics: topics };   // rules can be about anything, so they see everything
@@ -1088,11 +1089,10 @@ function aiContext_(t) {
   if (on('meals')) { var st = recipeStats_();
     c.recipes = rows_('Recipes').filter(function (r) { return r.name && r.status !== 'archived'; }).map(function (r) { var s = st[r.id] || {};
       return r.name + ' | rating ' + (avg_(r.ratings) ? avg_(r.ratings).toFixed(1) : 'none') + ' | ' + (s.last ? 'last made ' + s.last : 'never made') + (s.n ? ', made ' + s.n + 'x' : '') + (r.pausedUntil && r.pausedUntil >= t ? ' | paused' : '') + (r.tags ? ' | #' + list_(r.tags).join(' #') : ''); }).slice(0, 60); }
-  if (on('birthdays')) { var gifts = rows_('gifts');
+  if (on('birthdays')) {
     c.birthdays = birthdays_().map(function (b) { var y = Number(t.slice(0, 4)), nx = y + '-' + b.md; if (nx < t) nx = (y + 1) + '-' + b.md; return { name: b.name, date: nx }; })
       .filter(function (b) { return b.date <= addDays_(t, 45); })
-      .map(function (b) { var n = gifts.filter(function (g) { return g.recipient === b.name; }).length, kid = kids.indexOf(b.name) >= 0;
-        return b.name + ' on ' + nice_(b.date) + (kid ? ' | gift ideas saved: ' + n : ''); }); }
+      .map(function (b) { return b.name + ' on ' + nice_(b.date); }); }
   if (on('todos')) { var open = rows_('Todos').filter(function (x) { return x.status !== 'Done'; });
     c.todos = open.filter(function (x) { return x.due && x.due <= addDays_(t, 7); }).sort(function (a, b) { return a.due < b.due ? -1 : 1; }).slice(0, 25)
       .map(function (x) { return x.title + ' | due ' + x.due + (x.due < t ? ' (OVERDUE)' : '') + (x.assignee ? ' | ' + x.assignee : '') + (x.amount ? ' | $' + x.amount : ''); });
@@ -1347,9 +1347,9 @@ function briefCands_(p, d, mode) {
   rows_('Todos').filter(function (x) { return x.status !== 'Done' && (!x.assignee || x.assignee === p) && x.due && x.due <= addDays_(d, 3); })
     .sort(function (a, b) { return a.due < b.due ? -1 : 1; }).slice(0, 20)
     .forEach(function (x) { add('Todos:' + x.id, 'To-do: ' + x.title + ' | due ' + x.due + (x.due < t ? ' (OVERDUE)' : x.due === d ? ' (due this day)' : '') + (x.assignee ? ' | ' + x.assignee + "'s" : ' | anyone') + (x.amount ? ' | $' + x.amount : '')); });
-  var kids = people.filter(function (x) { return x.kind === 'kid'; }).map(function (x) { return x.name; }), gifts = rows_('gifts');
+  var kids = people.filter(function (x) { return x.kind === 'kid'; }).map(function (x) { return x.name; });
   birthdays_().forEach(function (b) { var y = Number(d.slice(0, 4)), nx = y + '-' + b.md; if (nx < d) nx = (y + 1) + '-' + b.md;
-    if (nx <= addDays_(d, 10)) add('', 'Birthday: ' + b.name + ' on ' + nice_(nx) + (kids.indexOf(b.name) >= 0 ? ' | gift ideas saved: ' + gifts.filter(function (g) { return g.recipient === b.name; }).length : '')); });
+    if (nx <= addDays_(d, 10)) add('', 'Birthday: ' + b.name + ' on ' + nice_(nx)); });
   rows_('HouseCards').forEach(function (h) { if (h.kind === 'upkeep' && h.nextDue && h.nextDue <= addDays_(d, 7)) add('HouseCards:' + h.id, 'House upkeep: ' + h.title + (h.house ? ' (' + h.house + ')' : '') + ' due ' + h.nextDue); });
   var wx = null, h = get_('Houses', setting_(p + '|house', 'boston'));
   if (h && h.lat) { var w = fetchWx_(+h.lat, +h.lon), wd = w && w.days.filter(function (x) { return x.date === d; })[0];
@@ -1370,7 +1370,7 @@ function aiBrief_(p, d, mode) {
     'level "heads-up" means it needs action or something is at risk (NOT SET, NOT CONFIRMED, OVERDUE, nothing planned for dinner on a busy day); otherwise "normal".\n' +
     'Group routine things: when the school runs are all the usual people and nothing changed, fold them into one short item such as "Usual school runs: Paul drops off, Lina picks up" (ref "") or leave them out on a busy day; spell out any run that changed or has NO ONE SET. Lead with what is different about this day.\n' +
     'Put their own responsibilities first. Mention what someone else is doing only when it affects them (for example who has a pickup, or the other parent being out). Skip routine things that need nothing from them. Combine related candidates into one item when that reads better. ' +
-    'Plain words, first names, no emoji, no exclamation marks. Never name or describe gift ideas. Do not invent anything that is not in the candidates.';
+    'Plain words, first names, no emoji, no exclamation marks.  Do not invent anything that is not in the candidates.';
   var schema = { type: 'object', additionalProperties: false, required: ['headline', 'weather', 'items'],
     properties: { headline: { type: 'string' }, weather: { type: 'string' },
       items: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['text', 'ref', 'level'],
