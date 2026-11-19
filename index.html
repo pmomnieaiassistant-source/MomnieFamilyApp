@@ -164,7 +164,7 @@
                  display:flex; align-items:center; gap:10px; box-shadow:0 8px 22px rgba(15,23,42,.22); opacity:0; transform:translateY(14px) scale(.96); transition:opacity .18s ease, transform .22s cubic-bezier(.2,.9,.3,1.2); }
   .fabm button .ic { color:var(--accent); }
   .fabon .fabm { pointer-events:auto; } .fabon .fabm button { opacity:1; transform:none; }
-  .fabon .fabm button:nth-last-child(1) { transition-delay:0s; } .fabon .fabm button:nth-last-child(2) { transition-delay:.04s; } .fabon .fabm button:nth-last-child(3) { transition-delay:.08s; } .fabon .fabm button:nth-last-child(4) { transition-delay:.12s; }
+  .fabon .fabm button:nth-last-child(1) { transition-delay:0s; } .fabon .fabm button:nth-last-child(2) { transition-delay:.04s; } .fabon .fabm button:nth-last-child(3) { transition-delay:.08s; } .fabon .fabm button:nth-last-child(4) { transition-delay:.12s; } .fabon .fabm button:nth-last-child(5) { transition-delay:.16s; }
   @media (prefers-reduced-motion:reduce) { .fabx svg, .fabm button, .fabbg { transition:none; } }
   .fab { width:auto; height:52px; border-radius:26px; padding:0 20px 0 16px; background:var(--accent); color:var(--onacc); font:inherit; font-size:16px; font-weight:800;
          display:flex; align-items:center; gap:6px; box-shadow:0 8px 22px rgba(15,23,42,.28); }
@@ -372,7 +372,7 @@ a.alink { color: inherit; text-decoration: underline; text-decoration-color: col
 // Momnie Family app v6.0
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'], DAYN = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'], ADULTS = ['Paul', 'Shana'];
 // Shown at the bottom of Home. Bump it together with VERSION in sw.js on every release.
-const APP_VERSION = '15.6 · Nov 19, 2026';
+const APP_VERSION = '15.7 · Nov 19, 2026';
 const TABLES = ['People', 'Schools', 'SchoolCal', 'Activities', 'Overrides', 'Events', 'Caretakers', 'Childcare', 'Birthdays', 'Todos', 'TodoTypes', 'Recipes', 'DinnerRules', 'Weeks', 'Menus',
   'Groceries', 'GroceryList', 'HouseCards', 'Houses', 'WeatherRules', 'Quotes', 'Memories', 'Updates', 'Messages', 'Activity', 'Comments', 'Reactions', 'Links', 'Settings', 'Photos', 'gifts', 'ai_rules', 'ai_requests', 'notes', 'places', 'daily_items', 'daily_completions'];
 const CAT = { School: '#3f6fb5', Kids: '#4f7cc2', Work: '#64748b', Family: '#5b6fa8', Dinner: '#b08a4f', Caretaker: '#3e9aa6', Shared: '#94a3b8', Birthday: '#c9806a' }, SCHOOL_C = ['#5a72b8', '#7a8597', '#4a6fb0'];
@@ -2091,7 +2091,7 @@ function vFeed() {
   return html + feedFab();
 }
 // What the Feed's + button offers: [label, icon, action]. Add a line here to add an option.
-const FEED_ADD = () => [['New event', 'planner', 'fabEvent'], ['New to-do', 'todo', 'fabTodo'], ['New post', 'msg', 'fabPost']];
+const FEED_ADD = () => [aiCanUse() && ['Ask the assistant', 'spark', 'fabAsk'], ['Grocery item', 'cart', 'fabGroc'], ['New event', 'planner', 'fabEvent'], ['New to-do', 'todo', 'fabTodo'], ['New post', 'msg', 'fabPost']].filter(Boolean);
 let FABON = false;
 const feedFab = () => `<div class="fabwrap ${FABON ? 'fabon' : ''}"><div class="fabbg" data-a="fabClose"></div>
   <div class="fabm" role="menu" aria-hidden="${!FABON}">${FEED_ADD().map(([l, i, a]) => `<button data-a="${a}" role="menuitem" ${FABON ? '' : 'tabindex="-1"'}>${ic(i, 20)}${esc(l)}</button>`).join('')}</div>
@@ -2113,6 +2113,20 @@ A.fabClose = () => fabSet(false);
 A.fabEvent = () => { fabSet(false); editForm('Events', null); };
 A.fabTodo = () => { fabSet(false); editForm('Todos', null); };
 A.fabPost = () => { fabSet(false); A.newMsg(); };
+A.fabAsk = () => { fabSet(false); A.askOpen(); };
+// Grocery item from the Feed: a small sheet that stays open so several items can be added in a row.
+let GADDED = [];
+A.fabGroc = () => { fabSet(false); GADDED = [];
+  sheet(`<h2>Add to groceries</h2><div class="row"><input id="gqf" placeholder="e.g. yogurt" autocomplete="off" aria-label="Grocery item" oninput="gSuggestF(this.value)" onkeydown="if(event.key==='Enter')A.gaddF()"><button class="btn" data-a="gaddF">Add</button></div>
+    <div class="chips" id="gsuggf" style="flex-wrap:wrap;margin-top:8px"></div><div class="small muted" id="gaddedf" style="margin-top:10px" aria-live="polite"></div>`);
+  setTimeout(() => { const i = $('gqf'); if (i) i.focus(); }, 60); };
+A.gaddF = name => { const inp = $('gqf'); name = String(typeof name === 'string' ? name : (inp && inp.value) || '').trim(); if (!name) return;
+  const dup = S.GroceryList.some(g => g.status === 'open' && norm(g.name) === norm(name));
+  A.gadd(name);
+  if (!dup) GADDED.push(name);
+  if (inp) { inp.value = ''; inp.focus(); }
+  $('gsuggf').innerHTML = ''; $('gaddedf').textContent = GADDED.length ? 'Added: ' + GADDED.join(', ') : ''; };
+window.gSuggestF = q => { q = q.trim().toLowerCase(); $('gsuggf').innerHTML = q ? S.Groceries.filter(g => (g.name + ' ' + g.category + ' ' + g.details + ' ' + g.altNames).toLowerCase().includes(q)).slice(0, 6).map(g => `<button class="chip ok" data-a="gaddF" data-v="${esc(g.name)}">＋ ${esc(g.name)}${g.details ? ' · ' + esc(g.details.slice(0, 30)) : ''}</button>`).join('') : ''; };
 A.feedTog = (on, el) => { feedSet(el.dataset.k, on ? '1' : '0'); render(); };
 A.feedAll = () => { FKINDS().forEach(([k]) => { if (!fOn(k)) feedSet(k, '1'); }); FMENU = false; render(); };
 // Swipe a Feed post left to delete it. Paul can delete for everyone; Shana removes it from her own Feed.
