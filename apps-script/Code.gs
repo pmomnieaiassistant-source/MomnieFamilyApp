@@ -1,6 +1,8 @@
 /**
  * Momnie Family app backend
- * Version 3.31 (2026-11-19)
+ * Version 3.32 (2026-11-19)
+ *   3.32: Files on any card, not just photos: PDFs and documents go to the same "Momnie photos" Drive folder.
+ *         New Photos columns name and mime (blank mime = a photo, as before). Files up to 15 MB.
  *   3.31: Test of the automatic GitHub to Apps Script deploy (no behavior change).
  *   3.30: The Assistant shows the real reason when it fails (also saved as app|ai.error), retries once when Claude is busy,
  *         and falls back to plain JSON if the request form is refused.
@@ -102,7 +104,7 @@ var T = {
   Comments: 'id,time,who,table,ref,text,system',
   Reactions: 'id,time,who,table,ref,emoji',
   Links: 'id,aTable,aRef,bTable,bRef,by',
-  Photos: 'id,time,who,table,ref,fileId,caption,cover',
+  Photos: 'id,time,who,table,ref,fileId,caption,cover,name,mime',   // mime blank or image/* = a photo; anything else (application/pdf…) is a file
   Settings: 'id,value',
   NeedsReview: 'id,recipe,ingredient,closest,action',
   gifts: 'id,recipient,added_by,name,description,url,photo,assigned_to,created_at',
@@ -468,17 +470,23 @@ function photoFolder_() {
   if (!f) { f = DriveApp.createFolder('Momnie photos'); put_('Settings', { id: 'app|photoFolder', value: f.getId() }); }
   return f;
 }
-/** Saves one photo (base64 JPEG from the app, already shrunk on the phone) and attaches it to a card. */
+/** Saves one photo (base64 JPEG from the app, already shrunk on the phone) or file (a PDF, document…) and attaches it to a card. */
 function photoAdd_(b, me) {
-  if (!T[b.table] || b.table === 'Photos' || !b.ref) return { ok: false, error: 'Pick a card for the photo.' };
-  var data = String(b.data || '').replace(/^data:image\/\w+;base64,/, '');
-  if (!data) return { ok: false, error: 'No photo was sent.' };
-  if (data.length > 8000000) return { ok: false, error: 'That photo is too big. Try a smaller one.' };
-  var blob = Utilities.newBlob(Utilities.base64Decode(data), 'image/jpeg', b.table + '-' + b.ref + '-' + now_().replace(/\D/g, '') + '.jpg');
-  var file = photoFolder_().createFile(blob);
+  if (!T[b.table] || b.table === 'Photos' || !b.ref) return { ok: false, error: 'Pick a card for the photo or file.' };
+  var mime = String(b.mime || 'image/jpeg').replace(/[^\w.+\/-]/g, '') || 'application/octet-stream';
+  var data = String(b.data || '').replace(/^data:[^;,]*(;[^,]*)?,/, '');
+  if (!data) return { ok: false, error: 'Nothing was sent.' };
+  if (data.length > 21000000) return { ok: false, error: 'That file is too big (over 15 MB). Try a smaller one.' };
+  var pic = mime.indexOf('image/') === 0;
+  var orig = String(b.name || '').replace(/[\\\/:*?"<>|]+/g, ' ').trim().slice(0, 120);
+  var ext = mime === 'image/jpeg' ? '.jpg' : ((orig.match(/\.\w{1,6}$/) || [''])[0] || (mime === 'application/pdf' ? '.pdf' : ''));
+  var stamp = now_().replace(/\D/g, '');
+  var fname = pic ? b.table + '-' + b.ref + '-' + stamp + ext : (orig ? orig.replace(/\.\w{1,6}$/, '') : b.table + '-' + b.ref) + ' (' + stamp + ')' + ext;
+  var file = photoFolder_().createFile(Utilities.newBlob(Utilities.base64Decode(data), mime, fname));
   try { file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW); } catch (e) { console.error(e); }
-  var first = !rows_('Photos').some(function (x) { return x.table === b.table && x.ref === String(b.ref); });
-  var r = put_('Photos', { time: now_(), who: me, table: b.table, ref: String(b.ref), fileId: file.getId(), caption: b.caption || '', cover: first ? '1' : '' });
+  var first = pic && !rows_('Photos').some(function (x) { return x.table === b.table && x.ref === String(b.ref) && (!x.mime || x.mime.indexOf('image/') === 0); });
+  var r = put_('Photos', { time: now_(), who: me, table: b.table, ref: String(b.ref), fileId: file.getId(), caption: b.caption || '', cover: first ? '1' : '',
+    name: orig, mime: pic && mime === 'image/jpeg' ? '' : mime });
   if (b.log) log_(me, b.log, 'Photos', r.id);
   return { photo: r.id };
 }

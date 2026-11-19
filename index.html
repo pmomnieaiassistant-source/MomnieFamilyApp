@@ -140,7 +140,7 @@
   .swipe { position:relative; overflow:hidden; } .swipe > .post { background:var(--bg); transition:transform .15s; position:relative; z-index:1; }
   .swipe .under { position:absolute; inset:0; display:flex; justify-content:flex-end; align-items:center; padding-right:22px; background:var(--redbg); color:var(--red); font-weight:700; font-size:14px; }
   .irow { display:flex; gap:6px; margin-top:6px; align-items:center; } .irow input, .irow select { padding:10px; font-size:15px; } .irow .n { flex:1 1 auto; min-width:0; } .irow .a { flex:0 0 64px; } .irow .u { flex:0 0 80px; }
-  .irow .rm { flex:0 0 auto; border:0; background:var(--soft); color:var(--muted); width:32px; height:32px; border-radius:50%; font-size:14px; }
+  .irow .rm, .fchip .rm { flex:0 0 auto; border:0; background:var(--soft); color:var(--muted); width:32px; height:32px; border-radius:50%; font-size:14px; }
   .qty { color:var(--muted); font-weight:600; font-style:normal; display:inline; }
   .ic { display:inline-block; vertical-align:-4px; flex:0 0 auto; }
   .btn .ic { width:16px; height:16px; vertical-align:-3px; margin-right:4px; }
@@ -314,6 +314,9 @@
   .phgrid button { border:0; padding:0; border-radius:12px; overflow:hidden; aspect-ratio:1; background:var(--soft); position:relative; }
   .phgrid img { width:100%; height:100%; object-fit:cover; display:block; } .phgrid .cv { position:absolute; left:6px; top:6px; font-size:10px; font-weight:800; padding:2px 6px; border-radius:6px; background:var(--card); color:var(--text); }
   .phbig { display:block; width:100%; border-radius:16px; margin:10px 0; background:var(--soft); }
+  .fchip { display:flex; align-items:center; gap:8px; width:100%; border:1px solid var(--line); background:var(--soft); color:var(--text); font:inherit; font-size:14px; font-weight:600; text-align:left; padding:10px 12px; border-radius:var(--r-panel, 12px); margin-top:6px; }
+  .fchip .grow { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; } .fchip .ic { color:var(--accent); flex:0 0 auto; }
+  .phprev { display:block; width:100%; height:70vh; border:0; border-radius:16px; margin:10px 0; background:var(--soft); }
   .phpost { display:block; width:100%; max-height:420px; object-fit:cover; border-radius:16px; margin-top:8px; background:var(--soft); }
   #view input, #view select, #view textarea { background:var(--card); border:1px solid var(--line); }
   .av i[data-p="App"] { background:var(--accsoft); color:var(--accent); }
@@ -354,7 +357,7 @@ a.alink { color: inherit; text-decoration: underline; text-decoration-color: col
 // Momnie Family app v6.0
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'], DAYN = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'], ADULTS = ['Paul', 'Shana'];
 // Shown at the bottom of Home. Bump it together with VERSION in sw.js on every release.
-const APP_VERSION = '15.3 · Nov 18, 2026';
+const APP_VERSION = '15.4 · Nov 19, 2026';
 const TABLES = ['People', 'Schools', 'SchoolCal', 'Activities', 'Overrides', 'Events', 'Caretakers', 'Childcare', 'Birthdays', 'Todos', 'TodoTypes', 'Recipes', 'DinnerRules', 'Weeks', 'Menus',
   'Groceries', 'GroceryList', 'HouseCards', 'Houses', 'WeatherRules', 'Quotes', 'Memories', 'Updates', 'Messages', 'Activity', 'Comments', 'Reactions', 'Links', 'Settings', 'Photos', 'gifts', 'ai_rules', 'ai_requests', 'notes', 'places', 'daily_items', 'daily_completions'];
 const CAT = { School: '#3f6fb5', Kids: '#4f7cc2', Work: '#64748b', Family: '#5b6fa8', Dinner: '#b08a4f', Caretaker: '#3e9aa6', Shared: '#94a3b8', Birthday: '#c9806a' }, SCHOOL_C = ['#5a72b8', '#7a8597', '#4a6fb0'];
@@ -546,7 +549,15 @@ function md(s) { // **bold**, "- " bullets, blank lines, links
 const photoUrl = u => { const m = String(u || '').match(/(?:\/d\/|id=)([\w-]{20,})/); return m ? 'https://drive.google.com/thumbnail?id=' + m[1] + '&sz=w1000' : u; };
 // Photos on any card: rows in the Photos tab point at a card (table + ref) and a Drive file.
 const photoSrc = (fileId, w) => 'https://drive.google.com/thumbnail?id=' + encodeURIComponent(fileId) + '&sz=w' + (w || 1000);
-const photosOf = (t, id) => S.Photos.filter(p => p.table === t && p.ref === String(id)).sort((a, b) => a.time.localeCompare(b.time));
+// A row with a mime type that isn't an image is a file (PDF, document…); older rows have no mime and are photos.
+const isImg = p => !p.mime || p.mime.startsWith('image/');
+const attachOf = (t, id) => S.Photos.filter(p => p.table === t && p.ref === String(id)).sort((a, b) => a.time.localeCompare(b.time));
+const photosOf = (t, id) => attachOf(t, id).filter(isImg);
+const filesOf = (t, id) => attachOf(t, id).filter(p => !isImg(p));
+const fileUrl = p => 'https://drive.google.com/file/d/' + encodeURIComponent(p.fileId) + '/view';
+const fileName = p => p.name || p.caption || 'File';
+const fileKind = p => { const m = String(p.mime || ''), e = (fileName(p).match(/\.(\w+)$/) || [])[1]; return m === 'application/pdf' ? 'PDF' : e ? e.toUpperCase() : 'File'; };
+const fileChip = p => `<button class="fchip" data-a="photoView" data-v="${p.id}">${ic('file', 18)}<span class="grow">${esc(fileName(p))}</span><span class="small muted">${esc(fileKind(p))}</span></button>`;
 const coverOf = (t, id) => { const ps = photosOf(t, id); return ps.find(p => p.cover === '1') || ps[0] || null; };
 const st = (k, d) => { const r = byId('Settings', ME + '|' + k); return r && r.value !== '' ? r.value : d; };
 const L = (type, text, cat, extra) => Object.assign({ type, text, cat: cat || '' }, extra || {});
@@ -605,6 +616,8 @@ const ICONS = {
   wallet: '<rect x="3" y="6" width="18" height="14" rx="2.5"/><path d="M3 10h18M16 15h2M6 6l9-3 1.5 3"/>',
   camera: '<path d="M4 8h3l2-3h6l2 3h3a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z"/><circle cx="12" cy="13.5" r="3.5"/>',
   image: '<rect x="3" y="4" width="18" height="16" rx="3"/><circle cx="9" cy="10" r="2"/><path d="m21 16-5-5-9 9"/>',
+  clip: '<path d="m20.5 11.5-8.3 8.3a5 5 0 0 1-7.1-7.1l8.6-8.6a3.4 3.4 0 0 1 4.8 4.8l-8.6 8.6a1.7 1.7 0 0 1-2.4-2.4l7.9-7.9"/>',
+  file: '<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h4"/>',
   check: '<path d="m5 12 5 5 9-10"/>',
   x: '<path d="M6 6l12 12M18 6 6 18"/>',
   wrench: '<path d="M14.5 6.5a4 4 0 0 0 5 5L21 13l-8 8-3-3 8-8-1.5-1.5a4 4 0 0 1-5-5L13 2z"/>',
@@ -971,6 +984,9 @@ function fieldHTML(f, v) {
       `${f.hint ? `<div class="small muted" style="margin-top:6px">${esc(f.hint)}</div>` : ''}${f.dl ? f.dl() : ''}`; }
   if (f.t === 'time') { const du = f.dur ? durTxt(v[f.dur], val) : '';
     return `<label>${esc(f.l)}</label>${timeSelect(`data-k="${f.k}"`, val)}${du ? `<div class="small muted dur">(${du})</div>` : ''}`; }
+  if (f.t === 'files') { const fs = v[f.k] || [];
+    return `<label>${esc(f.l)}</label>${fs.map((x, i) => `<div class="fchip">${ic(/^image\//.test(x.type) ? 'image' : 'file', 18)}<span class="grow">${esc(x.name || 'Photo')}</span><button type="button" class="rm" data-frm="${f.k}" data-ri="${i}" aria-label="Remove">✕</button></div>`).join('')}
+      <button type="button" class="chip" style="margin-top:8px" data-fpick="${f.k}">${ic('clip', 14)} ${fs.length ? 'Add another' : 'Attach a photo or file'}</button>${f.hint ? `<div class="small muted" style="margin-top:6px">${esc(f.hint)}</div>` : ''}`; }
   if (f.t === 'chk') return `<label class="check-row"><input type="checkbox" data-k="${f.k}" ${val === '1' ? 'checked' : ''}> ${esc(f.l)}</label>`;
   if (f.t === 'sel') return `<label>${esc(f.l)}</label><select data-k="${f.k}">${o.map(x => { const [a, b] = Array.isArray(x) ? x : [x, x]; return `<option value="${esc(a)}" ${a === val ? 'selected' : ''}>${esc(noEmo(b))}</option>`; }).join('')}</select>`;
   if (f.t === 'multi') return `<label>${esc(f.l)}</label><div style="display:flex;flex-wrap:wrap;gap:6px">${o.map(x => `<button type="button" class="chip ${list(val).includes(x) ? 'on' : ''}" data-mk="${f.k}" data-mv="${esc(x)}">${esc(x)}</button>`).join('')}</div>${f.hint ? `<div class="small muted" style="margin-top:6px">${esc(f.hint)}</div>` : ''}`;
@@ -1016,6 +1032,10 @@ function form(title, fields, vals, onSave, buttons, opts) {
     if (ra) { const k = ra.dataset.radd, rows = v[k] = v[k] || [], last = rows[rows.length - 1] || {}; rows.push(k === '_slots' ? { start: last.start || '', end: last.end || '' } : {}); draw(); const ins = d.querySelectorAll(`[data-rk="${k}"][data-ri="${rows.length - 1}"]`); if (ins[0] && ins[0].tagName === 'INPUT') ins[0].focus(); return; }
     const rc = t.closest('[data-rcopy]');
     if (rc) { const rows = v[rc.dataset.rcopy] || [], m = Object.assign({}, rows[0] || {}); delete m.day; Object.keys(m).forEach(k => { if (k[0] === '_') delete m[k]; }); rows.forEach((r, i) => { if (i) Object.assign(r, m); }); draw(); return; }
+    const fp = t.closest('[data-fpick]');
+    if (fp) { const k = fp.dataset.fpick; pickFiles(d, ATTACH_ACCEPT, fs => { v[k] = (v[k] || []).concat(fs); draw(); }); return; }
+    const fr = t.closest('[data-frm]');
+    if (fr) { v[fr.dataset.frm].splice(+fr.dataset.ri, 1); draw(); return; }
     const rd = t.closest('[data-rdel]');
     if (rd) { v[rd.dataset.rdel].splice(+rd.dataset.ri, 1); draw(); return; }
     const ia = t.closest('[data-ingadd]');
@@ -1191,7 +1211,7 @@ const FORMS = {
     F('link', 'Link', 'text', null, { show: () => fl.includes('link') }), F('assignee', 'For', 'sel', [['', 'Either of us'], 'Paul', 'Shana']),
     F('due', 'Due date (blank = a week from now)', 'date'), F('repeat', 'Repeats', 'sel', [['', 'Does not repeat']].concat(REP_PRESETS.map(x => [x, repTxt(x)]), [['custom', 'Custom…']]), { re: 1 }),
     F('_rn', 'Every', 'num', null, { show: x => x.repeat === 'custom', ph: 'e.g. 6' }), F('_ru', 'Unit', 'sel', [['day', 'Days'], ['week', 'Weeks'], ['month', 'Months'], ['year', 'Years']], { show: x => x.repeat === 'custom' }),
-    F('house', 'House', 'sel', [['', 'N/A'], ['Boston', 'Boston'], ['Cape', 'Cape']]), F('notes', 'Notes', 'area'), F('_notify', 'Notify the other person now', 'chk')]; },
+    F('house', 'House', 'sel', [['', 'N/A'], ['Boston', 'Boston'], ['Cape', 'Cape']]), F('notes', 'Notes', 'area'), F('_files', 'Photos and files', 'files', null, { hint: 'e.g. a photo or PDF of the invoice.' }), F('_notify', 'Notify the other person now', 'chk')]; },
   Events: v => [F('title', 'What is it?'), F('category', 'Type', 'sel', ['School', 'Work', 'Kids', 'Family'], { re: 1 }), F('date', 'Date', 'date'), F('allDay', 'All day', 'chk', null, { re: 1 }),
     F('endDate', 'Last day (only if it runs several days)', 'date', null, { show: x => x.allDay === '1' }), F('start', 'Starts', 'time', null, { show: x => x.allDay !== '1' }), F('end', 'Ends', 'time', null, { show: x => x.allDay !== '1', dur: 'start' }),
     F('people', 'Who is involved', 'multi', S.People.map(p => p.name)), F('location', 'Where'), F('house', 'House', 'sel', HOUSE_O),
@@ -1253,6 +1273,7 @@ const FORMS = {
         if (!x._kindSet && !x.id && /\?\s*$/.test(x.text || '')) x.kind = 'question'; qGuess(x); x._redraw = was !== [x.kind, x.answerType, x.options].join('|'); } }),
       F('answerType', 'Answer with', 'sel', Q_TYPES, { show: x => x.kind === 'question', re: 1, on: x => { x._typeSet = 1; } }),
       F('options', 'Choices (comma separated)', 'text', null, { show: x => x.kind === 'question' && x.answerType === 'choice', ph: 'e.g. Me, You, Lina' }),
+      F('_files', 'Photos and files', 'files'),
       F('tags', q ? 'Who are you asking?' : 'Tag people', 'multi', () => q ? ADULTS.filter(n => n !== ME) : S.People.map(p => p.name)),
       F('visibility', 'Who can see it', 'sel', [['', 'Everyone'], ['adults', 'Paul and Shana only']]), F('pinUntil', 'Pin to the top of the Feed until (optional)', 'date', null, { re: 1 }), F('_pinAt', 'Until what time (optional)', 'time', null, { show: x => !!x.pinUntil, hint: 'Leave blank to keep it pinned all day.' })]; },
 };
@@ -1308,12 +1329,14 @@ const SAVE = {
     return write({ t: 'Schools', row }); },
   async Todos(v) {
     if (v.repeat === 'custom') { const n = parseInt(v._rn, 10); need(n > 0 && n < 1000, 'How often? Enter a number, like 6.'); v.repeat = n + ' ' + (v._ru || 'month') + (n === 1 ? '' : 's'); }
-    delete v._rn; delete v._ru;
+    delete v._rn; delete v._ru; const files = v._files; delete v._files;
     need(v.title && v.title.trim(), v.type === 'bill' ? 'Who is the bill from?' : 'What needs doing?'); if (v.type === 'bill') need(v.amount, 'Enter the amount.');
     const isNew = !v.id, row = Object.assign({}, v, { id: v.id || nid(), due: v.due || addDays(TODAY, 7), status: v.status || 'Open' }), ty = typeOf(row);
     const ops = [{ t: 'Todos', row, log: isNew ? L('todo_add', `added ${v.type === 'bill' ? 'a bill' : 'a to-do'}: ${v.title}${v.assignee ? ' (for ' + v.assignee + ')' : ''}`, 'bills', { amount: v.amount || '' }) : null }];
     if (v._link) ops.push({ t: 'Links', row: { id: nid(), aTable: v._link[0], aRef: v._link[1], bTable: 'Todos', bRef: row.id } }, sys(v._link[0], v._link[1], `created a to-do and linked this ${NAMES[v._link[0]] || 'card'}`));
-    return write(ops, v._notify === '1' ? { notify: 'on' } : {});
+    const ok = await write(ops, v._notify === '1' ? { notify: 'on' } : {});
+    if (ok && files && files.length) attachAll('Todos', row.id, files);
+    return ok;
   },
   async Events(v) {
     need(v.title && v.title.trim(), 'Give it a name.'); need(v.date, 'Pick a date.'); if (v.allDay !== '1') need(v.start, 'Pick a start time, or mark it all day.');
@@ -1357,7 +1380,7 @@ const SAVE = {
     need(v.text && v.text.trim(), 'Write a message.');
     const tagged = mentionsIn(v.text), short = v.text.length > 80 ? v.text.slice(0, 80) + '…' : v.text, other = tagged.filter(n => ADULTS.includes(n) && n !== ME);
     const row = Object.assign({}, v, { id: v.id || nid(), urgent: mode === 'urgent' ? '1' : v.urgent || '', tags: [...new Set(list(v.tags).concat(tagged))].join(', ') });
-    delete row._kindSet; delete row._typeSet; delete row._redraw;
+    delete row._kindSet; delete row._typeSet; delete row._redraw; const files = row._files; delete row._files;
     row.pinUntil = v.pinUntil ? v.pinUntil + (v._pinAt ? 'T' + v._pinAt : '') : ''; delete row._pinAt;
     const ops = [{ t: 'Messages', row, log: v.id ? null : Object.assign(L('message', (other.length ? 'tagged ' + joinNames(other) + ' in a message: ' : 'posted a message: ') + short, 'convo'), { hide: 1 }) }];
     if (row.kind === 'question') { if (!Q_TYPES.some(x => x[0] === row.answerType)) row.answerType = 'text';
@@ -1366,8 +1389,10 @@ const SAVE = {
       if (!v.id) { if (!byId('TodoTypes', 'question')) ops.push({ t: 'TodoTypes', row: { id: 'question', name: 'App question', emoji: '', assignee: '', builtin: '1', fields: '' } });
         qAsked(row).forEach(n => ops.push({ t: 'Todos', row: { id: nid(), type: 'question', title: `Answer ${ME}: ${short}`, due: TODAY, status: 'Open', assignee: n, source: 'question:' + row.id } })); } }
     else { row.kind = ''; row.answerType = ''; row.options = ''; }
-    return write(ops,
+    const ok = await write(ops,
       { notify: v.id ? 'off' : mode === 'urgent' ? 'urgent' : other.length ? 'on' : mode || 'off' });
+    if (ok && files && files.length) attachAll('Messages', row.id, files);
+    return ok;
   },
   async places(v) {
     need(v.name && v.name.trim(), 'Give the place a name.');
@@ -1526,9 +1551,9 @@ function stepsHTML(r) {
 }
 function photosHTML(t, id) {
   if (t === 'GCal' || t === 'Photos') return '';
-  const ps = photosOf(t, id), cv = coverOf(t, id);
-  return `<h3>Photos</h3>${ps.length ? `<div class="phgrid">${ps.map(p => `<button data-a="photoView" data-v="${p.id}" aria-label="Open photo"><img src="${esc(photoSrc(p.fileId, 400))}" alt="" loading="lazy">${t === 'Recipes' && ps.length > 1 && cv && cv.id === p.id ? '<span class="cv">COVER</span>' : ''}</button>`).join('')}</div>` : ''}
-    <div class="actions" style="margin-top:8px"><button class="btn gray sm" data-a="photoPick">${ic('camera', 16)}Add photo</button></div>`;
+  const ps = photosOf(t, id), cv = coverOf(t, id), fs = filesOf(t, id);
+  return `<h3>${t === 'gifts' ? 'Photos' : 'Photos and files'}</h3>${ps.length ? `<div class="phgrid">${ps.map(p => `<button data-a="photoView" data-v="${p.id}" aria-label="Open photo"><img src="${esc(photoSrc(p.fileId, 400))}" alt="" loading="lazy">${t === 'Recipes' && ps.length > 1 && cv && cv.id === p.id ? '<span class="cv">COVER</span>' : ''}</button>`).join('')}</div>` : ''}${fs.map(fileChip).join('')}
+    <div class="actions" style="margin-top:8px">${t === 'gifts' ? `<button class="btn gray sm" data-a="photoPick">${ic('camera', 16)}Add photo</button>` : `<button class="btn gray sm" data-a="photoPick" data-v="any">${ic('clip', 16)}Add photo or file</button>`}</div>`;
 }
 function socialHTML(t, id) {
   const rs = rxs(t, id), cs = cmts(t, id), lk = linksOf(t, id);
@@ -1759,11 +1784,15 @@ function openCard(t, id, date) { if (cardHTML(t, id, date) === null) { toast('Th
 A.open = (v, el) => el.dataset.t === 'Todos' && String((byId('Todos', el.dataset.id) || {}).source || '').startsWith('question:') && byId('Messages', byId('Todos', el.dataset.id).source.slice(9)) ? openCard('Messages', byId('Todos', el.dataset.id).source.slice(9)) : el.dataset.t === 'People' ? goPerson(el.dataset.id) : el.dataset.t === 'Menus' && !byId('Menus', el.dataset.id) ? (ensureWeek(el.dataset.id.slice(0, 10)), openCard('Menus', el.dataset.id)) : openCard(el.dataset.t, el.dataset.id, el.dataset.d || '');
 A.soon = () => toast('Feature coming soon');
 // ---------- photos ----------
-let photoFor = null;
 // The picker is made inside the open card: anything outside an open sheet can't be tapped or opened.
-A.photoPick = (v, el) => { const c = ctx(el); if (!c.t) return; photoFor = { t: c.t, id: c.id };
-  const i = document.createElement('input'); i.type = 'file'; i.accept = 'image/*'; i.hidden = true; i.onchange = () => { photoUpload(i.files[0]); i.remove(); };
-  (el.closest('dialog') || document.body).appendChild(i); i.click(); };
+const ATTACH_ACCEPT = 'image/*,application/pdf,.pdf,.doc,.docx,.xls,.xlsx,.csv,.txt,.heic';
+function pickFiles(host, accept, cb) {
+  const i = document.createElement('input'); i.type = 'file'; i.accept = accept; i.multiple = accept !== 'image/*'; i.hidden = true;
+  i.onchange = () => { const fs = [...i.files]; i.remove(); if (fs.length) cb(fs); };
+  (host || document.body).appendChild(i); i.click();
+}
+A.photoPick = (v, el) => { const c = ctx(el); if (!c.t) return; const f = { t: c.t, id: c.id };
+  pickFiles(el.closest('dialog'), v === 'any' ? ATTACH_ACCEPT : 'image/*', async fs => { for (const x of fs) await attachUpload(f.t, f.id, x); }); };
 /** Shrinks a photo on the phone (longest side 1600 px, JPEG) so uploads stay small and quick. */
 function shrinkPhoto(file) {
   return new Promise((ok, no) => { const url = URL.createObjectURL(file), img = new Image();
@@ -1772,22 +1801,37 @@ function shrinkPhoto(file) {
       URL.revokeObjectURL(url); ok(c.toDataURL('image/jpeg', 0.82)); };
     img.onerror = () => { URL.revokeObjectURL(url); no(new Error("That file isn't a photo the app can read.")); }; img.src = url; });
 }
-async function photoUpload(file) {
-  const f = photoFor; photoFor = null; if (!f || !file) return;
-  toast('Adding photo…');
-  try { const data = await shrinkPhoto(file), ti = titleOf(f.t, f.id);
-    if (await call('photo_add', { table: f.t, ref: f.id, data, log: f.t === 'gifts' ? null : L('photo', 'added a photo' + (ti ? ' to ' + ti : ''), 'convo') })) {
-      toast('Photo added'); const g = f.t === 'gifts' && byId('gifts', f.id), ph = g && photosOf('gifts', f.id).pop();
-      if (g && ph && !g.photo) write({ t: 'gifts', row: { id: g.id, photo: 'https://drive.google.com/file/d/' + ph.fileId + '/view' } }); } }
-  catch (e) { toast(e.message); }
+const readFile = file => new Promise((ok, no) => { const r = new FileReader(); r.onload = () => ok(r.result); r.onerror = () => no(new Error("Couldn't read that file.")); r.readAsDataURL(file); });
+const FILE_MAX = 15 * 1024 * 1024;
+/** Uploads one photo or file to a card. Photos are shrunk first; other files (PDFs…) go up as they are. quiet = no Feed post. */
+async function attachUpload(t, id, file, quiet) {
+  if (!file) return false;
+  const pic = /^image\//.test(file.type) || /\.(jpe?g|png|gif|webp|heic|heif)$/i.test(file.name);
+  let data = null, mime = '', name = file.name || '';
+  if (pic) { try { data = await shrinkPhoto(file); mime = 'image/jpeg'; } catch (e) { data = null; } }   // a photo the phone can't draw (e.g. HEIC on a computer) goes up as it is
+  if (!data) { if (file.size > FILE_MAX) { toast(`${name || 'That file'} is too big (over 15 MB).`); return false; }
+    data = await readFile(file).catch(e => { toast(e.message); return null; }); if (!data) return false;
+    mime = file.type || (/\.pdf$/i.test(name) ? 'application/pdf' : 'application/octet-stream'); }
+  const img = mime.startsWith('image/'), ti = titleOf(t, id);
+  toast(img ? 'Adding photo…' : 'Attaching ' + (name || 'file') + '…');
+  try {
+    if (await call('photo_add', { table: t, ref: id, data, mime, name, log: quiet || t === 'gifts' ? null : L('photo', (img ? 'added a photo' : 'attached a file') + (ti ? ' to ' + ti : ''), 'convo') })) {
+      toast(img ? 'Photo added' : 'File attached'); const g = img && t === 'gifts' && byId('gifts', id), ph = g && photosOf('gifts', id).pop();
+      if (g && ph && !g.photo) write({ t: 'gifts', row: { id: g.id, photo: 'https://drive.google.com/file/d/' + ph.fileId + '/view' } });
+      return true; }
+  } catch (e) { toast(e.message); }
+  return false;
 }
+/** Files picked in a New post / to-do form go up once the card is saved. */
+async function attachAll(t, id, files) { for (const f of files || []) await attachUpload(t, id, f, true); }
 A.photoView = id => { const p = byId('Photos', id); if (!p) return;
   const d = sheet(() => { const q = byId('Photos', id); if (!q) return null; const ps = photosOf(q.table, q.ref), cv = coverOf(q.table, q.ref);
-    return `<h2>${esc(titleOf(q.table, q.ref) || 'Photo')}</h2><div class="small muted">Added by ${esc(q.who)} · ${ago(q.time)}</div><img class="phbig" src="${esc(photoSrc(q.fileId, 1600))}" alt="">${q.caption ? `<div class="kv">${esc(q.caption)}</div>` : ''}
-      <div class="actions">${q.table === 'Recipes' && ps.length > 1 && cv && cv.id !== q.id ? `<button class="btn gray sm" data-a="photoCover" data-v="${q.id}">${ic('image', 16)}Make cover</button>` : ''}<button class="btn gray sm" data-a="open" data-t="${q.table}" data-id="${esc(q.ref)}">${ic('chev', 16)}Open ${esc((NAMES[q.table] || 'card'))}</button><button class="btn danger sm" data-a="photoDel" data-v="${q.id}">${ic('trash', 16)}Delete</button></div>`; });
+    const pic = isImg(q);
+    return `<h2>${esc(titleOf(q.table, q.ref) || (pic ? 'Photo' : 'File'))}</h2><div class="small muted">${pic ? '' : esc(fileName(q)) + ' · '}Added by ${esc(q.who)} · ${ago(q.time)}</div>${pic ? `<img class="phbig" src="${esc(photoSrc(q.fileId, 1600))}" alt="">` : `<iframe class="phprev" src="https://drive.google.com/file/d/${encodeURIComponent(q.fileId)}/preview" title="${esc(fileName(q))}"></iframe>`}${q.caption && q.caption !== q.name ? `<div class="kv">${esc(q.caption)}</div>` : ''}
+      <div class="actions">${pic ? '' : `<a class="btn sm" href="${esc(fileUrl(q))}" target="_blank" rel="noopener">${ic('file', 16)}Open in Drive</a>`}${q.table === 'Recipes' && ps.length > 1 && cv && cv.id !== q.id ? `<button class="btn gray sm" data-a="photoCover" data-v="${q.id}">${ic('image', 16)}Make cover</button>` : ''}<button class="btn gray sm" data-a="open" data-t="${q.table}" data-id="${esc(q.ref)}">${ic('chev', 16)}Open ${esc((NAMES[q.table] || 'card'))}</button><button class="btn danger sm" data-a="photoDel" data-v="${q.id}">${ic('trash', 16)}Delete</button></div>`; });
   d._ctx = { t: 'Photos', id }; };
 A.photoCover = id => { const p = byId('Photos', id); if (!p) return; write(photosOf(p.table, p.ref).map(x => ({ t: 'Photos', row: { id: x.id, cover: x.id === id ? '1' : '' } }))); };
-A.photoDel = async (id, el) => { if (!confirm('Delete this photo? It is removed from the app and from Google Drive.')) return;
+A.photoDel = async (id, el) => { if (!confirm(`Delete this ${isImg(byId('Photos', id) || {}) ? 'photo' : 'file'}? It is removed from the app and from Google Drive.`)) return;
   const p = byId('Photos', id), d = el.closest('dialog'); const ops = [{ t: 'Photos', del: id }];
   S.Activity.filter(a => a.table === 'Photos' && a.ref === id).forEach(a => ops.push({ t: 'Activity', del: a.id }));
   if (await write(ops) && d) d.close(); };
@@ -1910,7 +1954,7 @@ const myTodos = () => S.Todos.filter(t => t.status !== 'Done' && (t.assignee ===
 const todoRow = t => { const ty = typeOf(t), done = t.status === 'Done', late = !done && t.due && t.due < TODAY;
   return `<div class="li ${done ? 'done' : ''}"><button class="check ${done ? 'on' : ''}" data-a="todoDone" data-v="${t.id}" aria-label="Done">${done ? '✓' : ''}</button><div class="grow" data-a="open" data-t="Todos" data-id="${t.id}">
     <div class="row"><span class="ti"><span class="muted">${tyIcon(ty, 17)}</span> ${esc(t.title)}${aiMk('Todos', t.id)}</span>${t.amount ? `<span class="b">${money(t.amount)}</span>` : ''}</div>
-    <div class="small muted"><span class="${late || t.due === TODAY ? 'red' : ''}">${done ? 'Done ' + fmtDay(t.doneOn) + ' by ' + esc(t.doneBy) : (late ? 'Overdue · ' : t.due === TODAY ? 'Due today · ' : 'Due ') + fmtDay(t.due)}</span> · ${esc(t.assignee || 'Either of us')}${t.kid ? ' · ' + esc(t.kid) : ''}${t.house ? ' · ' + esc(t.house) : ''}${t.repeat ? ' · ' + ic('repeat', 13) : ''}</div></div></div>`; };
+    <div class="small muted"><span class="${late || t.due === TODAY ? 'red' : ''}">${done ? 'Done ' + fmtDay(t.doneOn) + ' by ' + esc(t.doneBy) : (late ? 'Overdue · ' : t.due === TODAY ? 'Due today · ' : 'Due ') + fmtDay(t.due)}</span> · ${esc(t.assignee || 'Either of us')}${t.kid ? ' · ' + esc(t.kid) : ''}${t.house ? ' · ' + esc(t.house) : ''}${t.repeat ? ' · ' + ic('repeat', 13) : ''}${attachOf('Todos', t.id).length ? ' · ' + ic('clip', 13) + attachOf('Todos', t.id).length : ''}</div></div></div>`; };
 
 // ----- Feed -----
 // Dinner flags, shown first and on their own, when a parent isn't home for dinner (tonight, or tomorrow from 7 PM): who's out, and that I'm cooking if I am.
@@ -2018,7 +2062,7 @@ function vFeed() {
   return html + `<button class="fab" data-a="newMsg" aria-label="New post">${ic('plus', 20)}Post</button>`;
 }
 // Feed filter (three-line menu next to Activity). Uses the same per-person settings as Home > Settings > Show in my Feed.
-const FKINDS = () => [['messages', 'Messages'], ['photos', 'Photos']].concat(Object.keys(NCATS).map(c => [c, ({ convo: 'Comments and questions', summary: 'Weekly and monthly summaries' })[c] || NCATS[c].replace(/ \(.*\)/, '')]), [['daily', 'Memories and quotes']]);
+const FKINDS = () => [['messages', 'Messages'], ['photos', 'Photos and files']].concat(Object.keys(NCATS).map(c => [c, ({ convo: 'Comments and questions', summary: 'Weekly and monthly summaries' })[c] || NCATS[c].replace(/ \(.*\)/, '')]), [['daily', 'Memories and quotes']]);
 const fOn = k => st('f.' + k, '1') !== '0';
 let FMENU = false, fPend = {}, fT = 0;
 // Checkboxes update right away; the changes are saved together a moment later.
@@ -2084,11 +2128,14 @@ async function aiConvoSoon() { if (!aiOn()) return;
 // A post pinned until a date stays pinned through that day; pinned until a date and time, until then.
 const pinnedNow = m => !!m.pinUntil && (m.pinUntil.length > 10 ? m.pinUntil > stamp().slice(0, 16) : m.pinUntil >= TODAY);
 const msgPost = (m, pin) => m.kind === 'question' ? qPost(m, pin) : `<div class="post" data-a="open" data-t="Messages" data-id="${m.id}">${avatar(m.from)}<div class="pbody"><div>${nameLink(m.from)}${list(m.tags).filter(n => n !== m.from).length ? ' → ' + list(m.tags).filter(n => n !== m.from).map(nameLink).join(', ') : ''} <span class="muted">· ${ago(m.time)}</span>${m.from !== ME && list(m.tags).includes(ME) ? ' <span class="chip ok">Tagged you</span>' : ''}${pin ? ` <span class="muted">${ic('pin', 14)}</span>` : ''}${m.urgent === '1' ? ' <span class="chip bad">Urgent</span>' : ''}</div>
-  <div class="ptext msg">${withMentions(m.text)}</div>${postFoot('Messages', m.id, m.resolved === '1' ? ic('check', 14) + ' Resolved by ' + esc(m.resolvedBy) : 'Open')}</div></div>`;
+  <div class="ptext msg">${withMentions(m.text)}</div>${postAttach('Messages', m.id)}${postFoot('Messages', m.id, m.resolved === '1' ? ic('check', 14) + ' Resolved by ' + esc(m.resolvedBy) : 'Open')}</div></div>`;
 const qPost = (m, pin) => { const asked = qAsked(m), ans = qAnswers(m), left = asked.filter(n => !ans[n]);
   return `<div class="post">${avatar(m.from)}<div class="pbody"><div>${nameLink(m.from)} asks ${asked.map(n => n === ME ? 'you' : nameLink(n)).join(', ')} <span class="muted">· ${ago(m.time)}</span> <span class="chip">${ic('question', 13)} Question</span>${pin ? ` <span class="muted">${ic('pin', 14)}</span>` : ''}${m.urgent === '1' ? ' <span class="chip bad">Urgent</span>' : ''}</div>
-  <div class="ptext msg" data-a="open" data-t="Messages" data-id="${m.id}" style="cursor:pointer">${withMentions(m.text)}</div>${qBlock(m)}${postFoot('Messages', m.id, left.length ? 'Waiting on ' + esc(joinNames(left.map(n => n === ME ? 'you' : n))) : ic('check', 14) + ' Answered')}</div></div>`; };
+  <div class="ptext msg" data-a="open" data-t="Messages" data-id="${m.id}" style="cursor:pointer">${withMentions(m.text)}</div>${postAttach('Messages', m.id)}${qBlock(m)}${postFoot('Messages', m.id, left.length ? 'Waiting on ' + esc(joinNames(left.map(n => n === ME ? 'you' : n))) : ic('check', 14) + ' Answered')}</div></div>`; };
 // Reactions and comment count under a post, as line icons.
+/** A post's photos (first one large, a count for the rest) and files, shown under its text. */
+const postAttach = (t, id) => { const ps = photosOf(t, id), fs = filesOf(t, id);
+  return (ps.length ? `<img class="phpost" src="${esc(photoSrc(ps[0].fileId, 1200))}" alt="" loading="lazy" data-a="photoView" data-v="${ps[0].id}">${ps.length > 1 ? `<div class="small muted" style="margin-top:4px">${ic('image', 13)} +${ps.length - 1} more photo${ps.length > 2 ? 's' : ''}</div>` : ''}` : '') + fs.map(fileChip).join(''); };
 const postFoot = (t, id, lead) => { const n = cmts(t, id).filter(c => c.system !== '1').length;
   return `<div class="pfoot">${lead ? `<span>${lead}</span>` : ''}${rxButton(t, id)}<span>${ic('msg', 15)}${n || 'Comment'}</span></div>${rxPicker(t, id)}`; };
 // One small, muted emote button: shows what people reacted with, and opens a picker.
@@ -2181,6 +2228,8 @@ function bundlePost(e) {
 }
 function actPost(a) {
   if (a.table === 'Photos') { const p = byId('Photos', a.ref), ti = p ? titleOf(p.table, p.ref) : '';
+    if (p && !isImg(p)) return `<div class="post">${avatar(a.who)}<div class="pbody"><div><b>${esc(a.who)}</b> attached a file${ti ? ` to <b data-a="open" data-t="${p.table}" data-id="${esc(p.ref)}" style="cursor:pointer">${esc(ti)}</b>` : ''} <span class="muted">· ${ago(a.time)}</span></div>
+      ${fileChip(p)}${postFoot(p.table, p.ref, '')}</div></div>`;
     if (p) return `<div class="post" data-a="photoView" data-v="${p.id}">${avatar(a.who)}<div class="pbody"><div><b>${esc(a.who)}</b> added a photo${ti ? ` to <b>${esc(ti)}</b>` : ''} <span class="muted">· ${ago(a.time)}</span></div>
       <img class="phpost" src="${esc(photoSrc(p.fileId, 1200))}" alt="" loading="lazy">${postFoot(p.table, p.ref, '')}</div></div>`; }
   if (a.type === 'ai') { const aud = aiNoteFor(a), rule = String(a.ref || '').startsWith('rule:') ? byId('ai_rules', a.ref.slice(5)) : null;
