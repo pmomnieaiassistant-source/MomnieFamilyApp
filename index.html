@@ -153,6 +153,19 @@
   header { border-bottom:0; }
   .btn { background:var(--accent); color:var(--onacc); } .btn.gray { background:var(--soft); color:var(--text); } .btn.dark { background:var(--text); color:var(--bg); }
   .btn .ic, .chip .ic, .alert .ic { vertical-align:-3px; }
+  /* Feed + button: a round plus that turns into an X and raises a short list of things to add */
+  .fabx { position:fixed; z-index:8; right:18px; bottom:calc(76px + env(safe-area-inset-bottom)); width:56px; height:56px; padding:0; border-radius:50%; border:0; background:var(--accent); color:var(--onacc);
+          display:flex; align-items:center; justify-content:center; box-shadow:0 8px 22px rgba(15,23,42,.28); }
+  .fabx svg { transition:transform .22s ease; } .fabon .fabx svg { transform:rotate(45deg); }
+  .fabbg { position:fixed; inset:0; z-index:7; background:rgba(15,23,42,.45); opacity:0; pointer-events:none; transition:opacity .2s; }
+  .fabon .fabbg { opacity:1; pointer-events:auto; }
+  .fabm { position:fixed; z-index:8; right:18px; bottom:calc(76px + 56px + 14px + env(safe-area-inset-bottom)); display:flex; flex-direction:column; align-items:flex-end; gap:10px; pointer-events:none; }
+  .fabm button { min-height:48px; padding:0 18px 0 14px; border-radius:999px; border:1px solid var(--line); background:var(--card); color:var(--text); font:inherit; font-size:16px; font-weight:700;
+                 display:flex; align-items:center; gap:10px; box-shadow:0 8px 22px rgba(15,23,42,.22); opacity:0; transform:translateY(14px) scale(.96); transition:opacity .18s ease, transform .22s cubic-bezier(.2,.9,.3,1.2); }
+  .fabm button .ic { color:var(--accent); }
+  .fabon .fabm { pointer-events:auto; } .fabon .fabm button { opacity:1; transform:none; }
+  .fabon .fabm button:nth-last-child(1) { transition-delay:0s; } .fabon .fabm button:nth-last-child(2) { transition-delay:.04s; } .fabon .fabm button:nth-last-child(3) { transition-delay:.08s; } .fabon .fabm button:nth-last-child(4) { transition-delay:.12s; }
+  @media (prefers-reduced-motion:reduce) { .fabx svg, .fabm button, .fabbg { transition:none; } }
   .fab { width:auto; height:52px; border-radius:26px; padding:0 20px 0 16px; background:var(--accent); color:var(--onacc); font:inherit; font-size:16px; font-weight:800;
          display:flex; align-items:center; gap:6px; box-shadow:0 8px 22px rgba(15,23,42,.28); }
   .seg { margin:10px 12px 6px; padding:4px; gap:4px; border:0; border-radius:14px; background:var(--soft); }
@@ -359,7 +372,7 @@ a.alink { color: inherit; text-decoration: underline; text-decoration-color: col
 // Momnie Family app v6.0
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'], DAYN = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'], ADULTS = ['Paul', 'Shana'];
 // Shown at the bottom of Home. Bump it together with VERSION in sw.js on every release.
-const APP_VERSION = '15.5 · Nov 19, 2026';
+const APP_VERSION = '15.6 · Nov 19, 2026';
 const TABLES = ['People', 'Schools', 'SchoolCal', 'Activities', 'Overrides', 'Events', 'Caretakers', 'Childcare', 'Birthdays', 'Todos', 'TodoTypes', 'Recipes', 'DinnerRules', 'Weeks', 'Menus',
   'Groceries', 'GroceryList', 'HouseCards', 'Houses', 'WeatherRules', 'Quotes', 'Memories', 'Updates', 'Messages', 'Activity', 'Comments', 'Reactions', 'Links', 'Settings', 'Photos', 'gifts', 'ai_rules', 'ai_requests', 'notes', 'places', 'daily_items', 'daily_completions'];
 const CAT = { School: '#3f6fb5', Kids: '#4f7cc2', Work: '#64748b', Family: '#5b6fa8', Dinner: '#b08a4f', Caretaker: '#3e9aa6', Shared: '#94a3b8', Birthday: '#c9806a' }, SCHOOL_C = ['#5a72b8', '#7a8597', '#4a6fb0'];
@@ -1949,7 +1962,7 @@ function render() {
   $('view').innerHTML = ({ feed: vFeed, planner: vPlanner, meals: vDinner, todo: vTodo, home: vHome, person: vPerson, hh: vHH })[view]();
   if (view === 'person') document.documentElement.style.setProperty('--hdrh', document.querySelector('header').offsetHeight + 'px');
 }
-A.nav = v => { if (v === 'dailyGo') { view = 'todo'; render(); window.scrollTo(0, 0); return A.dailyOpen(); }
+A.nav = v => { FABON = false; if (v === 'dailyGo') { view = 'todo'; render(); window.scrollTo(0, 0); return A.dailyOpen(); }
   if (v === 'planner') { PW = mondayOf(TODAY); view = v; render(); return plannerToToday(); }
   view = v; render(); window.scrollTo(0, 0); };
 /** Puts today at the top of the screen (earlier days stay above, a scroll away). */
@@ -2075,8 +2088,18 @@ function vFeed() {
       <div class="actions"><button class="btn gray sm" data-a="feedAll">Show everything</button><button class="btn sm" data-a="feedMenu">Done</button></div>
       <div class="small muted" style="margin-top:10px">Only changes your Feed. Same as Home, Settings, Show in my Feed.</div></div>` : ''}
     ${fOff.length ? `<div class="small muted rapplied" style="padding:2px 0 0">Hiding ${esc(fOff.join(', '))} · <a data-a="feedAll">Show everything</a></div>` : ''}</div>` + (out.length ? out.map(e => swipeWrap(e.items ? e.items.map(x => 'A:' + x.a.id) : e.r ? ['R:' + e.r.id] : e.m ? ['M:' + e.m.id] : ['A:' + e.a.id], e.items ? bundlePost(e) : e.r ? askPost(e.r) : e.m ? msgPost(e.m, e.pin) : actPost(e.a))).join('') : '<div class="empty">Nothing yet. Changes either of you make will show up here.</div>');
-  return html + `<button class="fab" data-a="newMsg" aria-label="New post">${ic('plus', 20)}Post</button>`;
+  return html + feedFab();
 }
+// What the Feed's + button offers: [label, icon, action]. Add a line here to add an option.
+const FEED_ADD = () => [['New event', 'planner', 'fabEvent'], ['New to-do', 'todo', 'fabTodo'], ['New post', 'msg', 'fabPost']];
+let FABON = false;
+const feedFab = () => `<div class="fabwrap ${FABON ? 'fabon' : ''}"><div class="fabbg" data-a="fabClose"></div>
+  <div class="fabm" role="menu" aria-hidden="${!FABON}">${FEED_ADD().map(([l, i, a]) => `<button data-a="${a}" role="menuitem" ${FABON ? '' : 'tabindex="-1"'}>${ic(i, 20)}${esc(l)}</button>`).join('')}</div>
+  <button class="fabx" data-a="fabFeed" aria-label="Add something" aria-expanded="${FABON}" aria-haspopup="menu">${ic('plus', 26)}</button></div>`;
+const fabSet = on => { FABON = on; const w = document.querySelector('.fabwrap'); if (!w) return;
+  w.classList.toggle('fabon', on);
+  w.querySelector('.fabx').setAttribute('aria-expanded', String(on)); w.querySelector('.fabm').setAttribute('aria-hidden', String(!on));
+  w.querySelectorAll('.fabm button').forEach(b => on ? b.removeAttribute('tabindex') : b.setAttribute('tabindex', '-1')); };
 // Feed filter (three-line menu next to Activity). Uses the same per-person settings as Home > Settings > Show in my Feed.
 const FKINDS = () => [['messages', 'Messages'], ['photos', 'Photos and files']].concat(Object.keys(NCATS).map(c => [c, ({ convo: 'Comments and questions', summary: 'Weekly and monthly summaries' })[c] || NCATS[c].replace(/ \(.*\)/, '')]), [['daily', 'Memories and quotes']]);
 const fOn = k => st('f.' + k, '1') !== '0';
@@ -2085,6 +2108,11 @@ let FMENU = false, fPend = {}, fT = 0;
 function feedSet(k, v) { const id = ME + '|f.' + k, r = byId('Settings', id); if (r) r.value = v; else S.Settings.push({ id, value: v }); fPend[id] = v; clearTimeout(fT); fT = setTimeout(feedSave, 700); }
 function feedSave() { if (busy) { fT = setTimeout(feedSave, 500); return; } const ops = Object.keys(fPend).map(id => ({ t: 'Settings', row: { id, value: fPend[id] } })); fPend = {}; if (ops.length) write(ops); }
 A.feedMenu = () => { FMENU = !FMENU; render(); };
+A.fabFeed = () => fabSet(!FABON);
+A.fabClose = () => fabSet(false);
+A.fabEvent = () => { fabSet(false); editForm('Events', null); };
+A.fabTodo = () => { fabSet(false); editForm('Todos', null); };
+A.fabPost = () => { fabSet(false); A.newMsg(); };
 A.feedTog = (on, el) => { feedSet(el.dataset.k, on ? '1' : '0'); render(); };
 A.feedAll = () => { FKINDS().forEach(([k]) => { if (!fOn(k)) feedSet(k, '1'); }); FMENU = false; render(); };
 // Swipe a Feed post left to delete it. Paul can delete for everyone; Shana removes it from her own Feed.
