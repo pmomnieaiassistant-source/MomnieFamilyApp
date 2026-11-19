@@ -1,6 +1,8 @@
 /**
  * Momnie Family app backend
- * Version 3.33 (2026-11-19)
+ * Version 3.34 (2026-11-19)
+ *   3.34: Stacked posts: Messages and Activity carry stack and stackIdx; stackPost_() writes a pile of cards as one Feed post
+ *         (long cards continue on the next card); Sheet menu adds a sample.
  *   3.33: ideas tab gets a status column (filled in by hand).
  *   3.32: Files on any card, not just photos: PDFs and documents go to their own "Momnie documents" Drive folder
  *         (photos stay in "Momnie photos").
@@ -101,8 +103,8 @@ var T = {
   Quotes: 'id,quote,author,lastShown',
   Memories: 'id,date,note,photo',
   Updates: 'id,date,title,message,hiddenFrom,label',   // label: optional heading over a splash screen, e.g. "A bit from Paul"
-  Messages: 'id,time,from,text,tags,visibility,pinUntil,urgent,resolved,resolvedBy,kind,answerType,options',   // kind 'question': answerType yesno / time / choice / text
-  Activity: 'id,time,who,type,text,amount,table,ref,cat,audience,state,subject',   // audience: who sees an AI assistant note; state: 'cleared' = the assistant retired it
+  Messages: 'id,time,from,text,tags,visibility,pinUntil,urgent,resolved,resolvedBy,kind,answerType,options,stack,stackIdx',   // kind 'question': answerType yesno / time / choice / text; stack: posts that share a stack id show as one pile of cards (stackIdx = card order)
+  Activity: 'id,time,who,type,text,amount,table,ref,cat,audience,state,subject,stack,stackIdx',   // audience: who sees an AI assistant note; state: 'cleared' = the assistant retired it; stack, stackIdx: as in Messages
   Comments: 'id,time,who,table,ref,text,system',
   Reactions: 'id,time,who,table,ref,emoji',
   Links: 'id,aTable,aRef,bTable,bRef,by',
@@ -401,6 +403,56 @@ function log_(who, log, t, ref) {
   put_('Activity', { time: log.time || now_(), who: who, type: log.type || '', text: log.text || '', amount: log.amount === undefined ? '' : log.amount,
     table: log.table || t || '', ref: log.ref || ref || '', cat: log.cat || '', audience: log.audience || '', subject: log.subject || '' });   // subject: newer posts about the same thing replace older ones in the Feed
   if (who !== 'App' && who !== 'AI assistant' && who !== 'Assistant') _logs.push(log);   // AI notes notify only their chosen audience (aiPosts_)
+}
+
+// ---------- stacked posts ----------
+var STACK_CARD_MAX = 280;   // characters per card; longer text continues on the next card
+/** Splits text into card-sized pieces at sentence (or word) boundaries. */
+function stackSplit_(text, max) {
+  max = max || STACK_CARD_MAX;
+  var t = String(text || '').replace(/\s+\n/g, '\n').trim(), out = [];
+  while (t.length > max) {
+    var cut = Math.max(t.lastIndexOf('. ', max), t.lastIndexOf('! ', max), t.lastIndexOf('? ', max), t.lastIndexOf('\n', max));
+    if (cut < max * 0.5) cut = t.lastIndexOf(' ', max);
+    if (cut < max * 0.5) cut = max - 1;
+    out.push(t.slice(0, cut + 1).trim());
+    t = t.slice(cut + 1).trim();
+  }
+  if (t) out.push(t);
+  return out;
+}
+/**
+ * Writes several posts as ONE stacked post: the app shows posts that share a stack id as a pile of cards in a
+ * single Feed row (swipe left and right, "1 of 5" in the corner). Each card is its own post.
+ * cards: [{ title, text, table, ref }]   title (optional) starts the card in bold, e.g. a section name.
+ * o: { audience: 'Paul, Shana' ('' = the assistant's usual audience), cat, who }
+ * A card longer than STACK_CARD_MAX continues on extra cards, marked (2/3) and so on.
+ * Returns { stack: id, ids: [Activity ids] }. Stacked posts send no notification.
+ */
+function stackPost_(cards, o) {
+  o = o || {};
+  var id = 'st' + Utilities.getUuid().replace(/-/g, '').slice(0, 10), t = now_(), ids = [], n = 0;
+  (cards || []).forEach(function (c) {
+    var title = String(c.title || '').trim(), parts = stackSplit_(c.text, STACK_CARD_MAX - (title ? title.length + 8 : 0));
+    if (!parts.length) parts = [''];
+    parts.forEach(function (part, k) {
+      var head = title ? title + (parts.length > 1 ? ' (' + (k + 1) + '/' + parts.length + ')' : '') : '';
+      var r = put_('Activity', { time: t, who: o.who || 'Assistant', type: 'ai', text: (head ? '**' + head + '**\n' : '') + part, cat: o.cat || 'ai',
+        table: k === 0 ? (c.table || '') : '', ref: k === 0 ? (c.ref || '') : '', audience: o.audience || '', subject: '', stack: id, stackIdx: String(n++) });
+      ids.push(r.id);
+    });
+  });
+  return { stack: id, ids: ids };
+}
+/** Sheet menu: adds a sample stacked post so it can be tried in the app. */
+function menuStackDemo() {
+  var r = stackPost_([
+    { title: 'Stacked posts', text: 'This is one Feed post made of several cards. Swipe left to see the next card, right to go back.' },
+    { title: 'Each card is its own post', text: 'The corner shows where you are in the pile, like 2 of 4. The cards waiting underneath peek out below.' },
+    { title: 'Coming next', text: 'The assistant will use stacks for each child\'s week in review: one card per section, then the photos. Long sections continue on a second card.' },
+    { title: 'Done looking?', text: 'Remove this sample with the button under the cards.' }
+  ], {});   // the assistant's usual audience
+  SpreadsheetApp.getUi().alert('Added a sample stacked post (' + r.ids.length + ' cards). Open the Feed in the app and pull down to refresh.');
 }
 
 // ---------- notifications ----------
@@ -1388,6 +1440,7 @@ function onOpen() {
     .addSeparator()
     .addItem('Run the assistant now (Feed notes)', 'menuAiNotes')
     .addItem('Write AI Today cards now', 'menuAiCards')
+    .addItem('Add a sample stacked post', 'menuStackDemo')
     .addToUi();
 }
 /**
