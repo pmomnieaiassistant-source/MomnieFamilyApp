@@ -23,7 +23,16 @@
           --shadow:0 8px 22px rgba(0,0,0,.35); --shadow-sm:0 1px 3px rgba(0,0,0,.4); } }
   * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
   body { margin:0; font:16px -apple-system,"SF Pro Text","Inter",system-ui,sans-serif; background:var(--bg); color:var(--text);
-         padding-bottom:calc(84px + env(safe-area-inset-bottom)); -webkit-font-smoothing:antialiased; }
+         -webkit-font-smoothing:antialiased; }
+  /* The page itself never scrolls; only the content area (#view) does. iPhone home-screen apps misplace the fixed
+     bottom tabs and + button when the page scrolls under them while it redraws. Use 100vh there, not 100%
+     (100% can come up short by the status bar and lift the tabs). In a plain Safari tab, use the visible height. */
+  html, body { height:100vh; overflow:hidden; }
+  @media not all and (display-mode: standalone) { html, body { height:100dvh; } }
+  body { display:flex; flex-direction:column; }
+  header { flex:none; }
+  #view { flex:1; min-height:0; overflow-y:auto; -webkit-overflow-scrolling:touch; overscroll-behavior-y:contain; padding-bottom:calc(84px + env(safe-area-inset-bottom)); }
+  #view > * { flex-shrink:0; }
   header { position:sticky; top:0; z-index:5; display:flex; justify-content:space-between; align-items:center; padding:calc(10px + env(safe-area-inset-top)) 16px 10px;
            background:var(--blur); -webkit-backdrop-filter:saturate(180%) blur(20px); backdrop-filter:saturate(180%) blur(20px); border-bottom:.5px solid var(--line); }
   h1 { font-size:26px; margin:0; font-weight:800; letter-spacing:-.6px; }
@@ -240,7 +249,7 @@
   .lnk { background:none; border:0; padding:4px 0; color:var(--accent); font:inherit; font-size:14px; font-weight:700; display:inline-flex; align-items:center; gap:4px; cursor:pointer; }
   .lnk.back { padding-top:10px; font-size:15px; }
   .phero .phead .icon-btn { align-self:flex-start; }
-  .ptabs { display:flex; gap:6px; overflow-x:auto; padding:4px 12px 2px; scrollbar-width:none; position:sticky; top:var(--hdrh, 60px); z-index:4; background:var(--bg); padding-bottom:6px; } .ptabs::-webkit-scrollbar { display:none; }
+  .ptabs { display:flex; gap:6px; overflow-x:auto; padding:4px 12px 2px; scrollbar-width:none; position:sticky; top:0; z-index:4; background:var(--bg); padding-bottom:6px; } .ptabs::-webkit-scrollbar { display:none; }
   .ptabs button { flex:0 0 auto; border:1px solid var(--line); background:var(--card); color:var(--text); font:inherit; font-size:14px; font-weight:600; padding:8px 13px; border-radius:12px; display:inline-flex; align-items:center; gap:6px; }
   .ptabs button.on { background:var(--accent); border-color:var(--accent); color:var(--onacc); }
   .ptabs i { font-style:normal; font-size:11px; font-weight:800; min-width:18px; padding:1px 5px; border-radius:6px; background:var(--soft); color:var(--muted); } .ptabs i.bad { background:#fde2e2; color:#b42318; } .ptabs .on i { background:rgba(255,255,255,.25); color:inherit; }
@@ -372,7 +381,7 @@ a.alink { color: inherit; text-decoration: underline; text-decoration-color: col
 // Momnie Family app v6.0
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'], DAYN = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'], ADULTS = ['Paul', 'Shana'];
 // Shown at the bottom of Home. Bump it together with VERSION in sw.js on every release.
-const APP_VERSION = '15.7 · Nov 19, 2026';
+const APP_VERSION = '15.8 · Nov 19, 2026';
 const TABLES = ['People', 'Schools', 'SchoolCal', 'Activities', 'Overrides', 'Events', 'Caretakers', 'Childcare', 'Birthdays', 'Todos', 'TodoTypes', 'Recipes', 'DinnerRules', 'Weeks', 'Menus',
   'Groceries', 'GroceryList', 'HouseCards', 'Houses', 'WeatherRules', 'Quotes', 'Memories', 'Updates', 'Messages', 'Activity', 'Comments', 'Reactions', 'Links', 'Settings', 'Photos', 'gifts', 'ai_rules', 'ai_requests', 'notes', 'places', 'daily_items', 'daily_completions'];
 const CAT = { School: '#3f6fb5', Kids: '#4f7cc2', Work: '#64748b', Family: '#5b6fa8', Dinner: '#b08a4f', Caretaker: '#3e9aa6', Shared: '#94a3b8', Birthday: '#c9806a' }, SCHOOL_C = ['#5a72b8', '#7a8597', '#4a6fb0'];
@@ -441,6 +450,10 @@ const kids = () => S.People.filter(p => p.kind === 'kid');
 const joinNames = a => a.length <= 1 ? (a[0] || '') : a.slice(0, -1).join(', ') + ' and ' + a[a.length - 1];
 const kidNames = a => { const k = kids().map(p => p.name); return a.length >= 3 && k.every(n => a.includes(n)) ? 'the kids' : joinNames(a); };
 function ago(t) { const d = new Date(t), m = Math.round((Date.now() - d) / 60000); if (isNaN(m)) return ''; if (m < 1) return 'now'; if (m < 60) return m + 'm'; if (m < 1440) return Math.floor(m / 60) + 'h'; if (m < 10080) return Math.floor(m / 1440) + 'd'; return fmtDate(t); }
+// Scrolling: only #view scrolls (see the CSS note), so every jump or position check goes through these.
+const viewY = () => { const v = $('view'); return v ? v.scrollTop : 0; };
+const scrollToY = (y, smooth) => { const v = $('view'); if (v) v.scrollTo({ top: Math.max(0, y || 0), behavior: smooth ? 'smooth' : 'auto' }); };
+const elTop = el => { const v = $('view'); return el.getBoundingClientRect().top - v.getBoundingClientRect().top + v.scrollTop; };   // where an element sits inside #view
 function toast(msg) { const t = $('toast'); t.textContent = msg; t.style.display = 'block'; clearTimeout(toast.h); toast.h = setTimeout(() => t.style.display = 'none', 2600); }
 // Presence: green ring if someone used the app in the last 5 minutes, yellow from 5 to 30 minutes, then nothing.
 const seenMin = who => who === ME ? 0 : SEEN[who] ? (Date.now() - new Date(SEEN[who])) / 60000 : Infinity;
@@ -1670,7 +1683,7 @@ function personPage(p) {
   return head + body + '<div style="height:24px"></div>';
 }
 /** Keeps the tab row in view after switching tabs (only scrolls up if you were further down). */
-const ptabsTop = onlyUp => { const t = document.querySelector('.ptabs'); if (!t) return; const y = t.offsetTop - document.querySelector('header').offsetHeight; if (!onlyUp || window.scrollY > y) window.scrollTo(0, y); };
+const ptabsTop = onlyUp => { const t = document.querySelector('.ptabs'); if (!t) return; const pv = t.previousElementSibling, y = pv ? elTop(pv) + pv.offsetHeight : elTop(t); if (!onlyUp || viewY() > y) scrollToY(y); };
 A.ptab = v => { PTAB = v; GFT.menu = false; render(); ptabsTop(true); };
 A.pWeekGo = v => { PWK = +v === 0 ? 0 : PWK + +v; render(); ptabsTop(); };
 A.factsEdit = id => { const p = byId('People', id); if (!p) return; const saved = factsOf(p), sugg = (p.kind === 'kid' ? FACTS_KID : FACTS_ADULT).filter(k => !saved.some(f => f.k.toLowerCase() === k.toLowerCase()));
@@ -1682,23 +1695,23 @@ function vPerson() { const p = byId('People', PERSON); return p ? personPage(p) 
 function goPerson(id) {
   if (!byId('People', id)) return;
   sheets.slice().forEach(d => d.close());
-  if (view !== 'person') { prevView = view; prevY = window.scrollY; try { history.pushState({ person: id }, ''); } catch (e) {} }
+  if (view !== 'person') { prevView = view; prevY = viewY(); try { history.pushState({ person: id }, ''); } catch (e) {} }
   if (PERSON !== id) { PTAB = 'overview'; PWK = 0; }
-  PERSON = id; view = 'person'; render(); window.scrollTo(0, 0);
+  PERSON = id; view = 'person'; render(); scrollToY(0);
 }
-function leavePerson() { if (view !== 'person') return; view = prevView || 'home'; render(); window.scrollTo(0, prevY); }
+function leavePerson() { if (view !== 'person') return; view = prevView || 'home'; render(); scrollToY(prevY); }
 A.personBack = () => { if (history.state && history.state.person) history.back(); else leavePerson(); };
-window.addEventListener('popstate', () => { if (view === 'person') leavePerson(); else if (view === 'hh') { if (HH.includes(':')) { HH = hhParent(HH); render(); window.scrollTo(0, 0); } else leaveHH(); } });
+window.addEventListener('popstate', () => { if (view === 'person') leavePerson(); else if (view === 'hh') { if (HH.includes(':')) { HH = hhParent(HH); render(); scrollToY(0); } else leaveHH(); } });
 // ----- Household pages (Schools, Activities, House): full pages of cards; tap a card to open and edit it -----
-function goHH(k) { sheets.slice().forEach(d => d.close()); if (view !== 'hh') { prevView = view === 'person' ? 'home' : view; prevY = window.scrollY; try { history.pushState({ hh: k }, ''); } catch (e) {} }
-  HH = k; view = 'hh'; render(); window.scrollTo(0, 0); }
+function goHH(k) { sheets.slice().forEach(d => d.close()); if (view !== 'hh') { prevView = view === 'person' ? 'home' : view; prevY = viewY(); try { history.pushState({ hh: k }, ''); } catch (e) {} }
+  HH = k; view = 'hh'; render(); scrollToY(0); }
 let HH_FROM = '';
-function leaveHH() { if (view !== 'hh') return; view = prevView || 'home'; render(); window.scrollTo(0, prevY); if (HH_FROM === 'settings') { HH_FROM = ''; A.openSettings(); } }
+function leaveHH() { if (view !== 'hh') return; view = prevView || 'home'; render(); scrollToY(prevY); if (HH_FROM === 'settings') { HH_FROM = ''; A.openSettings(); } }
 A.hhBack = () => { if (history.state && history.state.hh) history.back(); else if (HH.includes(':')) { HH = hhParent(HH); render(); } else leaveHH(); };
 const hhParent = k => ({ school: 'Schools', act: 'Activities', house: 'houses' })[k.split(':')[0]] || 'Schools';
 // Open a profile page for one school, activity or house.
-A.hhGo = k => { sheets.slice().forEach(d => d.close()); if (view !== 'hh') { prevView = view === 'person' ? 'home' : view; prevY = window.scrollY; }
-  try { history.pushState({ hh: k }, ''); } catch (e) {} HH = k; view = 'hh'; render(); window.scrollTo(0, 0); };
+A.hhGo = k => { sheets.slice().forEach(d => d.close()); if (view !== 'hh') { prevView = view === 'person' ? 'home' : view; prevY = viewY(); }
+  try { history.pushState({ hh: k }, ''); } catch (e) {} HH = k; view = 'hh'; render(); scrollToY(0); };
 const hhTitle = () => { const [k, id] = HH.split(':'); if (!id) return HH_TITLES[HH];
   if (k === 'school') { const x = byId('Schools', id); return x ? x.short || x.name : 'School'; } if (k === 'act') { const x = byId('Activities', id); return x ? x.name : 'Activity'; } return id === 'Cape' ? 'Cape house' : id; };
 const WX_WORD = { rain: 'rain chance', snow: 'snow', low: 'low', high: 'high', uv: 'UV' }, wxUnit = m => m === 'rain' ? '%' : m === 'snow' ? ' in' : m === 'uv' ? '' : '°';
@@ -1962,11 +1975,11 @@ function render() {
   $('view').innerHTML = ({ feed: vFeed, planner: vPlanner, meals: vDinner, todo: vTodo, home: vHome, person: vPerson, hh: vHH })[view]();
   if (view === 'person') document.documentElement.style.setProperty('--hdrh', document.querySelector('header').offsetHeight + 'px');
 }
-A.nav = v => { FABON = false; if (v === 'dailyGo') { view = 'todo'; render(); window.scrollTo(0, 0); return A.dailyOpen(); }
+A.nav = v => { FABON = false; if (v === 'dailyGo') { view = 'todo'; render(); scrollToY(0); return A.dailyOpen(); }
   if (v === 'planner') { PW = mondayOf(TODAY); view = v; render(); return plannerToToday(); }
-  view = v; render(); window.scrollTo(0, 0); };
+  view = v; render(); scrollToY(0); };
 /** Puts today at the top of the screen (earlier days stay above, a scroll away). */
-function plannerToToday() { const el = $('day-' + TODAY); if (!el) return window.scrollTo(0, 0); window.scrollTo(0, Math.max(0, el.getBoundingClientRect().top + window.scrollY - document.querySelector('header').offsetHeight - 6)); }
+function plannerToToday() { const el = $('day-' + TODAY); if (!el) return scrollToY(0); scrollToY(elTop(el) - 6); }
 function pcard(i) {
   const n = cmts(i.t, i.id).filter(c => c.system !== '1').length;
   const sub = [i.sub && esc(i.sub), i.ride && rideHTML(i)].filter(Boolean).join(' · ');
@@ -2295,7 +2308,7 @@ function dinnerPost(a) {
     <div class="ptext" style="font-weight:400;margin-top:4px">${ns.map(line).join('')}</div>
     ${open.length ? `<div class="row" style="margin-top:8px;gap:8px"><span class="small grow">${esc(joinNames(open.map(m => DAYNAME[m.day])))} ${open.length === 1 ? 'is' : 'are'} still open.</span><button class="btn gray sm" data-a="dinPick" data-v="${wk}">Pick something</button></div>` : `<div class="small muted" style="margin-top:6px">${ic('check', 13)} Every night is planned.</div>`}</div></div>`;
 }
-A.dinPick = wk => { view = 'meals'; DT = 'menu'; MW = wk; render(); window.scrollTo(0, 0); };
+A.dinPick = wk => { view = 'meals'; DT = 'menu'; MW = wk; render(); scrollToY(0); };
 function actPost(a) {
   if (String(a.subject || '').startsWith('dinners|')) return dinnerPost(a);
   if (a.table === 'Photos') { const p = byId('Photos', a.ref), ti = p ? titleOf(p.table, p.ref) : '';
@@ -2345,7 +2358,7 @@ function vPlanner() {
   return html + `<div class="chips" style="padding-top:16px;flex-wrap:wrap">${[...S.People.map(p => [p.name === 'Paul' ? 'Dad (Paul)' : p.name, pcol(p.name)]), ['Family', CAT.Family], ...S.Schools.map((s, i) => [s.short || s.name, SCHOOL_C[i % 3]]), ['Dinner', CAT.Dinner], ['Caretaker', CAT.Caretaker], ['Shared calendar', CAT.Shared], ['Birthdays', CAT.Birthday]].map(([l, c]) => `<span class="small muted" style="white-space:nowrap"><span class="dot" style="background:${c}"></span>${l}</span>`).join('')}<span class="small muted" style="white-space:nowrap">${ic('up', 13)}drops off ${ic('down', 13)}picks up</span></div>`;
 }
 // From the Feed's plan: open the Planner on that day.
-A.planDay = d => { view = 'planner'; PW = mondayOf(d); render(); const el = $('day-' + d); window.scrollTo(0, el ? el.getBoundingClientRect().top + window.scrollY - 70 : 0); };
+A.planDay = d => { view = 'planner'; PW = mondayOf(d); render(); const el = $('day-' + d); scrollToY(el ? elTop(el) - 10 : 0); };
 A.pweek = async n => { PW = addDays(PW, +n); render(); if (PW < addDays(TODAY, -7) || addDays(PW, 6) > addDays(TODAY, 48)) { try { await api('cal', { start: PW, days: 7 }); render(); } catch (e) {} } };
 A.schoolRide = v => { const [sid, date, k] = v.split('|'); sheet(() => { const sch = byId('Schools', sid); if (!sch) return null; const r = schoolRuns(date).find(x => x.sid === sid && x.kind === k);
   const now = schoolRide(sid, date, k), names = rideO().map(x => Array.isArray(x) ? x : [x, x]).filter(([a]) => a);
@@ -2446,8 +2459,8 @@ function ensureWeek(wk) { if (byId('Weeks', wk)) return;
   applyOps([{ t: 'Weeks', row: { id: wk, status: 'draft', lockedBy: '' } }].concat(weekNights(wk).map(n => { const r = Object.assign({}, n); delete r._virtual; return { t: 'Menus', row: r }; })));
   call('week_add', { week: wk }); }
 A.mweek = n => { const cur = mondayOf(TODAY); MW = +n === 0 ? cur : addDays(MW || cur, +n); if (MW < cur) MW = cur; if (MW > addDays(cur, 7 * MWMAX)) MW = addDays(cur, 7 * MWMAX); render(); };
-A.mgo = w => { MW = w; render(); window.scrollTo(0, 0); };
-A.weekAdd = async w => { if (await call('week_add', { week: w })) { MW = w; render(); window.scrollTo(0, 0); } };
+A.mgo = w => { MW = w; render(); scrollToY(0); };
+A.weekAdd = async w => { if (await call('week_add', { week: w })) { MW = w; render(); scrollToY(0); } };
 A.weekDel = w => { if (confirm("Delete this week's plan?")) write(S.Menus.filter(m => m.week === w).map(m => ({ t: 'Menus', del: m.id })).concat({ t: 'Weeks', del: w })); };
 // Weeks are always editable (no more "lock in"). A change to a night in the next 7 days posts to the Feed so the other person knows.
 // All dinner changes for a week share one subject, so the Feed shows a single, up-to-date "dinners for the week" post (dinnerPost).
@@ -2457,7 +2470,7 @@ A.swap = id => { const m = byId('Menus', id); return call('dinner_swap', { id, l
 // Swiping a night right shows two choices over it: Random (a new suggestion) or Select (pick from the list).
 let MCHG = '';
 A.mRandom = id => { MCHG = ''; ensureWeek(id.slice(0, 10)); render(); A.swap(id); };
-A.mSelect = id => { MCHG = ''; ensureWeek(id.slice(0, 10)); PFOR = id; RPICK = ''; RMENU = false; DT = 'rec'; render(); window.scrollTo(0, 0); };
+A.mSelect = id => { MCHG = ''; ensureWeek(id.slice(0, 10)); PFOR = id; RPICK = ''; RMENU = false; DT = 'rec'; render(); scrollToY(0); };
 // While picking, a touch on a recipe counts however long it's held, as long as the finger doesn't slide (sliding scrolls).
 // iOS otherwise turns a held touch into text selection or the image menu and never sends the tap.
 (function () { let el = null, x0 = 0, y0 = 0;
@@ -2471,8 +2484,8 @@ A.pickFor = rid => { if (!PFOR) return; const m = byId('Menus', PFOR), r = byId(
   const was = m.skipped === '1' ? '' : dish(m);
   write({ t: 'Menus', row: { id: m.id, recipeId: rid, note: '', kept: '1', skipped: '' }, log: menuLog(m, 'menu_set', `${was ? 'changed' : 'planned'} dinner for ${fmtDay(m.date)}: ${was ? was + ' → ' : ''}${r.name}`) });
   DT = 'menu'; MW = mondayOf(m.date); render(); menuShow(m.id, true); };
-function menuShow(id, flash) { const el = document.querySelector(`.dcard[data-menu="${id}"]`); if (!el) return window.scrollTo(0, 0);
-  window.scrollTo(0, Math.max(0, el.getBoundingClientRect().top + window.scrollY - window.innerHeight / 3));
+function menuShow(id, flash) { const el = document.querySelector(`.dcard[data-menu="${id}"]`); if (!el) return scrollToY(0);
+  scrollToY(elTop(el) - $('view').clientHeight / 3);
   if (flash) { PFLASH = id; el.classList.add('flash'); clearTimeout(menuShow.t); menuShow.t = setTimeout(() => { PFLASH = ''; document.querySelectorAll('.dcard.flash').forEach(x => x.classList.remove('flash')); }, 1800); } }
 A.mChgClose = () => { MCHG = ''; render(); };
 A.skip = id => { const m = byId('Menus', id), on = m.skipped !== '1'; write({ t: 'Menus', row: { id, skipped: on ? '1' : '' }, log: on ? L('menu_skip', `skipped dinner on ${fmtDay(m.date)} (${dish(m)})`, 'dinner', { subject: dinSub(m.date) }) : null }); };
@@ -2682,8 +2695,8 @@ A.recClear = () => { RS = 'stale'; RT = []; RARCH = false; RMENU = false; render
 /** Brings the night picker fully into view above the bottom tabs, without pushing the recipe's name off the top. */
 function recPickShow(id) { const c = document.querySelector(`.rcard[data-rid="${id}"]`); if (!c) return; const r = c.getBoundingClientRect(), nav = document.querySelector('nav.bottom'), hdr = document.querySelector('header');
   const room = window.innerHeight - (nav ? nav.offsetHeight : 0) - 10, over = r.bottom - room, top = r.top - (hdr ? hdr.offsetHeight : 0) - 8;
-  if (over > 0) window.scrollBy({ top: Math.min(over, top), behavior: 'smooth' }); }
-A.recArch = v => { RARCH = !!v; RMENU = false; RACT = ''; RPICK = ''; render(); window.scrollTo(0, 0); };
+  if (over > 0) $('view').scrollBy({ top: Math.min(over, top), behavior: 'smooth' }); }
+A.recArch = v => { RARCH = !!v; RMENU = false; RACT = ''; RPICK = ''; render(); scrollToY(0); };
 const pauseTxt = () => { const n = pauseDays(); return n % 30 === 0 ? (n / 30) + ' month' + (n > 30 ? 's' : '') : n % 7 === 0 ? (n / 7) + ' week' + (n > 7 ? 's' : '') : n + ' days'; };
 A.recActClose = () => { RACT = ''; render(); };
 A.recPauseGo = id => { const r = byId('Recipes', id); RACT = ''; if (r) write({ t: 'Recipes', row: { id, pausedUntil: addDays(TODAY, pauseDays()) } }); };
@@ -2740,7 +2753,7 @@ function vTodo() {
     <button class="fab" data-a="add" data-v="Todos" aria-label="Add to-do">${ic('plus', 26)}</button><button class="padtab" data-a="dailyOpen" aria-label="Open the daily checklist"><span class="rings"></span><span class="lbl2">Daily checklist</span></button>`;
 }
 A.tdMenu = () => { TD.menu = !TD.menu; render(); };
-A.tdTab = v => { TD.tab = v; TD.menu = false; render(); window.scrollTo(0, 0); }; A.tdType = v => { TD.type = v; render(); }; A.tdSort = v => { TD.sort = v; render(); };
+A.tdTab = v => { TD.tab = v; TD.menu = false; render(); scrollToY(0); }; A.tdType = v => { TD.type = v; render(); }; A.tdSort = v => { TD.sort = v; render(); };
 A.tdClear = () => { TD.who = [ME, '']; TD.type = ''; TD.sort = 'date'; TD.menu = false; render(); };
 A.tdWho = v => { TD.who = TD.who.includes(v) ? TD.who.filter(x => x !== v) : TD.who.concat(v); render(); };
 
@@ -3081,9 +3094,11 @@ A.dinClear = id => { const m = byId('Menus', id); if (!m || (!m.recipeId && !m.n
 // pull down to refresh
 (function () { const el = $('ptr'), ic = $('ptrIcon'), TRIG = 70; let y0 = null, d = 0, on = false;
   const set = (v, anim) => { el.style.transition = anim ? 'transform .25s, opacity .25s' : 'none'; el.style.transform = `translateY(${v - 50}px)`; el.style.opacity = Math.min(v / TRIG, 1); if (!on) ic.textContent = v >= TRIG ? '↻' : '↓'; };
-  document.addEventListener('touchstart', e => { y0 = (on || window.scrollY > 0 || sheets.length || e.target.closest('.dcard[data-swipe], .rcard')) ? null : e.touches[0].clientY; d = 0; }, { passive: true });
-  document.addEventListener('touchmove', e => { if (y0 === null) return; if (window.scrollY > 0) { y0 = null; set(0, true); return; } d = Math.min(110, Math.max(0, e.touches[0].clientY - y0) * 0.5); set(d, false); }, { passive: true });
+  document.addEventListener('touchstart', e => { y0 = (on || viewY() > 0 || sheets.length || e.target.closest('.dcard[data-swipe], .rcard')) ? null : e.touches[0].clientY; d = 0; }, { passive: true });
+  document.addEventListener('touchmove', e => { if (y0 === null) return; if (viewY() > 0) { y0 = null; set(0, true); return; } d = Math.min(110, Math.max(0, e.touches[0].clientY - y0) * 0.5); set(d, false); }, { passive: true });
   document.addEventListener('touchend', async () => { if (y0 === null) return; y0 = null; if (d < TRIG) { set(0, true); return; } on = true; ic.textContent = '↻'; el.classList.add('spin'); set(60, true); try { await load(); } catch (e) { toast(e.message); } el.classList.remove('spin'); on = false; set(0, true); }); })();
+// If the iPhone keyboard nudged the page itself, put it back: only #view should ever scroll.
+document.addEventListener('focusout', () => setTimeout(() => { if (document.scrollingElement && document.scrollingElement.scrollTop) document.scrollingElement.scrollTop = 0; }, 60));
 document.querySelectorAll('nav.bottom button').forEach(b => b.insertAdjacentHTML('afterbegin', ic(b.dataset.ic, 24)));
 $('hdrAsk').innerHTML = ic('spark', 21); $('hdrReload').innerHTML = ic('refresh', 21);
 boot();
