@@ -183,13 +183,14 @@
   .sc[data-d="1"] .scin > *, .sc[data-d="2"] .scin > *, .sc[data-d="3"] .scin > * { opacity:0; }   /* only the front card's content shows */
   .stkcount { position:absolute; top:10px; right:10px; z-index:20; padding:3px 9px; border-radius:999px; background:color-mix(in srgb, var(--card) 88%, transparent);
               border:1px solid var(--line); color:var(--muted); font-size:12px; font-weight:800; letter-spacing:.2px; pointer-events:none; font-variant-numeric:tabular-nums; }
-  .stkfoot { display:flex; align-items:center; gap:6px; padding:2px 2px 0; }
+  .stkfoot { display:flex; align-items:center; gap:6px; padding:2px 2px 0; margin-top:18px; }   /* clear of the cards peeking out below */
   .stkfoot button { border:0; background:none; color:var(--muted); font:inherit; font-size:13px; font-weight:700; padding:6px 8px; border-radius:10px; display:flex; align-items:center; }
   .stkfoot button:disabled { opacity:.35; }
   .stkunder { grid-area:1 / 1; z-index:5; display:flex; justify-content:flex-end; align-items:center; padding-right:22px; margin-bottom:0;
                align-self:stretch; border-radius:var(--r-card, 20px); background:var(--redbg); color:var(--red); font-weight:700; font-size:14px; opacity:0; transition:opacity .15s; }
   .stk.stkend .stkunder { opacity:1; }   /* only while the last card is being swiped away */
-  .stkfoot .stkdots { display:flex; gap:5px; align-items:center; }
+  .stkfoot .stkdots { display:flex; gap:5px; align-items:center; padding:12px 6px; margin:-12px 0; touch-action:none; cursor:pointer; }   /* hold and slide to scrub through the cards */
+  .stkfoot .stkdots.many { gap:3px; } .stkfoot .stkdots.many i { width:4px; height:4px; } .stkfoot .stkdots.many i.on { width:10px; }
   .stkfoot .stkdots i { width:6px; height:6px; border-radius:50%; background:var(--line); transition:background .2s, width .2s; }
   .stkfoot .stkdots i.on { width:16px; border-radius:3px; background:var(--accent); }
   .sctitle { font-weight:800; margin-bottom:4px; }
@@ -415,7 +416,7 @@ a.alink { color: inherit; text-decoration: underline; text-decoration-color: col
 // Momnie Family app v6.0
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'], DAYN = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'], ADULTS = ['Paul', 'Shana'];
 // Shown at the bottom of Home. Bump it together with VERSION in sw.js on every release.
-const APP_VERSION = '16.10 · Nov 19, 2026';
+const APP_VERSION = '16.11 · Nov 19, 2026';
 const TABLES = ['People', 'Schools', 'SchoolCal', 'Activities', 'Overrides', 'Events', 'Caretakers', 'Childcare', 'Birthdays', 'Annuals', 'Todos', 'TodoTypes', 'Recipes', 'DinnerRules', 'Weeks', 'Menus',
   'Groceries', 'GroceryList', 'HouseCards', 'Houses', 'WeatherRules', 'Quotes', 'Memories', 'Updates', 'Messages', 'Activity', 'Comments', 'Reactions', 'Links', 'Settings', 'Photos', 'gifts', 'ai_rules', 'ai_requests', 'notes', 'places', 'daily_items', 'daily_completions'];
 const CAT = { School: '#3f6fb5', Kids: '#4f7cc2', Work: '#64748b', Family: '#5b6fa8', Dinner: '#b08a4f', Caretaker: '#3e9aa6', Shared: '#94a3b8', Birthday: '#c9806a' }, SCHOOL_C = ['#5a72b8', '#7a8597', '#4a6fb0'];
@@ -2279,7 +2280,7 @@ function stackHTML(g) {
     </div>
     <span class="stkcount" aria-live="polite">${i + 1} of ${n}</span>
     <div class="stkfoot"><button data-a="stkPrev" aria-label="Previous card" ${i === 0 ? 'disabled' : ''}>${ic('left', 18)}</button>
-      <span class="stkdots" aria-hidden="true">${n <= 12 ? g.cards.map((c, k) => `<i class="${k === i ? 'on' : ''}"></i>`).join('') : ''}</span>
+      <span class="stkdots${n > 12 ? ' many' : ''}" aria-hidden="true">${g.cards.map((c, k) => `<i class="${k === i ? 'on' : ''}"></i>`).join('')}</span>
       <button data-a="stkNext" aria-label="Next card" ${i === n - 1 ? 'disabled' : ''}>${ic('chev', 18)}</button>
     </div></div>`;
 }
@@ -2294,6 +2295,14 @@ let stkRO = null;
 function stackWatch() {   // refit when images load or the screen changes size
   if (typeof ResizeObserver === 'undefined') return; if (stkRO) stkRO.disconnect();
   stkRO = new ResizeObserver(stackFitAll); document.querySelectorAll('.stk .sc[data-d="0"] .scin').forEach(x => stkRO.observe(x)); }
+// Hold a finger on the dots and slide to move quickly through the cards.
+(() => { let sc = null;
+  const at = (e) => { const r = sc.dots.getBoundingClientRect(), n = sc.st.querySelectorAll('.sc').length, k = Math.floor((e.clientX - r.left) / r.width * n);
+    const i = Math.max(0, Math.min(n - 1, k)); if (i !== +sc.st.dataset.i) stackShow(sc.st, i); };
+  document.addEventListener('pointerdown', e => { const dots = e.target.closest && e.target.closest('.stkdots'); if (!dots) return;
+    sc = { dots, st: dots.closest('.stk'), id: e.pointerId }; try { dots.setPointerCapture(e.pointerId); } catch (x) {} e.preventDefault(); at(e); });
+  document.addEventListener('pointermove', e => { if (sc && e.pointerId === sc.id) at(e); });
+  const end = e => { if (sc && e.pointerId === sc.id) sc = null; }; document.addEventListener('pointerup', end); document.addEventListener('pointercancel', end); })();
 function stackShow(st, i) {
   const cards = [...st.querySelectorAll('.sc')], n = cards.length; i = Math.max(0, Math.min(n - 1, i));
   cards.forEach((c, k) => { c.dataset.d = stackD(k, i); c.style.transition = ''; c.style.transform = ''; c.querySelectorAll('.scin > *').forEach(x => x.style.opacity = '');
@@ -3301,7 +3310,7 @@ A.dinClear = id => { const m = byId('Menus', id); if (!m || (!m.recipeId && !m.n
 // pull down to refresh
 (function () { const el = $('ptr'), ic = $('ptrIcon'), TRIG = 70; let y0 = null, d = 0, on = false;
   const set = (v, anim) => { el.style.transition = anim ? 'transform .25s, opacity .25s' : 'none'; el.style.transform = `translateY(${v - 50}px)`; el.style.opacity = Math.min(v / TRIG, 1); if (!on) ic.textContent = v >= TRIG ? '↻' : '↓'; };
-  document.addEventListener('touchstart', e => { y0 = (on || viewY() > 0 || sheets.length || e.target.closest('.dcard[data-swipe], .rcard, .stkdeck')) ? null : e.touches[0].clientY; d = 0; }, { passive: true });
+  document.addEventListener('touchstart', e => { y0 = (on || viewY() > 0 || sheets.length || e.target.closest('.dcard[data-swipe], .rcard, .stkdeck, .stkdots')) ? null : e.touches[0].clientY; d = 0; }, { passive: true });
   document.addEventListener('touchmove', e => { if (y0 === null) return; if (viewY() > 0) { y0 = null; set(0, true); return; } d = Math.min(110, Math.max(0, e.touches[0].clientY - y0) * 0.5); set(d, false); }, { passive: true });
   document.addEventListener('touchend', async () => { if (y0 === null) return; y0 = null; if (d < TRIG) { set(0, true); return; } on = true; ic.textContent = '↻'; el.classList.add('spin'); set(60, true); try { await load(); } catch (e) { toast(e.message); } el.classList.remove('spin'); on = false; set(0, true); }); })();
 // If the iPhone keyboard nudged the page itself, put it back: only #view should ever scroll.
