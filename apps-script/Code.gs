@@ -1,6 +1,7 @@
 /**
  * Momnie Family app backend
- * Version 3.38 (2026-11-19)
+ * Version 3.39 (2026-11-19)
+ *   3.39: Posts from outside sources can be limited to some people (audience), for a preview before the whole family sees them.
  *   3.38: Annual events (Annuals tab): things we like to do every year, kept off the Planner.
  *   3.37: source_post says when SOURCE_KEY is missing (vs a wrong key).
  *   3.36: Posts from outside sources: sourcePost_() posts a stack AS the school (type 'source'), once per key; the
@@ -459,7 +460,8 @@ function stackPost_(cards, o) {
 // stacks, re-orders or hides these. Everyone in the family sees them (Feed filter: School updates).
 /**
  * o: { source: school id (e.g. 'chs') or a plain name, key: unique id for this update (e.g. 'wir|Clara|2026-11-06'),
- *      title, intro, cards: [{ title, text }], time (optional, YYYY-MM-DDTHH:MM:SS) }
+ *      title, intro, cards: [{ title, text }], time (optional, YYYY-MM-DDTHH:MM:SS),
+ *      audience (optional, e.g. 'Paul': only those people see it, for a preview; blank = the whole family) }
  * The same key is only ever posted once (it is kept as the post's subject). Returns { stack, ids } or { skipped }.
  */
 function sourcePost_(o) {
@@ -478,7 +480,7 @@ function sourcePost_(o) {
     parts.forEach(function (part, k) {
       var head = title ? title + (parts.length > 1 ? ' (' + (k + 1) + '/' + parts.length + ')' : '') : '';
       var r = put_('Activity', { time: t, who: who, type: 'source', text: (head ? '**' + head + '**\n' : '') + part, cat: 'school',
-        table: school ? 'Schools' : '', ref: school ? school.id : '', audience: '', subject: n === 0 ? subj : '', stack: id, stackIdx: String(n++) });
+        table: school ? 'Schools' : '', ref: school ? school.id : '', audience: txt_(o.audience, 100), subject: n === 0 ? subj : '', stack: id, stackIdx: String(n++) });
       ids.push(r.id);
     });
   });

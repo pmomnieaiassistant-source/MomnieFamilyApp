@@ -415,7 +415,7 @@ a.alink { color: inherit; text-decoration: underline; text-decoration-color: col
 // Momnie Family app v6.0
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'], DAYN = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'], ADULTS = ['Paul', 'Shana'];
 // Shown at the bottom of Home. Bump it together with VERSION in sw.js on every release.
-const APP_VERSION = '16.4 · Nov 19, 2026';
+const APP_VERSION = '16.5 · Nov 19, 2026';
 const TABLES = ['People', 'Schools', 'SchoolCal', 'Activities', 'Overrides', 'Events', 'Caretakers', 'Childcare', 'Birthdays', 'Annuals', 'Todos', 'TodoTypes', 'Recipes', 'DinnerRules', 'Weeks', 'Menus',
   'Groceries', 'GroceryList', 'HouseCards', 'Houses', 'WeatherRules', 'Quotes', 'Memories', 'Updates', 'Messages', 'Activity', 'Comments', 'Reactions', 'Links', 'Settings', 'Photos', 'gifts', 'ai_rules', 'ai_requests', 'notes', 'places', 'daily_items', 'daily_completions'];
 const CAT = { School: '#3f6fb5', Kids: '#4f7cc2', Work: '#64748b', Family: '#5b6fa8', Dinner: '#b08a4f', Caretaker: '#3e9aa6', Shared: '#94a3b8', Birthday: '#c9806a' }, SCHOOL_C = ['#5a72b8', '#7a8597', '#4a6fb0'];
@@ -2186,7 +2186,7 @@ function vFeed() {
   // unless they tick "Show what the assistant tidied away" in the Feed menu.
   const tidyOn = aiWho().includes(ME) && st('f.moot', '0') !== '1';
   const latestSub = new Map(); S.Activity.forEach(a => { if (!a.subject) return; const pr = latestSub.get(a.subject); if (!pr || (a.time || '') >= (pr.time || '')) latestSub.set(a.subject, a); });
-  const stream = S.Activity.filter(a => a.type !== 'message' && a.state !== 'cleared' && !(a.state === 'moot' && tidyOn) && (!a.subject || latestSub.get(a.subject) === a) && (a.type !== 'ai' || aiNoteFor(a).includes(ME)) && !kindHidden(a) && !gone.has('A:' + a.id)).map(a => ({ time: a.time, a })).concat(S.Messages.filter(mm => fOn('messages') && !gone.has('M:' + mm.id)).map(mm => ({ time: mm.time, m: mm, pin: pinnedNow(mm) && mm.resolved !== '1' })))
+  const stream = S.Activity.filter(a => a.type !== 'message' && a.state !== 'cleared' && !(a.state === 'moot' && tidyOn) && (a.type !== 'source' || !a.audience || list(a.audience).includes(ME)) && (!a.subject || latestSub.get(a.subject) === a) && (a.type !== 'ai' || aiNoteFor(a).includes(ME)) && !kindHidden(a) && !gone.has('A:' + a.id)).map(a => ({ time: a.time, a })).concat(S.Messages.filter(mm => fOn('messages') && !gone.has('M:' + mm.id)).map(mm => ({ time: mm.time, m: mm, pin: pinnedNow(mm) && mm.resolved !== '1' })))
     .concat(S.ai_requests.filter(q => !hide('ai') && q.status !== 'filled' && q.status !== 'cleared' && (q.status !== 'error' || q.who === ME) && !gone.has('R:' + q.id)).map(q => ({ time: q.time || '', r: q })))
     .sort((x, y) => (y.pin ? 1 : 0) - (x.pin ? 1 : 0) || y.time.localeCompare(x.time)).slice(0, 70);
   // Bundle bursts: several changes by the same person within a few minutes become one post.
