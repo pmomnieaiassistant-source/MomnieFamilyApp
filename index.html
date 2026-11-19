@@ -415,7 +415,7 @@ a.alink { color: inherit; text-decoration: underline; text-decoration-color: col
 // Momnie Family app v6.0
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'], DAYN = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'], ADULTS = ['Paul', 'Shana'];
 // Shown at the bottom of Home. Bump it together with VERSION in sw.js on every release.
-const APP_VERSION = '16.5 · Nov 19, 2026';
+const APP_VERSION = '16.6 · Nov 19, 2026';
 const TABLES = ['People', 'Schools', 'SchoolCal', 'Activities', 'Overrides', 'Events', 'Caretakers', 'Childcare', 'Birthdays', 'Annuals', 'Todos', 'TodoTypes', 'Recipes', 'DinnerRules', 'Weeks', 'Menus',
   'Groceries', 'GroceryList', 'HouseCards', 'Houses', 'WeatherRules', 'Quotes', 'Memories', 'Updates', 'Messages', 'Activity', 'Comments', 'Reactions', 'Links', 'Settings', 'Photos', 'gifts', 'ai_rules', 'ai_requests', 'notes', 'places', 'daily_items', 'daily_completions'];
 const CAT = { School: '#3f6fb5', Kids: '#4f7cc2', Work: '#64748b', Family: '#5b6fa8', Dinner: '#b08a4f', Caretaker: '#3e9aa6', Shared: '#94a3b8', Birthday: '#c9806a' }, SCHOOL_C = ['#5a72b8', '#7a8597', '#4a6fb0'];
@@ -2698,6 +2698,8 @@ A.aiRun = async (v, el) => { el.disabled = true; el.textContent = 'Running the a
   const n = r.notes || {}, bits = [n.error ? 'Notes: ' + n.error : (n.notes || []).length ? `${n.notes.length} note${n.notes.length === 1 ? '' : 's'} posted` : 'no new notes'];
   if ((r.cards || []).length) bits.push('Today card updated for ' + joinNames(r.cards)); if (r.cardError) bits.push('Today card: ' + r.cardError);
   if ((r.convo || []).length) bits.push(r.convo.length + ' plan' + (r.convo.length === 1 ? '' : 's') + ' from conversations');
+  const tidy = [r.tidied ? `${r.tidied} old note${r.tidied === 1 ? '' : 's'} cleared` : '', r.stacked ? `${r.stacked} stack${r.stacked === 1 ? '' : 's'} made or updated` : '', r.hidden ? `${r.hidden} moot post${r.hidden === 1 ? '' : 's'} hidden` : ''].filter(Boolean);
+  bits.push(tidy.length ? 'Feed tidied: ' + tidy.join(', ') : 'Feed already tidy');
   toast(bits.join(' · ')); };
 const pauseDays = () => +((byId('Settings', 'app|pauseDays') || {}).value || 30) || 30;
 A.rules = () => { const tags = [...new Set(S.Recipes.flatMap(r => list(r.tags.toLowerCase())))].sort(), recs = S.Recipes.slice().sort((a, b) => a.name.localeCompare(b.name));
