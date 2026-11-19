@@ -109,6 +109,8 @@
   dialog { border:0; margin:auto 0 0; width:100%; max-width:100%; max-height:90vh; overflow:auto; padding:22px 18px calc(22px + env(safe-area-inset-bottom)); border-radius:22px 22px 0 0; background:var(--card); color:var(--text); }
   dialog[open] { animation:up .2s ease-out; } @keyframes up { from { transform:translateY(40px); opacity:.4; } to { transform:none; opacity:1; } }
   dialog::backdrop { background:rgba(0,0,0,.4); }
+  /* A form's Save buttons stay pinned to the bottom of the sheet, so they're never off screen. */
+  dialog .actions.formbar { position:sticky; bottom:calc(-22px - env(safe-area-inset-bottom)); z-index:2; margin:12px -18px calc(-22px - env(safe-area-inset-bottom)); padding:10px 18px calc(12px + env(safe-area-inset-bottom)); background:var(--card); border-top:1px solid var(--line); }
   dialog.splash { margin:auto; width:calc(100% - 40px); max-width:400px; border-radius:22px; text-align:center; }
   dialog.splash img { max-width:100%; border-radius:14px; margin:10px 0; } dialog.splash .q { font-size:20px; font-weight:700; line-height:1.35; font-family:Georgia,serif; font-style:italic; }
   .x { position:sticky; float:right; top:0; border:0; background:var(--soft); color:var(--text); width:32px; height:32px; border-radius:50%; font-size:15px; z-index:2; }
@@ -357,7 +359,7 @@ a.alink { color: inherit; text-decoration: underline; text-decoration-color: col
 // Momnie Family app v6.0
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'], DAYN = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'], ADULTS = ['Paul', 'Shana'];
 // Shown at the bottom of Home. Bump it together with VERSION in sw.js on every release.
-const APP_VERSION = '15.4 · Nov 19, 2026';
+const APP_VERSION = '15.5 · Nov 19, 2026';
 const TABLES = ['People', 'Schools', 'SchoolCal', 'Activities', 'Overrides', 'Events', 'Caretakers', 'Childcare', 'Birthdays', 'Todos', 'TodoTypes', 'Recipes', 'DinnerRules', 'Weeks', 'Menus',
   'Groceries', 'GroceryList', 'HouseCards', 'Houses', 'WeatherRules', 'Quotes', 'Memories', 'Updates', 'Messages', 'Activity', 'Comments', 'Reactions', 'Links', 'Settings', 'Photos', 'gifts', 'ai_rules', 'ai_requests', 'notes', 'places', 'daily_items', 'daily_completions'];
 const CAT = { School: '#3f6fb5', Kids: '#4f7cc2', Work: '#64748b', Family: '#5b6fa8', Dinner: '#b08a4f', Caretaker: '#3e9aa6', Shared: '#94a3b8', Birthday: '#c9806a' }, SCHOOL_C = ['#5a72b8', '#7a8597', '#4a6fb0'];
@@ -952,7 +954,8 @@ const xFor = d => d.classList.contains('notepad') || d.classList.contains('splas
     if (!on) { if (y > 10 && y > Math.abs(x) && d.scrollTop <= 0) { on = true; d.style.transition = 'none'; d.style.animation = 'none'; } else if (Math.abs(x) > 10 || y < -10) { d = null; return; } else return; }
     dy = Math.max(0, y); d.style.transform = `translateY(${dy}px)`; e.preventDefault(); }, { passive: false });
   const end = () => { if (!d || !on) { d = null; return; } const dl = d, fast = dy / Math.max(1, Date.now() - t0) > 0.5; d = null; dl.style.transition = 'transform .18s ease-out';
-    if (dy > 110 || (fast && dy > 40)) { dl.style.transform = 'translateY(105%)'; setTimeout(() => dl.close(), 170); }
+    if ((dy > 110 || (fast && dy > 40)) && dl._dirty && dl._ask) { dl.style.transform = ''; setTimeout(() => { dl.style.transition = ''; }, 200); dl._ask(); }
+    else if (dy > 110 || (fast && dy > 40)) { dl.style.transform = 'translateY(105%)'; setTimeout(() => dl.close(), 170); }
     else { dl.style.transform = ''; setTimeout(() => { dl.style.transition = ''; }, 200); } };
   document.addEventListener('touchend', end); document.addEventListener('touchcancel', end); })();
 function sheet(content, cls) {
@@ -961,10 +964,21 @@ function sheet(content, cls) {
   const h = d._render ? d._render(d) : content;
   d.innerHTML = xFor(d) + (h || '');
   d.addEventListener('close', () => { sheets.splice(sheets.indexOf(d), 1); d.remove(); });
-  d.addEventListener('click', e => { if (e.target !== d) return; const r = d.getBoundingClientRect(); if (e.clientY < r.top || e.clientY > r.bottom || e.clientX < r.left || e.clientX > r.right) d.close(); });
+  d.addEventListener('click', e => { if (e.target !== d) return; const r = d.getBoundingClientRect(); if (e.clientY < r.top || e.clientY > r.bottom || e.clientX < r.left || e.clientX > r.right) closeSheet(d); });
+  d.addEventListener('cancel', e => { if (d._dirty && d._ask) { e.preventDefault(); d._ask(); } });   // Esc key
   sheets.push(d); d.showModal(); return d;
 }
-A.close = (v, el) => { const d = (el && el.closest('dialog')) || sheets[sheets.length - 1]; if (d) d.close(); };
+/** Closes a sheet, unless it is a form with changes: then it asks first (Save / Discard / Keep editing). */
+function closeSheet(d) { if (!d) return; if (d._dirty && d._ask) { d._ask(); return false; } d.close(); return true; }
+A.close = (v, el) => closeSheet((el && el.closest('dialog')) || sheets[sheets.length - 1]);
+/** The small "Save your changes?" box over a form. */
+function askSave(f) {
+  const q = sheet(`<h2 style="margin-top:0">Save your changes?</h2><div class="small muted">You've filled in some of this form.</div>
+    <div class="actions" style="flex-direction:column"><button class="btn" data-q="save">Save</button><button class="btn gray" data-q="drop">Don't save</button><button class="btn gray" data-q="stay">Keep editing</button></div>`, 'splash');
+  q.addEventListener('click', e => { const b = e.target.closest('[data-q]'); if (!b) return; const k = b.dataset.q; q.close();
+    if (k === 'drop') { f._dirty = false; f.close(); }
+    else if (k === 'save') { const s = f.querySelector('[data-save]'); if (s) s.click(); } });
+}
 const ctx = el => (el.closest('dialog') || {})._ctx || {};
 function refresh() {
   render();
@@ -998,33 +1012,35 @@ function fieldHTML(f, v) {
 /** Bottom-sheet form. fields: array or v => array. onSave(v, mode) may throw to show an error, or return false to stay open. */
 function form(title, fields, vals, onSave, buttons, opts) {
   const v = Object.assign({}, vals), d = sheet(''), fs = typeof fields === 'function' ? fields : () => fields;
+  d._dirty = false; d._ask = () => askSave(d);
   const draw = () => {
     const shown = fs(v).filter(f => !f.show || f.show(v));
     shown.forEach(f => { if (f.t === 'sel') { const o = (typeof f.o === 'function' ? f.o(v) : f.o).map(x => Array.isArray(x) ? x[0] : x); if (!o.includes(v[f.k] || '')) v[f.k] = o[0] || ''; } });
     const aiBox = !opts || !opts.ai ? '' : !v._ai ? `<button type="button" class="btn gray sm aiopen" data-aiopen aria-label="Describe it to the assistant" title="Describe it to the assistant">${ic('spark', 18)}</button>`
       : `<div class="aibox"><textarea data-aitext rows="3" placeholder="${esc(opts.ph || 'Describe it in your own words')}">${esc(v._aiText || '')}</textarea>
         <div class="row" style="gap:8px;margin-top:8px"><button type="button" class="btn sm" data-aifill>${ic('spark', 16)}Fill it in</button><span class="small muted grow">${v._aiMsg ? esc(v._aiMsg) : 'Check what it fills in, then save.'}</span></div></div>`;
-    d.innerHTML = XBTN + (v._ai ? '' : aiBox) + `<h2>${esc(title)}</h2>` + (v._ai ? aiBox : '') + shown.map(f => fieldHTML(f, v)).join('') + `<div class="err"></div><div class="actions">${(buttons || [['Save', '']]).map(([l, m], i) => `<button class="btn ${i ? 'dark' : ''}" data-save="${m}">${l}</button>`).join('')}</div>`;
+    d.innerHTML = XBTN + (v._ai ? '' : aiBox) + `<h2>${esc(title)}</h2>` + (v._ai ? aiBox : '') + shown.map(f => fieldHTML(f, v)).join('') + `<div class="err"></div><div class="actions formbar">${(buttons || [['Save', '']]).map(([l, m], i) => `<button class="btn ${i ? 'dark' : ''}" data-save="${m}">${l}</button>`).join('')}</div>`;
   };
   draw();
   const rowSet = el => { if (!el.dataset.rk) return false; const r = (v[el.dataset.rk] || [])[+el.dataset.ri]; if (r) r[el.dataset.rc] = el.value; return true; };
-  d.addEventListener('input', ev => { const el = ev.target; if (rowSet(el)) return; if (el.dataset.aitext !== undefined) { v._aiText = el.value; return; }
+  d.addEventListener('input', ev => { const el = ev.target; if (el.dataset.k || el.dataset.rk || el.dataset.ing) d._dirty = true; if (rowSet(el)) return; if (el.dataset.aitext !== undefined) { v._aiText = el.value; return; }
     if (el.dataset.k && el.type !== 'checkbox' && el.tagName !== 'SELECT') v[el.dataset.k] = el.value;
     if (el.dataset.ing) { const q = el.value.trim(), k = el.dataset.ing, box = d.querySelector(`.sugg[data-for="${k}"]`);
       const hits = q ? S.Groceries.filter(g => (g.name + ' ' + g.category + ' ' + g.altNames).toLowerCase().includes(q.toLowerCase())).slice(0, 6) : [];
       box.innerHTML = hits.map(g => `<button type="button" class="chip ok" data-ingadd="${k}" data-mv="${esc(g.name)}">＋ ${esc(g.name)}</button>`).join('') + (q && !groc(q) ? `<button type="button" class="chip" data-ingadd="${k}" data-mv="${esc(q)}" data-new="1">Create new “${esc(q)}”</button>` : ''); } });
-  d.addEventListener('change', ev => { const el = ev.target, k = el.dataset.k;
+  d.addEventListener('change', ev => { const el = ev.target, k = el.dataset.k; if (k || el.dataset.rk) d._dirty = true;
     if (rowSet(el)) { const r = (v[el.dataset.rk] || [])[+el.dataset.ri], rf = fs(v).find(x => x.k === el.dataset.rk); if (r && !(rf && rf.fixed) && el.dataset.rc === 'start' && r.start && !r.end) r.end = hm(toMin(r.start) + 60); if (r && /^(start|end)$/.test(el.dataset.rc)) draw(); return; }
     if (!k) return; v[k] = el.type === 'checkbox' ? (el.checked ? '1' : '') : el.value; const f = fs(v).find(x => x.k === k); if (f && f.on) f.on(v);
     const endF = f && f.t === 'time' && fs(v).find(x => x.dur === k); if (endF && v[k] && !v[endF.k]) v[endF.k] = hm(toMin(v[k]) + 60);
     if (f && ((typeof f.re === 'function' ? f.re(v) : f.re) || f.t === 'time')) draw(); });
   d.addEventListener('click', async ev => {
     const t = ev.target, m = t.closest('[data-mk]');
+    if (t.closest('[data-mk], [data-radd], [data-rcopy], [data-rdel], [data-ingadd], [data-ingrm], [data-fpick], [data-frm]')) d._dirty = true;
     if (t.closest('[data-aiopen]')) { v._ai = 1; draw(); const ta = d.querySelector('[data-aitext]'); if (ta) ta.focus(); return; }
     const af = t.closest('[data-aifill]');
     if (af) { const txt = (v._aiText || '').trim(); if (txt.length < 4) { v._aiMsg = 'Say a bit more first.'; draw(); return; }
       af.disabled = true; af.textContent = 'Thinking…';
-      try { const got = await opts.ai(txt, v); Object.keys(got || {}).forEach(k => { if (got[k] !== '' && got[k] != null) v[k] = got[k]; }); v._aiMsg = 'Filled in. Check it, then save.'; }
+      try { const got = await opts.ai(txt, v); Object.keys(got || {}).forEach(k => { if (got[k] !== '' && got[k] != null) v[k] = got[k]; }); d._dirty = true; v._aiMsg = 'Filled in. Check it, then save.'; }
       catch (e) { v._aiMsg = e.message; }
       draw(); return; }
     if (m) { const a = list(v[m.dataset.mk]), x = m.dataset.mv; v[m.dataset.mk] = (a.includes(x) ? a.filter(y => y !== x) : a.concat(x)).join(', '); m.classList.toggle('on'); const mf = fs(v).find(y => y.k === m.dataset.mk); if (mf && mf.re) draw(); return; }
@@ -1045,7 +1061,7 @@ function form(title, fields, vals, onSave, buttons, opts) {
     const b = t.closest('[data-save]'); if (!b) return;
     b.disabled = true; d.querySelector('.err').textContent = '';
     ['_ai', '_aiText', '_aiMsg'].forEach(k => delete v[k]);
-    try { const r = await onSave(v, b.dataset.save); if (r !== false) d.close(); } catch (e) { const er = d.querySelector('.err'); if (er) er.textContent = e.message; }
+    try { const r = await onSave(v, b.dataset.save); if (r !== false) { d._dirty = false; d.close(); } } catch (e) { const er = d.querySelector('.err'); if (er) er.textContent = e.message; }
     b.disabled = false;
   });
   return d;
@@ -2049,7 +2065,7 @@ function vFeed() {
     .sort((x, y) => (y.pin ? 1 : 0) - (x.pin ? 1 : 0) || y.time.localeCompare(x.time)).slice(0, 70);
   // Bundle bursts: several changes by the same person within a few minutes become one post.
   const win = (+st('bundleMin', '5') || 0) * 60000, out = [];
-  stream.forEach(e => { const p = out[out.length - 1], solo = x => x.r || x.m || x.pin || x.a.type === 'ai' || taggedMe(x.a.text, x.a.who) || x.a.table === 'Photos' || x.a.type === 'daily' || x.a.type.startsWith('summary') || x.a.who === 'App';
+  stream.forEach(e => { const p = out[out.length - 1], solo = x => x.r || x.m || x.pin || x.a.type === 'ai' || taggedMe(x.a.text, x.a.who) || x.a.table === 'Photos' || String(x.a.subject || '').startsWith('dinners|') || x.a.type === 'daily' || x.a.type.startsWith('summary') || x.a.who === 'App';
     if (win && p && !solo(e) && !solo(p.items ? p.items[0] : p) && p.who === e.a.who && new Date(p.t0) - new Date(e.time) <= win) { p.items = p.items || [{ time: p.time, a: p.a }]; p.items.push(e); p.t0 = e.time; return; }
     out.push(Object.assign({ who: e.a ? e.a.who : '', t0: e.time }, e)); });
   const fOff = FKINDS().filter(([k]) => !fOn(k)).map(x => x[1]);
@@ -2226,7 +2242,20 @@ function bundlePost(e) {
   return `<div class="post">${avatar(e.who)}<div class="pbody"><div><b>${esc(e.who)}</b> made ${e.items.length} updates <span class="muted">· ${ago(e.items[0].time)}</span></div><div class="ptext" style="font-weight:400">` +
     e.items.map(x => { const a = x.a, ti = a.table && a.ref ? titleOf(a.table, a.ref) : ''; return `<div class="row" style="padding:3px 0" ${ti ? `data-a="open" data-t="${a.table}" data-id="${esc(a.ref)}"` : ''}><span>${esc(a.text)}</span>${ti ? '<span class="chev">›</span>' : ''}</div>`; }).join('') + '</div></div></div>';
 }
+/** The week's dinners as one post, read from the current menu: what's planned each night and which nights are still open. */
+const DAYNAME = { Mon: 'Monday', Tue: 'Tuesday', Wed: 'Wednesday', Thu: 'Thursday', Fri: 'Friday', Sat: 'Saturday', Sun: 'Sunday' };
+function dinnerPost(a) {
+  const wk = a.subject.slice(8), saved = S.Menus.filter(m => m.week === wk), all = weekNights(wk).map(n => saved.find(m => m.day === n.day) || n);
+  const left = all.filter(m => m.date >= TODAY), ns = left.length ? left : all, open = left.filter(m => m.skipped !== '1' && !dish(m));
+  const verb = ns.filter(m => dish(m) && m.skipped !== '1').length ? 'set dinner for ' : 'updated dinner for ';
+  const line = m => `<div class="row" style="padding:2px 0" data-a="open" data-t="Menus" data-id="${esc(m.id)}"><span class="small b muted" style="width:38px">${m.day}</span><span class="grow">${m.skipped === '1' ? '<span class="muted">Skipped</span>' : dish(m) ? esc(dish(m)) : '<span class="muted">Open</span>'}</span></div>`;
+  return `<div class="post">${avatar(a.who)}<div class="pbody"><div><b>${esc(a.who)}</b> ${verb}${weekLow(wk, mondayOf(TODAY))} <span class="muted">· ${ago(a.time)}</span></div>
+    <div class="ptext" style="font-weight:400;margin-top:4px">${ns.map(line).join('')}</div>
+    ${open.length ? `<div class="row" style="margin-top:8px;gap:8px"><span class="small grow">${esc(joinNames(open.map(m => DAYNAME[m.day])))} ${open.length === 1 ? 'is' : 'are'} still open.</span><button class="btn gray sm" data-a="dinPick" data-v="${wk}">Pick something</button></div>` : `<div class="small muted" style="margin-top:6px">${ic('check', 13)} Every night is planned.</div>`}</div></div>`;
+}
+A.dinPick = wk => { view = 'meals'; DT = 'menu'; MW = wk; render(); window.scrollTo(0, 0); };
 function actPost(a) {
+  if (String(a.subject || '').startsWith('dinners|')) return dinnerPost(a);
   if (a.table === 'Photos') { const p = byId('Photos', a.ref), ti = p ? titleOf(p.table, p.ref) : '';
     if (p && !isImg(p)) return `<div class="post">${avatar(a.who)}<div class="pbody"><div><b>${esc(a.who)}</b> attached a file${ti ? ` to <b data-a="open" data-t="${p.table}" data-id="${esc(p.ref)}" style="cursor:pointer">${esc(ti)}</b>` : ''} <span class="muted">· ${ago(a.time)}</span></div>
       ${fileChip(p)}${postFoot(p.table, p.ref, '')}</div></div>`;
@@ -2364,7 +2393,7 @@ A.autofill = () => { const wk = MW || mondayOf(TODAY), days = autofillDays();
   todo.sort((a, b) => a.date.localeCompare(b.date)).forEach(m => {
     const rid = autoPick(m.date, again ? used.concat(m.recipeId) : used); if (!rid) return; used.push(rid); ops.push({ t: 'Menus', row: { id: m.id, recipeId: rid, note: '', kept: '', skipped: '' } }); });
   if (!ops.length) return toast('No recipes to pick from yet.');
-  ops[0].log = L('menu_set', `${again ? 're-picked' : 'filled'} ${ops.length} night${ops.length === 1 ? '' : 's'} for ${weekLow(wk, mondayOf(TODAY))}`, 'dinner');
+  ops[0].log = L('menu_set', `${again ? 're-picked' : 'filled'} ${ops.length} night${ops.length === 1 ? '' : 's'} for ${weekLow(wk, mondayOf(TODAY))}`, 'dinner', { subject: dinSub(wk) });
   write(ops); ops.forEach(o => { const el = document.querySelector(`.dcard[data-menu="${o.row.id}"]`); if (el) { el.classList.add('flash'); setTimeout(() => el.classList.remove('flash'), 1600); } }); };
 const ruleOf = d => byId('DinnerRules', d) || {};
 const weekNights = wk => DAYS.map((d, i) => ({ id: wk + '-' + d, week: wk, day: d, date: addDays(wk, i), recipeId: '', note: '', kept: '', skipped: '', away: ruleOf(d).away || '', cook: ruleOf(d).cook || '', _virtual: 1 }));
@@ -2379,7 +2408,9 @@ A.mgo = w => { MW = w; render(); window.scrollTo(0, 0); };
 A.weekAdd = async w => { if (await call('week_add', { week: w })) { MW = w; render(); window.scrollTo(0, 0); } };
 A.weekDel = w => { if (confirm("Delete this week's plan?")) write(S.Menus.filter(m => m.week === w).map(m => ({ t: 'Menus', del: m.id })).concat({ t: 'Weeks', del: w })); };
 // Weeks are always editable (no more "lock in"). A change to a night in the next 7 days posts to the Feed so the other person knows.
-const menuLog = (m, type, text) => m.date >= TODAY && m.date < addDays(TODAY, 7) ? L(type, text, 'dinner') : null;
+// All dinner changes for a week share one subject, so the Feed shows a single, up-to-date "dinners for the week" post (dinnerPost).
+const dinSub = d => 'dinners|' + mondayOf(d);
+const menuLog = (m, type, text) => m.date >= TODAY && m.date < addDays(TODAY, 7) ? L(type, text, 'dinner', { subject: dinSub(m.date) }) : null;
 A.swap = id => { const m = byId('Menus', id); return call('dinner_swap', { id, log: menuLog(m, 'menu_swap', `swapped dinner for ${fmtDay(m.date)}`) }).then(r => { refresh(); return r; }); };
 // Swiping a night right shows two choices over it: Random (a new suggestion) or Select (pick from the list).
 let MCHG = '';
@@ -2402,7 +2433,7 @@ function menuShow(id, flash) { const el = document.querySelector(`.dcard[data-me
   window.scrollTo(0, Math.max(0, el.getBoundingClientRect().top + window.scrollY - window.innerHeight / 3));
   if (flash) { PFLASH = id; el.classList.add('flash'); clearTimeout(menuShow.t); menuShow.t = setTimeout(() => { PFLASH = ''; document.querySelectorAll('.dcard.flash').forEach(x => x.classList.remove('flash')); }, 1800); } }
 A.mChgClose = () => { MCHG = ''; render(); };
-A.skip = id => { const m = byId('Menus', id), on = m.skipped !== '1'; write({ t: 'Menus', row: { id, skipped: on ? '1' : '' }, log: on ? L('menu_skip', `skipped dinner on ${fmtDay(m.date)} (${dish(m)})`, 'dinner') : null }); };
+A.skip = id => { const m = byId('Menus', id), on = m.skipped !== '1'; write({ t: 'Menus', row: { id, skipped: on ? '1' : '' }, log: on ? L('menu_skip', `skipped dinner on ${fmtDay(m.date)} (${dish(m)})`, 'dinner', { subject: dinSub(m.date) }) : null }); };
 // Who's making dinner that night. Tap the same person again to clear it.
 A.cook = (p, el) => { const m = byId('Menus', ctx(el).id), on = m.cook !== p;
   write({ t: 'Menus', row: { id: m.id, cook: on ? p : '' }, log: on ? menuLog(m, 'cook', `${p === ME ? 'is' : 'asked ' + p + ' to be'} making dinner ${fmtDay(m.date)}${dish(m) ? ' (' + dish(m) + ')' : ''}`) : null }); };

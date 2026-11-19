@@ -1,6 +1,7 @@
 /**
  * Momnie Family app backend
- * Version 3.32 (2026-11-19)
+ * Version 3.33 (2026-11-19)
+ *   3.33: ideas tab gets a status column (filled in by hand).
  *   3.32: Files on any card, not just photos: PDFs and documents go to their own "Momnie documents" Drive folder
  *         (photos stay in "Momnie photos").
  *         New Photos columns name and mime (blank mime = a photo, as before). Files up to 15 MB.
@@ -115,7 +116,7 @@ var T = {
   places: 'id,name,lat,lon,radius,added_by,created_at',   // known locations (Home, work, school) for "last seen at"
   daily_items: 'id,title,days,time_of_day,for_person,visible_to,created_by,active',
   daily_completions: 'id,item_id,date,completed_by,completed_at',   // id = item_id|date, so each item is checked once per day
-  ideas: 'id,time,who,text'   // feedback sent from the Home screen; read it in the Sheet
+  ideas: 'id,time,who,text,status'   // feedback sent from the Home screen; status is filled in by hand (Done, Not started…)
 };
 var DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 var MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
