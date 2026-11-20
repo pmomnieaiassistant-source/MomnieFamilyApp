@@ -1,6 +1,7 @@
 /**
  * Momnie Family app backend
- * Version 3.44 (2026-11-19)
+ * Version 3.45 (2026-11-20)
+ *   3.45: Annual traditions are no longer shown daily; shortly before one starts the assistant asks "Are we doing it again?" (shared Yes/No); Yes puts it on the Planner.
  *   3.44: The assistant can ask "Should this be an annual tradition?" about an event (yes/no question in the Feed); a Yes adds the tradition and posts a note. Messages gets a ref column.
  *   3.43: The assistant no longer sees gift-idea counts at all.
  *   3.42: The assistant reviews every two hours from 5 AM to 1 AM; the start-hour setting is gone.
@@ -1294,7 +1295,52 @@ function aiTidySafe_(t) { try { return aiTidy_(t); } catch (e) { console.error(e
 // question post (Messages, kind 'question', answerType 'yesno') with ref "tradition|<event id>|<title>". On its next run,
 // if the answer is Yes it adds the tradition (Annuals) and posts a note saying so; No just closes it. Each event title is asked about once.
 var TRAD_REF = /^tradition\|([^|]*)\|(.*)$/;
-function aiTradSafe_(t, ask) { try { return aiTrad_(t, ask); } catch (e) { console.error(e); return { error: String(e && e.message || e) }; } }
+function aiTradSafe_(t, ask) {
+  var out = {}; try { out = aiTrad_(t, ask) || {}; } catch (e) { console.error(e); out = { error: String(e && e.message || e) }; }
+  try { var a = aiAgain_(t, ask); out.made = (out.made || []).concat(a.made || []); out.again = a.asked || []; } catch (e2) { console.error(e2); }
+  return out;
+}
+// "Are we doing it again?": instead of a daily reminder, shortly before a tradition comes around (its "Remind us" lead, two weeks
+// by default) the assistant asks one shared Yes/No question in the Feed. Yes puts it on the Planner for this year's dates;
+// No leaves it. Each tradition is asked once a year (ref "again|<tradition id>|<year>|<name>").
+function aiAgain_(t, ask) {
+  if (setting_('app|ai.on', '') !== '1') return { off: true };
+  var made = [], asked = [], who = list_(setting_('app|ai.who', 'Paul')), AG = /^again\|([^|]*)\|(\d{4})\|(.*)$/;
+  rows_('Messages').forEach(function (m) {
+    var mt = AG.exec(m.ref || ''); if (!mt) return;
+    var ans = rows_('Comments').filter(function (c) { return c.table === 'Messages' && c.ref === m.id && c.system === 'answer'; }).sort(function (a, b) { return String(a.time) < String(b.time) ? -1 : 1; }).pop();
+    if (!ans) return;
+    var a = get_('Annuals', mt[1]);
+    if (!/^\s*yes/i.test(ans.text) || !a) { put_('Messages', { id: m.id, ref: 'again-no|' + mt[1] + '|' + mt[2] + '|' + mt[3] }); return; }
+    var w = annualNext_(a, t, mt[2]);
+    var have = rows_('Events').filter(function (e) { return norm_(e.title) === norm_(a.name) && e.date === w.s; })[0];
+    if (!have) put_('Events', { id: id_(), title: a.name, date: w.s, endDate: w.e > w.s ? w.e : '', allDay: '1', category: 'Family', location: a.where || '', notes: [a.notes, a.link].filter(Boolean).join('\n') });
+    put_('Messages', { id: m.id, ref: 'again-yes|' + mt[1] + '|' + mt[2] + '|' + mt[3] });
+    log_('Assistant', { type: 'ai', text: 'Put **' + a.name + '** on the Planner for ' + nice_(w.s) + (w.e > w.s ? ' to ' + nice_(w.e) : '') + '.', cat: 'ai', table: 'Annuals', ref: a.id, audience: who.join(', ') });
+    made.push(a.name);
+  });
+  if (!ask) return { made: made };
+  var open = rows_('Messages').filter(function (m) { return AG.test(m.ref || ''); }).length;
+  rows_('Annuals').forEach(function (a) {
+    if (open >= 3 || !a.from || !/^\d\d-\d\d$/.test(a.from.slice(5, 10))) return;
+    var w = annualNext_(a, t), lead = Number(a.remind) || 14;
+    if (w.days < 0 || w.days > lead || list_(a.years).indexOf(String(w.year)) >= 0) return;
+    var seen = rows_('Messages').some(function (m) { var x = /^again[^|]*\|([^|]*)\|(\d{4})\|/.exec(m.ref || ''); return x && x[1] === a.id && x[2] === String(w.year); });
+    if (seen) return;
+    put_('Messages', { id: id_(), time: now_(), from: 'Assistant', tags: who.join(', '), visibility: '', kind: 'question', answerType: 'yesno', ref: 'again|' + a.id + '|' + w.year + '|' + String(a.name).replace(/\|/g, ' '),
+      text: 'Are we doing "' + a.name + '" again this year? It usually starts ' + nice_(w.s) + (w.days === 0 ? ' (today)' : ' (in ' + w.days + ' day' + (w.days === 1 ? '' : 's') + ')') + '. If yes, I will put it on the Planner.' });
+    open++; asked.push(a.name);
+  });
+  return { made: made, asked: asked };
+}
+/** The next time a tradition starts (its month and day each year): { s, e, days, year }. For an answered question, pass the year it was asked for. */
+function annualNext_(a, t, forYear) {
+  var f = a.from.slice(5, 10), y = forYear ? Number(forYear) : Number(t.slice(0, 4)), s0 = y + '-' + f;
+  if (!forYear && s0 < t) { y++; s0 = y + '-' + f; }
+  var tm = String(a.to || '').slice(5, 10), e0 = /^\d\d-\d\d$/.test(tm) ? y + '-' + tm : s0;
+  if (e0 < s0) e0 = (y + 1) + '-' + tm;
+  return { s: s0, e: e0, days: Math.round((Date.parse(s0) - Date.parse(t)) / 864e5), year: y };
+}
 function aiTrad_(t, ask) {
   if (setting_('app|ai.on', '') !== '1') return { off: true };
   var made = [], who = list_(setting_('app|ai.who', 'Paul')), annuals = rows_('Annuals');
@@ -1547,7 +1593,7 @@ function aiConvoSafe_(t, manual) { try { return aiConvo_(t, manual); } catch (e)
 function aiConvo_(t, manual) {
   var last = setting_('app|ai.convoLast', ''), since = addDays_(t, -3), people = rows_('People');
   var cmt = rows_('Comments').filter(function (c) { return c.system !== '1' && c.time >= since; });
-  var threads = rows_('Messages').filter(function (m) { return !/^tradition/.test(m.ref || '') && (m.time >= since || cmt.some(function (c) { return c.table === 'Messages' && c.ref === m.id; })); }).map(function (m) {
+  var threads = rows_('Messages').filter(function (m) { return !/^(tradition|again)/.test(m.ref || '') && (m.time >= since || cmt.some(function (c) { return c.table === 'Messages' && c.ref === m.id; })); }).map(function (m) {
     var cs = cmt.filter(function (c) { return c.table === 'Messages' && c.ref === m.id; }), newest = [m.time].concat(cs.map(function (c) { return c.time; })).sort().pop();
     return { id: m.id, time: m.time, from: m.from, text: m.text, asked: m.kind === 'question' ? (m.tags || 'the other parent') : '', answerKind: m.kind === 'question' ? m.answerType : '', isNew: newest > last,
       replies: cs.map(function (c) { return { who: c.who, time: c.time, text: c.system === 'answer' && m.answerType === 'time' ? t12_(c.text) : c.text, isAnswer: c.system === 'answer' }; }) };

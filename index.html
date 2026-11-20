@@ -416,7 +416,7 @@ a.alink { color: inherit; text-decoration: underline; text-decoration-color: col
 // Momnie Family app v6.0
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'], DAYN = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'], ADULTS = ['Paul', 'Shana'];
 // Shown at the bottom of Home. Bump it together with VERSION in sw.js on every release.
-const APP_VERSION = '16.14 · Nov 19, 2026';
+const APP_VERSION = '16.15 · Nov 19, 2026';
 const TABLES = ['People', 'Schools', 'SchoolCal', 'Activities', 'Overrides', 'Events', 'Caretakers', 'Childcare', 'Birthdays', 'Annuals', 'Todos', 'TodoTypes', 'Recipes', 'DinnerRules', 'Weeks', 'Menus',
   'Groceries', 'GroceryList', 'HouseCards', 'Houses', 'WeatherRules', 'Quotes', 'Memories', 'Updates', 'Messages', 'Activity', 'Comments', 'Reactions', 'Links', 'Settings', 'Photos', 'gifts', 'ai_rules', 'ai_requests', 'notes', 'places', 'daily_items', 'daily_completions'];
 const CAT = { School: '#3f6fb5', Kids: '#4f7cc2', Work: '#64748b', Family: '#5b6fa8', Dinner: '#b08a4f', Caretaker: '#3e9aa6', Shared: '#94a3b8', Birthday: '#c9806a' }, SCHOOL_C = ['#5a72b8', '#7a8597', '#4a6fb0'];
@@ -2163,7 +2163,7 @@ function vFeed() {
   const where = S.People.filter(p => p.kind !== 'kid' && p.name !== ME && workHours(p, sd).s && list(p.workDays).includes(DAYS[dowIdx(sd)])).map(p => { const home = workWhere(p, sd) === 'home', wh = workHours(p, sd);
     return { lvl: 'plain', icon: home ? 'house' : 'building', text: `${p.name} ${home ? 'working from home' : 'in office'} ${night ? 'tomorrow' : 'today'}${wh.e && wh.e !== wh.s ? ' · until ' + fmtT(wh.e) : ''}`, open: ['People', p.id] }; });
   const rem = where.concat(dinnerFlags(sd, night)).concat(al.map(a => ({ lvl: a.lvl || 'plain', icon: a.icon, text: a.text, open: a.open, sride: a.sride, nav: a.nav })))
-    .concat(annReminders()).concat(bdays.map(b => ({ lvl: 'plain', icon: 'cake', text: b.title + (night ? ' tomorrow' : ' today'), open: [b.t, b.id] })),
+    .concat(bdays.map(b => ({ lvl: 'plain', icon: 'cake', text: b.title + (night ? ' tomorrow' : ' today'), open: [b.t, b.id] })),
       todoSummary(mine, over, due, night));
   const remHTML = r => `<div class="alert ${r.lvl}${r.tag ? ' flag' : ''}" ${r.sride ? `data-a="schoolRide" data-v="${r.sride}"` : r.nav ? `data-a="nav" data-v="${r.nav}"` : r.open ? `data-a="open" data-t="${r.open[0]}" data-id="${esc(r.open[1])}" data-d="${r.open[2] || ''}"` : ''}>${r.ty ? tyIcon(r.ty, 16) : ic(r.icon || 'alert', 16)}<span class="grow">${esc(r.text)}</span>${r.tag ? `<span class="ftag">${esc(r.tag)}</span>` : ''}</div>`;
   const code = wd ? (night || WX.code === null ? wd.code : WX.code) : null;
@@ -2340,7 +2340,7 @@ function qGuess(x) { if (x.kind !== 'question' || x._typeSet) return; const t = 
 const qAsked = m => { const a = list(m.tags).filter(n => ADULTS.includes(n) && n !== m.from); return a.length ? a : ADULTS.filter(n => n !== m.from); };
 // A shared question (the assistant's "should this be an annual tradition?") has ONE answer for everyone it asks: whoever answers
 // last decides, and anyone can switch it, like a toggle.
-const qShared = m => /^tradition/.test(m.ref || '');
+const qShared = m => /^(tradition|again)/.test(m.ref || '');
 const qAnswers = m => { const o = {}; S.Comments.filter(c => c.table === 'Messages' && c.ref === m.id && c.system === 'answer').sort((a, b) => (a.time || '').localeCompare(b.time || '')).forEach(c => { o[c.who] = c; });
   if (qShared(m)) { const last = Object.values(o).sort((a, b) => (a.time || '').localeCompare(b.time || '')).pop(); if (last) qAsked(m).forEach(n => { o[n] = last; }); }
   return o; };
