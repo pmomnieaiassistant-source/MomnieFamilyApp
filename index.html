@@ -416,7 +416,7 @@ a.alink { color: inherit; text-decoration: underline; text-decoration-color: col
 // Momnie Family app v6.0
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'], DAYN = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'], ADULTS = ['Paul', 'Shana'];
 // Shown at the bottom of Home. Bump it together with VERSION in sw.js on every release.
-const APP_VERSION = '16.15 · Nov 19, 2026';
+const APP_VERSION = '16.16 · Nov 19, 2026';
 const TABLES = ['People', 'Schools', 'SchoolCal', 'Activities', 'Overrides', 'Events', 'Caretakers', 'Childcare', 'Birthdays', 'Annuals', 'Todos', 'TodoTypes', 'Recipes', 'DinnerRules', 'Weeks', 'Menus',
   'Groceries', 'GroceryList', 'HouseCards', 'Houses', 'WeatherRules', 'Quotes', 'Memories', 'Updates', 'Messages', 'Activity', 'Comments', 'Reactions', 'Links', 'Settings', 'Photos', 'gifts', 'ai_rules', 'ai_requests', 'notes', 'places', 'daily_items', 'daily_completions'];
 const CAT = { School: '#3f6fb5', Kids: '#4f7cc2', Work: '#64748b', Family: '#5b6fa8', Dinner: '#b08a4f', Caretaker: '#3e9aa6', Shared: '#94a3b8', Birthday: '#c9806a' }, SCHOOL_C = ['#5a72b8', '#7a8597', '#4a6fb0'];
@@ -881,9 +881,9 @@ function alerts() {
   [TODAY].concat(late ? [tm] : []).forEach(d => schoolRuns(d).forEach(r => { if (r.who || (d === TODAY && r.time < nowHM())) return;
     out.push({ lvl: 'red', icon: 'car', text: `${r.name} ${RIDE_WORD[r.kind]} ${fmtT(r.time)}${d === tm ? ' tomorrow' : ''} (${kidNames(r.kids)}): no one set`, sride: `${r.sid}|${d}|${r.kind}` }); }));
   [TODAY, tm, addDays(TODAY, 2)].forEach(d => conflictsFor(d).forEach(c => out.push({ lvl: 'amber', icon: 'alert', text: c.text, open: c.open })));
-  S.Messages.forEach(m => { if (m.kind === 'question') { if (m.from !== ME && qAsked(m).includes(ME) && !qAnswers(m)[ME]) out.push({ lvl: m.urgent === '1' ? 'red' : '', icon: 'question', text: `${m.from} asks: “${titleOf('Messages', m.id)}”`, open: ['Messages', m.id] }); return; }
+  S.Messages.forEach(m => { if (m.kind === 'question') { if (m.from !== ME && m.from !== 'Assistant' && qAsked(m).includes(ME) && !qAnswers(m)[ME]) out.push({ lvl: m.urgent === '1' ? 'red' : '', icon: 'question', text: `${m.from} asks: “${titleOf('Messages', m.id)}”`, open: ['Messages', m.id] }); return; }
     if (m.resolved !== '1' && list(m.tags).includes(ME)) out.push({ lvl: m.urgent === '1' ? 'red' : '', icon: m.urgent === '1' ? 'alert' : 'msg', text: `${m.from}: “${titleOf('Messages', m.id)}”`, open: ['Messages', m.id] }); });
-  S.ai_requests.forEach(q => { if (q.who === ME && q.status === 'question' && q.question) out.push({ lvl: 'amber', icon: 'spark', text: `The assistant asks: ${q.question}`, nav: 'feed' }); });
+  // the assistant's own questions stay in the Feed; this card lists only questions from people
   S.Reactions.forEach(r => { if (r.emoji === '❓' && r.who !== ME && !cmts(r.table, r.ref).some(c => c.who === ME && c.time > r.time)) { const ti = titleOf(r.table, r.ref); if (ti) out.push({ lvl: '', icon: 'question', text: `${r.who} has a question on “${ti}”`, open: [r.table, r.ref] }); } });
   return out;
 }
