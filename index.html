@@ -416,7 +416,7 @@ a.alink { color: inherit; text-decoration: underline; text-decoration-color: col
 // Momnie Family app v6.0
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'], DAYN = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'], ADULTS = ['Paul', 'Shana'];
 // Shown at the bottom of Home. Bump it together with VERSION in sw.js on every release.
-const APP_VERSION = '16.12 · Nov 19, 2026';
+const APP_VERSION = '16.13 · Nov 19, 2026';
 const TABLES = ['People', 'Schools', 'SchoolCal', 'Activities', 'Overrides', 'Events', 'Caretakers', 'Childcare', 'Birthdays', 'Annuals', 'Todos', 'TodoTypes', 'Recipes', 'DinnerRules', 'Weeks', 'Menus',
   'Groceries', 'GroceryList', 'HouseCards', 'Houses', 'WeatherRules', 'Quotes', 'Memories', 'Updates', 'Messages', 'Activity', 'Comments', 'Reactions', 'Links', 'Settings', 'Photos', 'gifts', 'ai_rules', 'ai_requests', 'notes', 'places', 'daily_items', 'daily_completions'];
 const CAT = { School: '#3f6fb5', Kids: '#4f7cc2', Work: '#64748b', Family: '#5b6fa8', Dinner: '#b08a4f', Caretaker: '#3e9aa6', Shared: '#94a3b8', Birthday: '#c9806a' }, SCHOOL_C = ['#5a72b8', '#7a8597', '#4a6fb0'];
@@ -2337,11 +2337,19 @@ function qGuess(x) { if (x.kind !== 'question' || x._typeSet) return; const t = 
   if (/^(are|is|do|does|did|can|could|will|would|should|have|has|was|were|am|shall|want|need)\b/.test(lo)) { x.answerType = 'yesno'; return; }
   x.answerType = 'text'; }
 const qAsked = m => { const a = list(m.tags).filter(n => ADULTS.includes(n) && n !== m.from); return a.length ? a : ADULTS.filter(n => n !== m.from); };
-const qAnswers = m => { const o = {}; S.Comments.filter(c => c.table === 'Messages' && c.ref === m.id && c.system === 'answer').sort((a, b) => (a.time || '').localeCompare(b.time || '')).forEach(c => { o[c.who] = c; }); return o; };
+// A shared question (the assistant's "should this be an annual tradition?") has ONE answer for everyone it asks: whoever answers
+// last decides, and anyone can switch it, like a toggle.
+const qShared = m => /^tradition/.test(m.ref || '');
+const qAnswers = m => { const o = {}; S.Comments.filter(c => c.table === 'Messages' && c.ref === m.id && c.system === 'answer').sort((a, b) => (a.time || '').localeCompare(b.time || '')).forEach(c => { o[c.who] = c; });
+  if (qShared(m)) { const last = Object.values(o).sort((a, b) => (a.time || '').localeCompare(b.time || '')).pop(); if (last) qAsked(m).forEach(n => { o[n] = last; }); }
+  return o; };
 const qShow = (m, v) => m.answerType === 'time' && /^\d{2}:\d{2}$/.test(v) ? fmtT(v) : v;
 const QEDIT = {};
 function qBlock(m) {
   const asked = qAsked(m), ans = qAnswers(m), mineOpen = asked.includes(ME) && (!ans[ME] || QEDIT[m.id]);
+  if (qShared(m)) { const a = asked.map(n => ans[n]).filter(Boolean)[0], cur = a ? a.text : '';
+    return `<div class="aq" style="border-color:var(--line)"><div class="row" style="padding:3px 0;gap:6px"><span class="grow">${a ? 'Marked by ' + esc(a.who) : 'Not answered yet'}</span></div>` +
+      `<div class="actions" style="margin-top:8px">${asked.includes(ME) ? ['Yes', 'No'].map(x => `<button class="btn ${cur === x ? '' : 'gray'} sm" data-a="qAns" data-v="${x}" data-id="${m.id}" aria-pressed="${cur === x}">${cur === x ? ic('check', 14) + ' ' : ''}${x}</button>`).join('') : ''}</div></div>`; }
   const rows = asked.map(n => `<div class="row" style="padding:3px 0;gap:6px"><span class="grow">${esc(n)}</span>${ans[n] ? `<b>${esc(qShow(m, ans[n].text))}</b>${n === ME && !QEDIT[m.id] ? ` <a class="small" data-a="qEdit" data-v="${m.id}">Change</a>` : ''}` : '<span class="muted small">No answer yet</span>'}</div>`).join('');
   let ui = '';
   if (mineOpen) {
@@ -2355,8 +2363,9 @@ function qBlock(m) {
 A.qEdit = id => { QEDIT[id] = 1; refresh(); };
 A.qAns = (v, el) => { const id = el.dataset.id, m = byId('Messages', id); if (!m) return;
   const box = el.closest('.aq'), inp = box && box.querySelector(`[data-qin="${id}"]`), val = (v || (inp ? inp.value : '') || '').trim();
+  if (qShared(m) && (qAnswers(m)[ME] || {}).text === val) return;   // already marked that way
   if (!val) return toast(m.answerType === 'time' ? 'Pick a time first.' : 'Type your answer first.');
-  const ans = qAnswers(m), done = qAsked(m).every(n => n === ME || ans[n]), short = m.text.length > 60 ? m.text.slice(0, 60) + '…' : m.text;
+  const ans = qAnswers(m), done = qShared(m) || qAsked(m).every(n => n === ME || ans[n]), short = m.text.length > 60 ? m.text.slice(0, 60) + '…' : m.text;
   const ops = [{ t: 'Comments', row: { id: nid(), time: stamp(), who: ME, table: 'Messages', ref: id, text: val, system: 'answer' }, log: L('answer', `answered “${short}”: ${qShow(m, val)}`, 'convo', { table: 'Messages', ref: id }) }];
   S.Todos.filter(t => t.source === 'question:' + id && t.assignee === ME && t.status !== 'Done').forEach(t => ops.push({ t: 'Todos', row: { id: t.id, status: 'Done', doneOn: TODAY, doneBy: ME } }));
   if (done && m.resolved !== '1') ops.push({ t: 'Messages', row: { id, resolved: '1', resolvedBy: ME } });
