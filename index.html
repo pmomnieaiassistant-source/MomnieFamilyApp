@@ -416,7 +416,7 @@ a.alink { color: inherit; text-decoration: underline; text-decoration-color: col
 // Momnie Family app v6.0
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'], DAYN = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'], ADULTS = ['Paul', 'Shana'];
 // Shown at the bottom of Home. Bump it together with VERSION in sw.js on every release.
-const APP_VERSION = '16.16 · Nov 19, 2026';
+const APP_VERSION = '16.17 · Nov 19, 2026';
 const TABLES = ['People', 'Schools', 'SchoolCal', 'Activities', 'Overrides', 'Events', 'Caretakers', 'Childcare', 'Birthdays', 'Annuals', 'Todos', 'TodoTypes', 'Recipes', 'DinnerRules', 'Weeks', 'Menus',
   'Groceries', 'GroceryList', 'HouseCards', 'Houses', 'WeatherRules', 'Quotes', 'Memories', 'Updates', 'Messages', 'Activity', 'Comments', 'Reactions', 'Links', 'Settings', 'Photos', 'gifts', 'ai_rules', 'ai_requests', 'notes', 'places', 'daily_items', 'daily_completions'];
 const CAT = { School: '#3f6fb5', Kids: '#4f7cc2', Work: '#64748b', Family: '#5b6fa8', Dinner: '#b08a4f', Caretaker: '#3e9aa6', Shared: '#94a3b8', Birthday: '#c9806a' }, SCHOOL_C = ['#5a72b8', '#7a8597', '#4a6fb0'];
@@ -795,6 +795,20 @@ function annNext(a) {
   for (const yr of [y - 1, y, y + 1]) { const s0 = yr + '-' + f; let e0 = yr + '-' + t; if (e0 < s0) e0 = (yr + 1) + '-' + t;
     if (e0 >= TODAY) return { s: s0, e: e0, now: s0 <= TODAY, days: Math.round((parse(s0) - parse(TODAY)) / 864e5), year: yr }; }
   return null;
+}
+/** Every Planner event that belongs to a tradition: linked to it (Plan it, Make it an annual tradition, the assistant) or with the same name. Oldest first. */
+const annEvents = a => { const ids = new Set(linksOf('Annuals', a.id).filter(l => l[0] === 'Events').map(l => l[1]));
+  return S.Events.filter(e => ids.has(e.id) || norm(e.title) === norm(a.name)).sort((x, y) => x.date.localeCompare(y.date)); };
+/** The tradition card's mini feed: what is planned, then every past year as a card that opens the event (photos, comments, notes). */
+function annHistory(a) {
+  const evs = annEvents(a), end = e => e.endDate && e.endDate > e.date ? e.endDate : e.date, up = evs.filter(e => end(e) >= TODAY), past = evs.filter(e => end(e) < TODAY).reverse(),
+    row = e => { const n = cmts('Events', e.id).filter(c => c.system !== '1').length, ph = photosOf('Events', e.id).length;
+      return acard(`data-a="open" data-t="Events" data-id="${esc(e.id)}"`, esc(e.title), [esc(fmtDate(e.date)) + (e.endDate && e.endDate > e.date ? ' – ' + esc(fmtDate(e.endDate)) : '') + ' ' + e.date.slice(0, 4), e.location ? esc(e.location) : '',
+        [ph ? ph + ' photo' + (ph === 1 ? '' : 's') : '', n ? n + ' comment' + (n === 1 ? '' : 's') : ''].filter(Boolean).join(' · ')], e.date <= TODAY && end(e) >= TODAY ? 'On now' : ''); },
+    covered = new Set(evs.map(e => e.date.slice(0, 4))), bare = list(a.years).filter(y => !covered.has(y) && y < TODAY.slice(0, 4)).sort().reverse();
+  return (up.length ? `<h3>Upcoming</h3>${up.map(row).join('')}` : '') +
+    `<h3>Past events</h3>${past.map(row).join('') || (bare.length ? '' : '<div class="small muted">No past events yet. Open one on the Planner and tap Make it an annual tradition, or plan it here, and each year will collect under this card with its photos and comments.</div>')}` +
+    bare.map(y => `<div class="small muted" style="margin:6px 0 0 4px">${esc(y)} · we went (no event saved)</div>`).join('');
 }
 const annWent = (a, yr) => list(a.years).includes(String(yr));
 const annWin = a => { const f = a.from ? fmtDate(a.from) : '', t = a.to && annMD(a.to) !== annMD(a.from) ? fmtDate(a.to) : ''; return f ? f + (t ? ' – ' + t : '') : ''; };
@@ -1584,7 +1598,7 @@ const CARD = {
     return `<h2>${esc(r.name)}</h2>` + kv('Usually', annWin(r)) + kv('In words', r.when) +
       (w ? kv('Next', w.now ? `On now, until ${fmtDay(w.e)}` : `${fmtDay(w.s)}${w.days <= 120 ? ` · in ${w.days} day${w.days === 1 ? '' : 's'}` : ''}`) : '') + kv('Where', r.where) + kvh('Website', r.link && linkOr(r.link)) +
       kv('We went', ys.length ? ys.join(', ') : 'Not yet') + kv('Remind us', annRemind(r)) + kv('Notes', r.notes) +
-      `<div class="actions"><button class="btn sm" data-a="annPlan">${ic('planner', 16)}Plan it</button><button class="btn gray sm" data-a="annWent">${went ? 'Undo: we went in ' + thisY : 'We went this year'}</button></div>` + std(); },
+      `<div class="actions"><button class="btn sm" data-a="annPlan">${ic('planner', 16)}Plan it</button><button class="btn gray sm" data-a="annWent">${went ? 'Undo: we went in ' + thisY : 'We went this year'}</button></div>` + annHistory(r) + std(); },
   places(r) { return `<h2>${esc(r.name)}</h2>` + kv('Counts as there within', (+r.radius || 200) + ' m') + kvh('Where', r.lat && r.lon ? `<a href="https://maps.google.com/?q=${esc(r.lat)},${esc(r.lon)}" target="_blank" rel="noopener">${esc((+r.lat).toFixed(4) + ', ' + (+r.lon).toFixed(4))} · open in Maps</a>` : 'Not set') + std(); },
   WeatherRules(r) { return `<h2>${esc(r.message || 'Weather rule')}</h2>` + kv('Rule', wxRuleTxt(r)) + kv('Notification', r.push === '1' ? (r.urgent === '1' ? 'Yes, urgent' : 'Yes') : 'No, it shows in the Today card') + kv('On', r.enabled === '0' ? 'Off' : 'On') + std(); },
   gifts(g) { if (!giftSeen(g)) return '<h2>Gift idea</h2><div class="empty">This one is a surprise.</div>'; const own = g.recipient === ME, img = giftPhoto(g, 1200);
@@ -1999,9 +2013,10 @@ function traditionFrom(t, r) {
 A.mkTradition = (v, el) => { const c = ctx(el), r = c.t === 'GCal' ? CAL.find(x => x.id === c.id) : byId(c.t, c.id); if (!r) return;
   const x = traditionFrom(c.t, r); if (!x.name || !x.from) return toast('This one has no name or date to keep');
   const yr = x.from.slice(0, 4), went = x.from <= TODAY ? yr : '', have = S.Annuals.find(a => norm(a.name) === norm(x.name));
-  if (have) { if (went && !list(have.years).includes(yr)) write({ t: 'Annuals', row: { id: have.id, years: list(have.years).concat(yr).sort().join(', ') } });
+  if (have) { const ops = []; if (went && !list(have.years).includes(yr)) ops.push({ t: 'Annuals', row: { id: have.id, years: list(have.years).concat(yr).sort().join(', ') } });
+    if (c.t === 'Events' && !linksOf('Annuals', have.id).some(l => l[1] === c.id)) ops.push({ t: 'Links', row: { id: nid(), aTable: 'Annuals', aRef: have.id, bTable: 'Events', bRef: c.id } }); if (ops.length) write(ops);
     toast(`"${have.name}" is already an annual tradition${went ? ' · added ' + yr : ''}`); return openCard('Annuals', have.id); }
-  const id = nid(); write({ t: 'Annuals', row: Object.assign({ id, remind: '', years: went }, x) });
+  const id = nid(); write([{ t: 'Annuals', row: Object.assign({ id, remind: '', years: went }, x) }].concat(c.t === 'Events' ? [{ t: 'Links', row: { id: nid(), aTable: 'Annuals', aRef: id, bTable: 'Events', bRef: c.id } }] : []));
   toast(`Added to annual traditions · ${annWin(x)}`); openCard('Annuals', id); };
 A.toEvent = (v, el) => { const r = byId('Todos', ctx(el).id); editForm('Events', null, { title: r.title, category: r.kid ? 'Kids' : 'Family', people: r.kid, _todoDone: r.id, _link: ['Todos', r.id] }); };
 A.careAsk = (k, el) => { const c = byId('Childcare', ctx(el).id); let asks = {}; try { asks = JSON.parse(c.asks || '{}'); } catch (e) {} if (!asks[k] && c.confirmedId !== k) { asks[k] = 'asked'; setTimeout(() => write({ t: 'Childcare', row: { id: c.id, asks: JSON.stringify(asks) } }), 400); } };
