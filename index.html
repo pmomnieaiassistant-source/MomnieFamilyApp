@@ -376,6 +376,8 @@
   .fchip { display:flex; align-items:center; gap:8px; width:100%; border:1px solid var(--line); background:var(--soft); color:var(--text); font:inherit; font-size:14px; font-weight:600; text-align:left; padding:10px 12px; border-radius:var(--r-panel, 12px); margin-top:6px; }
   .fchip .grow { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; } .fchip .ic { color:var(--accent); flex:0 0 auto; }
   .phprev { display:block; width:100%; height:70vh; border:0; border-radius:16px; margin:10px 0; background:var(--soft); }
+  .phcover { display:block; width:calc(100% + 32px); margin:-14px -16px 10px; height:130px; max-width:none; object-fit:cover; border-radius:inherit; border-bottom-left-radius:0; border-bottom-right-radius:0; background:var(--soft); }
+  .hcard:has(.phcover) { overflow:hidden; }
   .phpost { display:block; width:100%; max-height:420px; object-fit:cover; border-radius:16px; margin-top:8px; background:var(--soft); }
   #view input, #view select, #view textarea { background:var(--card); border:1px solid var(--line); }
   .av i[data-p="App"] { background:var(--accsoft); color:var(--accent); }
@@ -416,7 +418,7 @@ a.alink { color: inherit; text-decoration: underline; text-decoration-color: col
 // Momnie Family app v6.0
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'], DAYN = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'], ADULTS = ['Paul', 'Shana'];
 // Shown at the bottom of Home. Bump it together with VERSION in sw.js on every release.
-const APP_VERSION = '16.17 · Nov 19, 2026';
+const APP_VERSION = '16.18 · Nov 19, 2026';
 const TABLES = ['People', 'Schools', 'SchoolCal', 'Activities', 'Overrides', 'Events', 'Caretakers', 'Childcare', 'Birthdays', 'Annuals', 'Todos', 'TodoTypes', 'Recipes', 'DinnerRules', 'Weeks', 'Menus',
   'Groceries', 'GroceryList', 'HouseCards', 'Houses', 'WeatherRules', 'Quotes', 'Memories', 'Updates', 'Messages', 'Activity', 'Comments', 'Reactions', 'Links', 'Settings', 'Photos', 'gifts', 'ai_rules', 'ai_requests', 'notes', 'places', 'daily_items', 'daily_completions'];
 const CAT = { School: '#3f6fb5', Kids: '#4f7cc2', Work: '#64748b', Family: '#5b6fa8', Dinner: '#b08a4f', Caretaker: '#3e9aa6', Shared: '#94a3b8', Birthday: '#c9806a' }, SCHOOL_C = ['#5a72b8', '#7a8597', '#4a6fb0'];
@@ -802,9 +804,10 @@ const annEvents = a => { const ids = new Set(linksOf('Annuals', a.id).filter(l =
 /** The tradition card's mini feed: what is planned, then every past year as a card that opens the event (photos, comments, notes). */
 function annHistory(a) {
   const evs = annEvents(a), end = e => e.endDate && e.endDate > e.date ? e.endDate : e.date, up = evs.filter(e => end(e) >= TODAY), past = evs.filter(e => end(e) < TODAY).reverse(),
-    row = e => { const n = cmts('Events', e.id).filter(c => c.system !== '1').length, ph = photosOf('Events', e.id).length;
+    row = e => { const n = cmts('Events', e.id).filter(c => c.system !== '1').length, phs = photosOf('Events', e.id), ph = phs.length,
+        cover = ph ? `<img class="phcover" src="${esc(photoSrc(phs[0].fileId, 800))}" alt="" loading="lazy">` : '';   // the event's first photo is its cover
       return acard(`data-a="open" data-t="Events" data-id="${esc(e.id)}"`, esc(e.title), [esc(fmtDate(e.date)) + (e.endDate && e.endDate > e.date ? ' – ' + esc(fmtDate(e.endDate)) : '') + ' ' + e.date.slice(0, 4), e.location ? esc(e.location) : '',
-        [ph ? ph + ' photo' + (ph === 1 ? '' : 's') : '', n ? n + ' comment' + (n === 1 ? '' : 's') : ''].filter(Boolean).join(' · ')], e.date <= TODAY && end(e) >= TODAY ? 'On now' : ''); },
+        [ph ? ph + ' photo' + (ph === 1 ? '' : 's') : '', n ? n + ' comment' + (n === 1 ? '' : 's') : ''].filter(Boolean).join(' · ')], e.date <= TODAY && end(e) >= TODAY ? 'On now' : '').replace('><div class="row"', '>' + cover + '<div class="row"'); },
     covered = new Set(evs.map(e => e.date.slice(0, 4))), bare = list(a.years).filter(y => !covered.has(y) && y < TODAY.slice(0, 4)).sort().reverse();
   return (up.length ? `<h3>Upcoming</h3>${up.map(row).join('')}` : '') +
     `<h3>Past events</h3>${past.map(row).join('') || (bare.length ? '' : '<div class="small muted">No past events yet. Open one on the Planner and tap Make it an annual tradition, or plan it here, and each year will collect under this card with its photos and comments.</div>')}` +
