@@ -297,7 +297,7 @@
   .pwk { display:flex; align-items:center; justify-content:space-between; margin:12px 12px 4px; text-align:center; }
   .pdaybox.today { border-color:var(--accent); } .pdaybox.past { opacity:.6; }
   .pgifts .rbar { margin-right:0 !important; }
-  .rchg { color:var(--accent); font-weight:700; } .av.aiav { background:var(--accsoft); color:var(--accent); display:inline-flex; align-items:center; justify-content:center; } .irow.ihead span { font-size:12px; font-weight:700; color:var(--muted); text-transform:uppercase; letter-spacing:.4px; padding:0 4px; } .prow[data-a] { cursor:pointer; }
+  .rchg { color:var(--accent); font-weight:700; } .av.aiav i { background:var(--accsoft); color:var(--accent); }   /* a circle like the people and schools have */ .irow.ihead span { font-size:12px; font-weight:700; color:var(--muted); text-transform:uppercase; letter-spacing:.4px; padding:0 4px; } .prow[data-a] { cursor:pointer; }
   .wseg { display:inline-flex; margin-top:5px; padding:3px; gap:3px; border-radius:10px; background:var(--soft); }
   .wseg button { border:0; background:none; font:inherit; font-size:13px; font-weight:700; color:var(--muted); padding:5px 12px; border-radius:8px; display:inline-flex; align-items:center; gap:4px; }
   .wseg button.on { background:var(--card); color:var(--accent); box-shadow:0 1px 3px rgba(0,0,0,.12); } .small.wfh { color:var(--accent); font-weight:600; }
@@ -416,7 +416,7 @@ a.alink { color: inherit; text-decoration: underline; text-decoration-color: col
 // Momnie Family app v6.0
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'], DAYN = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'], ADULTS = ['Paul', 'Shana'];
 // Shown at the bottom of Home. Bump it together with VERSION in sw.js on every release.
-const APP_VERSION = '16.13 · Nov 19, 2026';
+const APP_VERSION = '16.14 · Nov 19, 2026';
 const TABLES = ['People', 'Schools', 'SchoolCal', 'Activities', 'Overrides', 'Events', 'Caretakers', 'Childcare', 'Birthdays', 'Annuals', 'Todos', 'TodoTypes', 'Recipes', 'DinnerRules', 'Weeks', 'Menus',
   'Groceries', 'GroceryList', 'HouseCards', 'Houses', 'WeatherRules', 'Quotes', 'Memories', 'Updates', 'Messages', 'Activity', 'Comments', 'Reactions', 'Links', 'Settings', 'Photos', 'gifts', 'ai_rules', 'ai_requests', 'notes', 'places', 'daily_items', 'daily_completions'];
 const CAT = { School: '#3f6fb5', Kids: '#4f7cc2', Work: '#64748b', Family: '#5b6fa8', Dinner: '#b08a4f', Caretaker: '#3e9aa6', Shared: '#94a3b8', Birthday: '#c9806a' }, SCHOOL_C = ['#5a72b8', '#7a8597', '#4a6fb0'];
@@ -586,8 +586,9 @@ const taggedMe = (text, who) => who !== ME && mentionsIn(text).includes(ME);
 const personMentions = (name, n) => S.Messages.filter(m => list(m.tags).includes(name) || mentionsIn(m.text).includes(name)).map(m => ({ time: m.time, who: m.from, text: m.text, open: ['Messages', m.id], kind: 'message' }))
   .concat(S.Comments.filter(c => c.system !== '1' && c.table !== 'gifts' && mentionsIn(c.text).includes(name)).map(c => ({ time: c.time, who: c.who, text: c.text, open: [c.table, c.ref], kind: 'comment' })))
   .sort((a, b) => String(b.time || '').localeCompare(String(a.time || ''))).slice(0, n || 10);
+const aiAv = () => `<span class="av aiav"><i>${ic('spark', 18)}</i></span>`;
 const avatar = who => who === 'App' ? `<span class="av"><i data-p="App">${ic('home', 16)}</i></span>`
-  : who === 'Assistant' ? `<span class="av aiav">${ic('spark', 18)}</span>`
+  : who === 'Assistant' ? aiAv()
   : `<span class="av ${seenCls(who)}" ${ADULTS.includes(who) ? `data-seen="${esc(who)}"` : ''} ${personOf(who) ? `data-a="person" data-v="${esc(who)}"` : ''} style="background:${pcol(who)}"><i style="background:color-mix(in srgb, ${pcol(who)} 22%, var(--card));color:${pcol(who)}">${esc((who || '?').charAt(0))}</i></span>`;
 const whoDots = names => names.length ? `<span class="who">${names.map(n => `<i style="--pc:${pcol(n)}" title="${esc(n)}">${esc(n.slice(0, 2))}</i>`).join('')}</span>` : '';
 // Recipe ingredients are stored as "name (amount unit)", e.g. "chicken breast (1 lb)", so the Sheet and backend keep working.
@@ -2506,7 +2507,7 @@ function actPost(a) {
     if (p) return `<div class="post" data-a="photoView" data-v="${p.id}">${avatar(a.who)}<div class="pbody"><div><b>${esc(a.who)}</b> added a photo${ti ? ` to <b>${esc(ti)}</b>` : ''} <span class="muted">· ${ago(a.time)}</span></div>
       <img class="phpost" src="${esc(photoSrc(p.fileId, 1200))}" alt="" loading="lazy">${postFoot(p.table, p.ref, '')}</div></div>`; }
   if (a.type === 'ai') { const aud = aiNoteFor(a), rule = String(a.ref || '').startsWith('rule:') ? byId('ai_rules', a.ref.slice(5)) : null;
-    return `<div class="post"><span class="av aiav">${ic('spark', 18)}</span><div class="pbody"><div><b>Assistant</b> <span class="muted">· ${ago(a.time)}</span>${aud.length === 1 ? ' <span class="chip">Just for you</span>' : ''}</div>${rule ? `<div class="small muted" data-a="aiRuleEdit" data-v="${rule.id}" style="cursor:pointer">${ic('spark', 12)} Your rule: ${esc(rule.text.length > 70 ? rule.text.slice(0, 70) + '…' : rule.text)}</div>` : ''}<div class="ptext" style="font-weight:400">${aiCardText(a)}</div></div></div>`; }
+    return `<div class="post">${aiAv()}<div class="pbody"><div><b>Assistant</b> <span class="muted">· ${ago(a.time)}</span>${aud.length === 1 ? ' <span class="chip">Just for you</span>' : ''}</div>${rule ? `<div class="small muted" data-a="aiRuleEdit" data-v="${rule.id}" style="cursor:pointer">${ic('spark', 12)} Your rule: ${esc(rule.text.length > 70 ? rule.text.slice(0, 70) + '…' : rule.text)}</div>` : ''}<div class="ptext" style="font-weight:400">${aiCardText(a)}</div></div></div>`; }
   if (a.type === 'daily') return `<div class="post">${avatar('App')}<div class="pbody"><div><b>Today's memory</b> <span class="muted">· ${fmtDay(a.time)}</span></div><div class="ptext" style="font-weight:400">${dailyHTML(a)}</div></div></div>`;
   if (a.type.startsWith('summary')) { let extra = ''; if (a.type === 'summary_week' && a.ref) { const c = []; for (let i = 0; i < 7; i++) c.push(...conflictsFor(addDays(a.ref, i))); if (c.length) extra = '<div class="lbl">Conflicts to sort out</div>' + c.map(x => `<div class="alert amber" data-a="open" data-t="${x.open[0]}" data-id="${esc(x.open[1])}" data-d="${x.open[2]}">${esc(x.text)}</div>`).join(''); }
     return `<div class="post">${avatar('App')}<div class="pbody"><div><b>${a.type === 'summary_week' ? 'The week ahead' : 'This month'}</b> <span class="muted">· ${ago(a.time)}</span></div><div class="ptext" style="font-weight:400;white-space:normal">${md(stripEmo(a.text))}${extra}</div></div></div>`; }
