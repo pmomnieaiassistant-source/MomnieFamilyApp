@@ -1,6 +1,7 @@
 /**
  * Momnie Family app backend
- * Version 3.45 (2026-11-20)
+ * Version 3.46 (2026-11-20)
+ *   3.46: A tradition collects its events (links); the assistant links the event when a tradition is made or planned, and does not ask "again this year?" when it is already on the Planner.
  *   3.45: Annual traditions are no longer shown daily; shortly before one starts the assistant asks "Are we doing it again?" (shared Yes/No); Yes puts it on the Planner.
  *   3.44: The assistant can ask "Should this be an annual tradition?" about an event (yes/no question in the Feed); a Yes adds the tradition and posts a note. Messages gets a ref column.
  *   3.43: The assistant no longer sees gift-idea counts at all.
@@ -1314,7 +1315,9 @@ function aiAgain_(t, ask) {
     if (!/^\s*yes/i.test(ans.text) || !a) { put_('Messages', { id: m.id, ref: 'again-no|' + mt[1] + '|' + mt[2] + '|' + mt[3] }); return; }
     var w = annualNext_(a, t, mt[2]);
     var have = rows_('Events').filter(function (e) { return norm_(e.title) === norm_(a.name) && e.date === w.s; })[0];
-    if (!have) put_('Events', { id: id_(), title: a.name, date: w.s, endDate: w.e > w.s ? w.e : '', allDay: '1', category: 'Family', location: a.where || '', notes: [a.notes, a.link].filter(Boolean).join('\n') });
+    var evId = have ? have.id : id_();
+    if (!have) put_('Events', { id: evId, title: a.name, date: w.s, endDate: w.e > w.s ? w.e : '', allDay: '1', category: 'Family', location: a.where || '', notes: [a.notes, a.link].filter(Boolean).join('\n') });
+    put_('Links', { id: id_(), aTable: 'Annuals', aRef: a.id, bTable: 'Events', bRef: evId, by: 'Assistant' });
     put_('Messages', { id: m.id, ref: 'again-yes|' + mt[1] + '|' + mt[2] + '|' + mt[3] });
     log_('Assistant', { type: 'ai', text: 'Put **' + a.name + '** on the Planner for ' + nice_(w.s) + (w.e > w.s ? ' to ' + nice_(w.e) : '') + '.', cat: 'ai', table: 'Annuals', ref: a.id, audience: who.join(', ') });
     made.push(a.name);
@@ -1325,6 +1328,9 @@ function aiAgain_(t, ask) {
     if (open >= 3 || !a.from || !/^\d\d-\d\d$/.test(a.from.slice(5, 10))) return;
     var w = annualNext_(a, t), lead = Number(a.remind) || 14;
     if (w.days < 0 || w.days > lead || list_(a.years).indexOf(String(w.year)) >= 0) return;
+    var linked = {}; rows_('Links').forEach(function (l) { if (l.aTable === 'Annuals' && l.aRef === a.id && l.bTable === 'Events') linked[l.bRef] = 1; });
+    var planned = rows_('Events').some(function (e) { return (linked[e.id] || norm_(e.title) === norm_(a.name)) && e.date >= t && e.date <= addDays_(w.s, 45); });
+    if (planned) return;   // already on the Planner this year: nothing to ask
     var seen = rows_('Messages').some(function (m) { var x = /^again[^|]*\|([^|]*)\|(\d{4})\|/.exec(m.ref || ''); return x && x[1] === a.id && x[2] === String(w.year); });
     if (seen) return;
     put_('Messages', { id: id_(), time: now_(), from: 'Assistant', tags: who.join(', '), visibility: '', kind: 'question', answerType: 'yesno', ref: 'again|' + a.id + '|' + w.year + '|' + String(a.name).replace(/\|/g, ' '),
@@ -1357,6 +1363,7 @@ function aiTrad_(t, ask) {
       put_('Annuals', { id: id, name: title, from: from, to: e.endDate && e.endDate > from ? e.endDate : '', where: e.location || '', notes: e.notes || '', remind: '14', years: from <= t ? yr : '', when: '', link: '' });
       annuals.push({ id: id, name: title });
     }
+    if (e.id) put_('Links', { id: id_(), aTable: 'Annuals', aRef: id, bTable: 'Events', bRef: e.id, by: 'Assistant' });   // the event is this tradition's upcoming (or past) year
     put_('Messages', { id: m.id, ref: 'tradition-yes|' + mt[1] + '|' + title });
     log_('Assistant', { type: 'ai', text: (have ? '"' + title + '" is already an annual tradition.' : 'Created a new annual tradition: **' + title + '**' + (e.date ? ' (usually ' + nice_(e.date) + ')' : '') + '. You will get a reminder two weeks before it starts. Find it under Home, Annual traditions.'), cat: 'ai', table: 'Annuals', ref: id, audience: who.join(', ') });
     made.push(title);
