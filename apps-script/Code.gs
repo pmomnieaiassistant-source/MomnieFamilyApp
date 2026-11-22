@@ -1,6 +1,7 @@
 /**
  * Momnie Family app backend
- * Version 3.49 (2026-11-22)
+ * Version 3.50 (2026-11-22)
+ *   3.50: Proposed events (Events: proposal, proposedBy, proposedTo, counter).
  *   3.49: Weather rules can be limited to school days; the rain gear rule now only fires on school nights.
  *   3.48: Lists (checklist posts, Lists tab).
  *   3.47: One-day work changes (late, different hours, day off) from the app's Work schedule page are used in the Today cards.
@@ -102,7 +103,7 @@ var T = {
   SchoolCal: 'id,schoolId,date,endDate,title,kind,start,end,notes',
   Activities: 'id,name,kids,days,start,end,from,until,location,teacher,dropoff,pickup,house,notes,gcalId',
   Overrides: 'id,ref,date,dropoff,pickup,cancelled',
-  Events: 'id,title,date,endDate,allDay,start,end,category,people,house,location,dropoff,pickup,notes,gcal,gcalId,createdBy',
+  Events: 'id,title,date,endDate,allDay,start,end,category,people,house,location,dropoff,pickup,notes,gcal,gcalId,createdBy,proposal,proposedBy,proposedTo,counter',   // proposal 'pending': proposed by one parent, waiting for the other to accept or suggest another time
   Caretakers: 'id,name,relationship,phone,roster,birthday,drive,rate,unpaid,notes,pay,payDay,weekly',
   Childcare: 'id,date,start,end,task,place,kids,roster,notes,asks,confirmedId,payTodoId,paidAmount,paidOn,createdBy',
   Birthdays: 'id,name,date,notes',
@@ -406,9 +407,9 @@ function write_(b, me) {
         ['who', 'addedBy', 'createdBy', 'by', 'added_by', 'created_by', 'completed_by'].forEach(function (k) { if (c.indexOf(k) >= 0 && !row[k]) row[k] = me; });
         if (op.t === 'Messages' && !row.from) row.from = me;
       }
-      if (op.t === 'Events') row.gcal = '1';   // every app event is copied to the shared calendar
+      if (op.t === 'Events') row.gcal = row.proposal === 'pending' ? '' : '1';   // every app event is copied to the shared calendar, once it is not just a proposal
       r = put_(op.t, row);
-      if (op.t === 'Events') gcalSafe_(function () { gcalSync_(r); });
+      if (op.t === 'Events' && r.proposal !== 'pending') gcalSafe_(function () { gcalSync_(r); });
       if (op.t === 'Activities') gcalSafe_(function () { if (op.adopt) actAdopt_(r, String(op.adopt)); else actSync_(r); });
       if (op.adopt) calDrop_();
       if (op.t === 'Overrides' && row.cancelled !== undefined) { var act = get_('Activities', r.ref); if (act) gcalSafe_(function () { actSync_(act); }); }
