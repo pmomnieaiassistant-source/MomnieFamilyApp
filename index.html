@@ -419,7 +419,7 @@ a.alink { color: inherit; text-decoration: underline; text-decoration-color: col
 // Momnie Family app v6.0
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'], DAYN = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'], ADULTS = ['Paul', 'Shana'];
 // Shown at the bottom of Home. Bump it together with VERSION in sw.js on every release.
-const APP_VERSION = '16.22 · Nov 19, 2026';
+const APP_VERSION = '16.23 · Nov 19, 2026';
 const TABLES = ['People', 'Schools', 'SchoolCal', 'Activities', 'Overrides', 'Events', 'Caretakers', 'Childcare', 'Birthdays', 'Annuals', 'Lists', 'Todos', 'TodoTypes', 'Recipes', 'DinnerRules', 'Weeks', 'Menus',
   'Groceries', 'GroceryList', 'HouseCards', 'Houses', 'WeatherRules', 'Quotes', 'Memories', 'Updates', 'Messages', 'Activity', 'Comments', 'Reactions', 'Links', 'Settings', 'Photos', 'gifts', 'ai_rules', 'ai_requests', 'notes', 'places', 'daily_items', 'daily_completions'];
 const CAT = { School: '#3f6fb5', Kids: '#4f7cc2', Work: '#64748b', Family: '#5b6fa8', Dinner: '#b08a4f', Caretaker: '#3e9aa6', Shared: '#94a3b8', Birthday: '#c9806a' }, SCHOOL_C = ['#5a72b8', '#7a8597', '#4a6fb0'];
@@ -849,7 +849,7 @@ function itemsFor(d) {
     const ppl = list(a.kids), kidIn = ppl.some(n => kids().some(k => k.name === n));
     out.push({ t: 'Activities', id: a.id, title: a.name, sub: a.location, start: a.start, end: a.end, color: ppl.length ? pcol(ppl[0]) : CAT.Kids, people: ppl, dropoff: o.dropoff || a.dropoff, pickup: o.pickup || a.pickup, ride: kidIn }); });
   S.Events.forEach(e => { if (!e.date || d < e.date || d > (e.endDate || e.date)) return; const all = e.allDay === '1' || !e.start;
-    out.push({ t: 'Events', id: e.id, title: e.title, sub: e.location, start: all ? '' : e.start, end: all ? '' : e.end, color: list(e.people).length ? pcol(list(e.people)[0]) : CAT[e.category] || CAT.Family, people: list(e.people), dropoff: e.dropoff, pickup: e.pickup, ride: e.category === 'Kids' && !all, cat: e.category }); });
+    out.push({ t: 'Events', id: e.id, title: e.title, sub: e.location, start: all ? '' : e.start, end: all ? '' : e.end, color: list(e.people).length ? pcol(list(e.people)[0]) : CAT[e.category] || CAT.Family, people: list(e.people), dropoff: e.dropoff, pickup: e.pickup, ride: e.category === 'Kids' && !all, cat: e.category, pending: e.proposal === 'pending' ? e : null }); });
   CAL.forEach(c => { if (adopted.has(c.id) || (c.series && adopted.has(c.series))) return; const on = c.allDay ? (c.start <= d && d < c.end) : c.start.slice(0, 10) === d;
     if (on) out.push({ t: 'GCal', id: c.id, title: c.title, sub: c.location, start: c.allDay ? '' : c.start.slice(11), end: c.allDay ? '' : c.end.slice(11), color: CAT.Shared, people: [], src: 'gcal' }); });
   allBirthdays().forEach(b => { if (b.md === d.slice(5)) { const a = ageOn(b, d); out.push({ t: b.t, id: b.id, icon: 'cake', title: b.name + "'s birthday" + (a !== null && a > 0 ? ' (' + a + ')' : ''), start: '', color: CAT.Birthday, people: [], src: 'birthday' }); } });
@@ -891,7 +891,7 @@ function wxHits(dayIdx, when) {
 }
 /** "Needs attention" list for the Today section. */
 function alerts() {
-  const out = [], tm = addDays(TODAY, 1), late = new Date().getHours() >= 19;
+  const out = propAlerts(), tm = addDays(TODAY, 1), late = new Date().getHours() >= 19;
   [TODAY].concat(late ? [tm] : []).forEach(d => itemsFor(d).forEach(i => {
     if (i.ride && (!i.dropoff || !i.pickup) && !(d === TODAY && (i.end || i.start) < nowHM()))
       out.push({ lvl: 'red', icon: 'car', text: `${kidNames(i.people) || 'Kids'}, ${i.title} ${fmtT(i.start)}${d === tm ? ' tomorrow' : ''}: ${!i.dropoff && !i.pickup ? 'drop-off and pickup' : !i.dropoff ? 'drop-off' : 'pickup'} not set`, open: [i.t, i.id, d] });
@@ -1336,7 +1336,7 @@ const FORMS = {
     F('endDate', 'Last day (only if it runs several days)', 'date', null, { show: x => x.allDay === '1' }), F('start', 'Starts', 'time', null, { show: x => x.allDay !== '1' }), F('end', 'Ends', 'time', null, { show: x => x.allDay !== '1', dur: 'start' }),
     F('people', 'Who is involved', 'multi', S.People.map(p => p.name)), F('location', 'Where'), F('house', 'House', 'sel', HOUSE_O),
     F('dropoff', 'Drop-off', 'sel', rideO, { show: x => x.category === 'Kids' && x.allDay !== '1' }), F('pickup', 'Pickup', 'sel', rideO, { show: x => x.category === 'Kids' && x.allDay !== '1' }),
-    F('notes', 'Notes', 'area')],
+    F('notes', 'Notes', 'area'), F('_propose', 'Ask the other parent to confirm first', 'chk', null, { show: x => !x.id && ADULTS.length > 1, hint: 'It shows as proposed until they accept it or suggest another time.' })],
   Activities: [F('name', 'Activity', 'text', null, { ph: 'e.g. Hockey' }), F('kids', 'Who (kids or parents)', 'multi', () => S.People.map(p => p.name)),
     F('_slots', 'Days and times', 'rows', null, { add: 'Add another day', hint: 'Each day can have its own time, e.g. Sat 11–12 and Sun 12–1.', init: x => list(x.days).length ? list(x.days).map(dd => ({ day: dd, start: x.start || '', end: x.end || '' })) : [{ day: 'Mon' }],
       cols: [{ c: 'day', t: 'sel', o: DAYS, cls: 'u' }, { c: 'start', t: 'time', cls: 'n' }, { c: 'end', t: 'time', cls: 'n' }] }),
@@ -1470,10 +1470,12 @@ const SAVE = {
   async Events(v) {
     need(v.title && v.title.trim(), 'Give it a name.'); need(v.date, 'Pick a date.'); if (v.allDay !== '1') need(v.start, 'Pick a start time, or mark it all day.');
     const isNew = !v.id, row = Object.assign({}, v, { id: v.id || nid() }), ops = [];
+    if (isNew && v._propose === '1') { const other = ADULTS.find(n => n !== ME); Object.assign(row, { proposal: 'pending', proposedBy: ME, proposedTo: other || '' }); }
+    delete row._propose;
     if (v.category === 'Kids') { const dc = driveCheck([v.dropoff, v.pickup].filter(Boolean)); if (!dc) return false; ops.push(...dc); }
     if (isNew && !v.gcalId && !(ASSIST && ASSIST.quiet)) { const k = norm(v.title), dup = itemsFor(v.date).find(i => ['GCal', 'Events', 'SchoolCal'].includes(i.t) && (norm(i.title) === k || norm(i.title).includes(k) || k.includes(norm(i.title))));
       if (dup && confirm(`This looks like a duplicate of “${dup.title}”. Merge them into one card?`)) { if (dup.t === 'GCal') row.gcalId = dup.id; else { openCard(dup.t, dup.id, v.date); return; } } }
-    ops.push({ t: 'Events', row, adopt: isNew && row.gcalId ? row.gcalId : undefined, log: L(isNew ? 'event_add' : 'event_edit', `${isNew ? (row.gcalId ? 'imported from the calendar' : 'added plans') : 'updated'}: ${v.title} (${fmtDay(v.date)}${v.allDay !== '1' && v.start ? ', ' + fmtT(v.start) : ''})`, 'planner') });
+    ops.push({ t: 'Events', row, adopt: isNew && row.gcalId ? row.gcalId : undefined, log: L(isNew ? 'event_add' : 'event_edit', `${isNew ? (row.proposal === 'pending' ? 'proposed to ' + row.proposedTo : row.gcalId ? 'imported from the calendar' : 'added plans') : 'updated'}: ${v.title} (${fmtDay(v.date)}${v.allDay !== '1' && v.start ? ', ' + fmtT(v.start) : ''})`, 'planner') });
     if (v._link) ops.push({ t: 'Links', row: { id: nid(), aTable: v._link[0], aRef: v._link[1], bTable: 'Events', bRef: row.id } }, sys(v._link[0], v._link[1], `added a Planner event and linked this ${NAMES[v._link[0]] || 'card'}`));
     if (v._todoDone) ops.push({ t: 'Todos', row: { id: v._todoDone, status: 'Done', doneOn: TODAY, doneBy: ME } });
     ops.push(...dinnerAwayOps(row));
@@ -1604,6 +1606,21 @@ A.del = async (v, el) => {
 const kv = (l, v) => v ? `<div class="kv"><span>${esc(l)}</span>${esc(v)}</div>` : '';
 const kvh = (l, h) => h ? `<div class="kv"><span>${esc(l)}</span>${h}</div>` : '';
 const linkOr = s => isUrl(s) ? `<a href="${esc(s)}" target="_blank" rel="noopener">${esc(s)}</a>` : esc(s);
+// ----- Proposed events: one parent proposes, the other accepts or suggests another time -----
+const propBlock = r => { if (r.proposal !== 'pending') return ''; const mine = r.proposedTo === ME, from = r.proposedBy;
+  return `<div class="alert amber" style="margin-top:10px"><b>${mine ? esc(from) + ' proposed this' : 'Waiting for ' + esc(r.proposedTo) + ' to confirm'}</b>${r.counter ? `<div class="small" style="margin-top:2px">${esc(r.counter)}</div>` : ''}${mine ? `<div class="actions" style="margin-top:8px"><button class="btn sm" data-a="propAccept">${ic('check', 16)}Accept</button><button class="btn gray sm" data-a="propCounter">Suggest another time</button><button class="btn gray sm" data-a="propDecline">Decline</button></div>` : '<div class="small muted" style="margin-top:4px">It stays on the Planner as proposed until they answer.</div>'}</div>`; };
+A.propAccept = (v, el) => { const r = byId('Events', ctx(el).id); if (!r || r.proposal !== 'pending') return;
+  write({ t: 'Events', row: { id: r.id, proposal: '', counter: '' }, log: L('event_edit', `accepted ${r.proposedBy}'s plan: ${r.title} (${fmtDay(r.date)}${r.allDay !== '1' && r.start ? ', ' + fmtT(r.start) : ''})`, 'planner', { table: 'Events', ref: r.id }) }, { notify: 'on' }); toast('Accepted'); };
+A.propDecline = (v, el) => { const r = byId('Events', ctx(el).id); if (!r || !confirm(`Decline “${r.title}”? It comes off the Planner.`)) return;
+  write([{ t: 'Events', del: r.id, log: L('event_edit', `declined ${r.proposedBy}'s plan: ${r.title} (${fmtDay(r.date)})`, 'planner') }], { notify: 'on' }).then(() => A.close(v, el)); };
+A.propCounter = (v, el) => { const r = byId('Events', ctx(el).id); if (!r) return; const all = r.allDay === '1' || !r.start;
+  form('Suggest another time', [F('date', 'Date', 'date'), F('start', 'Starts', 'time', null, { show: () => !all }), F('end', 'Ends', 'time', null, { show: () => !all, dur: 'start' }), F('counter', 'Say why (optional)', 'text', null, { ph: 'e.g. I have a work dinner that night' })],
+    { date: r.date, start: r.start || '', end: r.end || '', counter: '' },
+    x => { need(x.date, 'Pick a date.'); if (!all) need(x.start, 'Pick a start time.'); const was = `${fmtDay(r.date)}${all ? '' : ' ' + fmtT(r.start)}`, now = `${fmtDay(x.date)}${all ? '' : ' ' + fmtT(x.start)}`;
+      return write({ t: 'Events', row: { id: r.id, date: x.date, endDate: r.endDate && r.endDate >= r.date ? addDays(x.date, Math.round((parse(r.endDate) - parse(r.date)) / 864e5)) : '', start: all ? '' : x.start, end: all ? '' : x.end || '', proposal: 'pending', proposedBy: ME, proposedTo: r.proposedBy,
+        counter: `${ME} suggests ${now} instead of ${was}${x.counter ? ': ' + x.counter : ''}` }, log: L('event_edit', `suggested another time for ${r.title}: ${now} (was ${was})`, 'planner', { table: 'Events', ref: r.id }) }, { notify: 'on' }); }); };
+// Today card: a proposal waiting on me
+const propAlerts = () => S.Events.filter(e => e.proposal === 'pending' && e.proposedTo === ME && (e.endDate || e.date) >= TODAY).map(e => ({ lvl: 'amber', icon: 'planner', text: `${e.proposedBy} proposed ${e.title} on ${fmtDay(e.date)}. Accept or suggest another time.`, open: ['Events', e.id] }));
 const TRAD_BTN = `<button class="btn gray sm" data-a="mkTradition">${ic('sun', 16)}Make it an annual tradition</button>`;
 const std = o => `<div class="actions">${o && o.noEdit ? '' : `<button class="btn gray sm" data-a="edit">${ic('pen')}Edit</button>`}<button class="btn gray sm" data-a="link">${ic('link')}Link</button>${o && o.care ? `<button class="btn gray sm" data-a="careFor">${ic('care')}Add caretaker</button>` : ''}${o && o.ann ? TRAD_BTN : ''}${o && o.noDel ? '' : `<button class="btn danger sm" data-a="del">${ic('trash')}Delete</button>`}</div>`;
 const rideSel = (cls, val) => `<select class="${cls}" data-c="rideAuto">${rideO().map(x => { const [a, b] = Array.isArray(x) ? x : [x, x]; return `<option value="${esc(a)}" ${a === (val || '') ? 'selected' : ''}>${esc(b)}</option>`; }).join('')}</select>`;
@@ -1645,7 +1662,7 @@ const CARD = {
       `<div class="actions"><button class="btn ${done ? 'gray' : 'dark'}" data-a="todoDone" data-v="${r.id}">${done ? 'Reopen' : r.type === 'bill' || r.type === 'paycare' ? 'Mark paid' : 'Mark done'}</button>${r.type === 'appt' && !done ? '<button class="btn gray" data-a="toEvent">' + ic('planner', 16) + 'Add to Planner</button>' : ''}</div>` + std(); },
   Events(r, d) { const all = r.allDay === '1' || !r.start;
     return `<h2>${esc(r.title)}</h2>` + kv('When', fmtDay(r.date) + (r.endDate && r.endDate > r.date ? ' – ' + fmtDay(r.endDate) : '') + (all ? ' · all day' : ` · ${fmtT(r.start)}${r.end ? '–' + fmtT(r.end) : ''}`)) + kv('Type', r.category) + kv('Who', r.people) + kv('Where', r.location) + kv('House', r.house) + kv('Notes', r.notes) +
-      kv('Calendar', r.gcalId ? 'Copied to the shared calendar; change it here, not in Google Calendar' : '') + (r.category === 'Kids' && !all ? rideBox('Rides', r.dropoff, r.pickup) : '') + std({ care: 1, ann: 1 }); },
+      kv('Calendar', r.gcalId ? 'Copied to the shared calendar; change it here, not in Google Calendar' : '') + (r.category === 'Kids' && !all ? rideBox('Rides', r.dropoff, r.pickup) : '') + propBlock(r) + std({ care: 1, ann: 1 }); },
   GCal(r) { return `<h2>${esc(r.title)}</h2>` + kv('When', r.allDay ? fmtDay(r.start) + (addDays(r.end, -1) > r.start ? ' – ' + fmtDay(addDays(r.end, -1)) : '') + ' · all day' : `${fmtDay(r.start)} · ${fmtT(r.start.slice(11))}–${fmtT(r.end.slice(11))}`) + kv('Where', r.location) + kv('From', 'Shared calendar') +
       `<div class="kv muted small">${r.recurring ? 'A repeating entry from the shared calendar. Import it as an app activity to manage it here, with rides and the kids it is for.' : 'From the shared calendar. Import it to add who it is for, rides and caretakers, and edit it here.'}</div>` +
       `<div class="actions"><button class="btn sm" data-a="convert">${ic('plus', 16)}Import</button><button class="btn gray sm" data-a="link">${ic('link')}Link</button><button class="btn gray sm" data-a="careFor">${ic('care')}Add caretaker</button>${TRAD_BTN}<button class="btn gray sm" data-a="gcalHide">${ic('x', 16)}${r.recurring ? 'Hide the series' : 'Hide from planner'}</button>${r.recurring ? '' : '<button class="btn danger sm" data-a="gcalDel">' + ic('trash') + 'Delete</button>'}</div>`; },
@@ -1859,6 +1876,8 @@ function vHH() {
     return back + (S.Caretakers.slice().sort((a, b) => a.name.localeCompare(b.name)).map(k => { const nx = up.find(c => c.confirmedId === k.id), pay = k.unpaid === '1' || k.pay === 'unpaid' ? 'Unpaid' : k.pay === 'weekly' ? `Paid weekly${k.payDay ? ' on ' + k.payDay : ''}${k.weekly ? ' · $' + k.weekly : ''}` : k.rate ? '$' + k.rate + '/hr' : '';
       return acard(`data-a="open" data-t="Caretakers" data-id="${esc(k.id)}"`, esc(k.name), [esc([k.relationship, list(k.roster).join(' and ')].filter(Boolean).join(' · ')), esc([pay, k.phone].filter(Boolean).join(' · ')), nx ? `${ic('clock', 13)} Next: ${esc(fmtDay(nx.date))}, ${esc(fmtT(nx.start))}` : ''], k.drive === '1' ? 'Drives' : ''); }).join('') || '<div class="empty">No caretakers yet.</div>') +
       `<div style="height:90px"></div><button class="fab" data-a="add" data-v="Caretakers" aria-label="Add a caretaker">${ic('plus', 20)}Caretaker</button>`; }
+  if (HH === 'whatsnew') { const us = S.Updates.filter(u => u.title || u.message).sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+    return back + `<div class="pad small muted">Every update we have shown, newest first.</div>` + (us.map(u => `<div class="box" style="padding:16px"><div class="small muted b">${u.label ? esc(String(u.label).toUpperCase()) : "WHAT'S NEW"}${u.date ? ' · ' + esc(fmtDate(u.date)) + ' ' + esc(String(u.date).slice(0, 4)) : ''}</div><h3 style="margin:6px 0">${esc(u.title)}</h3><div>${md(u.message)}</div></div>`).join('') || '<div class="empty">Nothing yet.</div>'); }
   if (HH === 'lists') { const rs = S.Lists.slice().sort((a, b) => (listDone(a) >= listItems(a).length ? 1 : 0) - (listDone(b) >= listItems(b).length ? 1 : 0) || String(b.time).localeCompare(String(a.time)));
     return back + (rs.map(r => acard(`data-a="open" data-t="Lists" data-id="${esc(r.id)}"`, esc(r.title), [`${listDone(r)} of ${listItems(r).length} done`, esc(listItems(r).filter(x => !x.d).slice(0, 3).map(x => x.t).join(', '))], listDone(r) >= listItems(r).length && listItems(r).length ? 'Done' : '')).join('') || '<div class="empty">No lists yet. Make one for anything you want to tick off: Christmas tips, a packing list, errands.</div>') +
       `<div style="height:90px"></div><button class="fab" data-a="add" data-v="Lists" aria-label="New list">${ic('plus', 20)}List</button>`; }
@@ -2129,7 +2148,7 @@ A.pause = (v, el) => { const r = byId('Recipes', ctx(el).id); if (r.pausedUntil 
 A.archive = (v, el) => { const r = byId('Recipes', ctx(el).id); write({ t: 'Recipes', row: { id: r.id, status: r.status === 'archived' ? '' : 'archived' } }); };
 // ---------- views ----------
 const TITLES = { feed: 'Feed', planner: 'Planner', meals: 'Meals', todo: 'To-Do', home: 'Home' };
-const HH_TITLES = { Schools: 'Schools', Activities: 'Activities', houses: 'House', places: 'Known locations', Caretakers: 'Caretakers', birthdays: 'Birthdays', annuals: 'Annual traditions', work: 'Work schedule', lists: 'Lists', WeatherRules: 'Weather rules', Groceries: 'Grocery library', TodoTypes: 'To-do types' };
+const HH_TITLES = { Schools: 'Schools', Activities: 'Activities', houses: 'House', places: 'Known locations', Caretakers: 'Caretakers', birthdays: 'Birthdays', annuals: 'Annual traditions', work: 'Work schedule', lists: 'Lists', whatsnew: "What's new", WeatherRules: 'Weather rules', Groceries: 'Grocery library', TodoTypes: 'To-do types' };
 let HH = '', WORKWK = '';
 function render() {
   const pv = view === 'person' && byId('People', PERSON);
@@ -2149,7 +2168,7 @@ A.nav = v => { FABON = false; if (v === 'dailyGo') { view = 'todo'; render(); sc
 function plannerToToday() { const el = $('day-' + TODAY); if (!el) return scrollToY(0); scrollToY(Math.max(0, elTop(el) - Math.round($('view').clientHeight * 0.2))); }   // today sits about a fifth of the way down, where the eye lands
 function pcard(i) {
   const n = cmts(i.t, i.id).filter(c => c.system !== '1').length;
-  const sub = [i.sub && esc(i.sub), i.ride && rideHTML(i)].filter(Boolean).join(' · ');
+  const sub = [i.pending && `<b class="amb">Proposed${i.pending.proposedTo === ME ? ' by ' + esc(i.pending.proposedBy) + ' · waiting on you' : ' · waiting on ' + esc(i.pending.proposedTo)}</b>`, i.sub && esc(i.sub), i.ride && rideHTML(i)].filter(Boolean).join(' · ');
   return `<div class="pc" style="--c:${esc(i.color)}" data-a="open" data-t="${i.t}" data-id="${esc(i.id)}" data-d="${i.date || ''}">${i.start ? `<div class="t">${fmtT(i.start)}</div>` : i.label ? `<div class="t">${esc(i.label)}</div>` : ''}${i.logo ? `<img src="${esc(i.logo)}" alt="">` : i.icon ? `<span class="pci">${ic(i.icon, 18)}</span>` : ''}
     <div class="grow"><div class="ti">${esc(i.title)}${aiMk(i.t, i.id)}</div>${sub ? `<div class="small ${i.warn || (i.ride && (!i.dropoff || !i.pickup)) ? 'red' : 'muted'}">${sub}</div>` : ''}</div>${whoDots(i.people)}${n ? `<span class="small muted">${ic('msg', 14)}${n}</span>` : ''}</div>`;
 }
@@ -3136,7 +3155,7 @@ function vHome() {
     hrow('openSettings', '', 'gear', 'Settings', 'Meals, assistant rules, caretakers, birthdays, notifications and more') +
     notesHTML() +
     `<div class="giftwrap"><div class="li giftrow" data-a="homeOpen" data-v="gifts"><span class="muted">${ic('gift', 16)}</span><span class="grow small">Gift ideas</span><span class="small muted">${S.gifts.length || ''}</span><span class="chev">›</span></div></div>` +
-    `<div class="hfoot"><div class="ver">Version ${APP_VERSION}</div>Made with love by your husband Paul.<br><a data-a="feedback">Click here to provide constructive feedback</a></div>`;
+    `<div class="hfoot"><div class="ver">Version ${APP_VERSION} · <a data-a="homeOpen" data-v="whatsnew">What's new</a></div>Made with love by your husband Paul.<br><a data-a="feedback">Click here to provide constructive feedback</a></div>`;
 }
 A.feedback = () => form('Constructive feedback', [F('idea', 'What would make the app better?', 'area', null, { ph: 'Ideas, annoyances, anything' })], {}, async v => {
   need(v.idea && v.idea.trim(), 'Write your idea first.');
