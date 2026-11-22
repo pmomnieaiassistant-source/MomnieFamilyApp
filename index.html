@@ -379,6 +379,7 @@
   .phcover { display:block; width:calc(100% + 32px); margin:-14px -16px 10px; height:130px; max-width:none; object-fit:cover; border-radius:inherit; border-bottom-left-radius:0; border-bottom-right-radius:0; background:var(--soft); }
   .hcard:has(.phcover) { overflow:hidden; }
   .lbox { margin-top:6px; } .lbox .check-row { padding:7px 0; } .lbox .ldone span { text-decoration:line-through; color:var(--muted); }
+  .pc.pend { opacity:.82; outline:1.5px dashed #c28a2c; outline-offset:-3px; }   /* proposed, not confirmed yet */
   .phpost { display:block; width:100%; max-height:420px; object-fit:cover; border-radius:16px; margin-top:8px; background:var(--soft); }
   #view input, #view select, #view textarea { background:var(--card); border:1px solid var(--line); }
   .av i[data-p="App"] { background:var(--accsoft); color:var(--accent); }
@@ -419,7 +420,7 @@ a.alink { color: inherit; text-decoration: underline; text-decoration-color: col
 // Momnie Family app v6.0
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'], DAYN = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'], ADULTS = ['Paul', 'Shana'];
 // Shown at the bottom of Home. Bump it together with VERSION in sw.js on every release.
-const APP_VERSION = '16.23 · Nov 19, 2026';
+const APP_VERSION = '16.24 · Nov 19, 2026';
 const TABLES = ['People', 'Schools', 'SchoolCal', 'Activities', 'Overrides', 'Events', 'Caretakers', 'Childcare', 'Birthdays', 'Annuals', 'Lists', 'Todos', 'TodoTypes', 'Recipes', 'DinnerRules', 'Weeks', 'Menus',
   'Groceries', 'GroceryList', 'HouseCards', 'Houses', 'WeatherRules', 'Quotes', 'Memories', 'Updates', 'Messages', 'Activity', 'Comments', 'Reactions', 'Links', 'Settings', 'Photos', 'gifts', 'ai_rules', 'ai_requests', 'notes', 'places', 'daily_items', 'daily_completions'];
 const CAT = { School: '#3f6fb5', Kids: '#4f7cc2', Work: '#64748b', Family: '#5b6fa8', Dinner: '#b08a4f', Caretaker: '#3e9aa6', Shared: '#94a3b8', Birthday: '#c9806a' }, SCHOOL_C = ['#5a72b8', '#7a8597', '#4a6fb0'];
@@ -2168,8 +2169,8 @@ A.nav = v => { FABON = false; if (v === 'dailyGo') { view = 'todo'; render(); sc
 function plannerToToday() { const el = $('day-' + TODAY); if (!el) return scrollToY(0); scrollToY(Math.max(0, elTop(el) - Math.round($('view').clientHeight * 0.2))); }   // today sits about a fifth of the way down, where the eye lands
 function pcard(i) {
   const n = cmts(i.t, i.id).filter(c => c.system !== '1').length;
-  const sub = [i.pending && `<b class="amb">Proposed${i.pending.proposedTo === ME ? ' by ' + esc(i.pending.proposedBy) + ' · waiting on you' : ' · waiting on ' + esc(i.pending.proposedTo)}</b>`, i.sub && esc(i.sub), i.ride && rideHTML(i)].filter(Boolean).join(' · ');
-  return `<div class="pc" style="--c:${esc(i.color)}" data-a="open" data-t="${i.t}" data-id="${esc(i.id)}" data-d="${i.date || ''}">${i.start ? `<div class="t">${fmtT(i.start)}</div>` : i.label ? `<div class="t">${esc(i.label)}</div>` : ''}${i.logo ? `<img src="${esc(i.logo)}" alt="">` : i.icon ? `<span class="pci">${ic(i.icon, 18)}</span>` : ''}
+  const sub = [i.pending && `<b class="amb">Needs confirmation${i.pending.proposedTo === ME ? ' · from you (proposed by ' + esc(i.pending.proposedBy) + ')' : ' · waiting on ' + esc(i.pending.proposedTo)}</b>`, i.sub && esc(i.sub), i.ride && rideHTML(i)].filter(Boolean).join(' · ');
+  return `<div class="pc${i.pending ? ' pend' : ''}" style="--c:${esc(i.color)}" data-a="open" data-t="${i.t}" data-id="${esc(i.id)}" data-d="${i.date || ''}">${i.start ? `<div class="t">${fmtT(i.start)}</div>` : i.label ? `<div class="t">${esc(i.label)}</div>` : ''}${i.logo ? `<img src="${esc(i.logo)}" alt="">` : i.icon ? `<span class="pci">${ic(i.icon, 18)}</span>` : ''}
     <div class="grow"><div class="ti">${esc(i.title)}${aiMk(i.t, i.id)}</div>${sub ? `<div class="small ${i.warn || (i.ride && (!i.dropoff || !i.pickup)) ? 'red' : 'muted'}">${sub}</div>` : ''}</div>${whoDots(i.people)}${n ? `<span class="small muted">${ic('msg', 14)}${n}</span>` : ''}</div>`;
 }
 const wxKind = c => c === 0 ? 'sun' : c <= 2 ? 'cloudsun' : c === 3 ? 'cloud' : c <= 48 ? 'fog' : c <= 67 || (c >= 80 && c <= 82) ? 'rain' : c <= 77 || c === 85 || c === 86 ? 'snow' : 'storm';
