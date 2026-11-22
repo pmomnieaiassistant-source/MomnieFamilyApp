@@ -1,6 +1,7 @@
 /**
  * Momnie Family app backend
- * Version 3.50 (2026-11-22)
+ * Version 3.51 (2026-11-22)
+ *   3.51: Fixes: the rain gear rule is switched to school days once (not every day); list posts are left out of the assistant's Feed tidying; proposed events are not copied to the calendar by "Copy everything" and the assistant sees them as not confirmed.
  *   3.50: Proposed events (Events: proposal, proposedBy, proposedTo, counter).
  *   3.49: Weather rules can be limited to school days; the rain gear rule now only fires on school nights.
  *   3.48: Lists (checklist posts, Lists tab).
@@ -429,6 +430,8 @@ function log_(who, log, t, ref) {
 // ---------- stacked posts ----------
 var STACK_CARD_MAX = 280;   // characters per card; longer text continues on the next card
 /** Where sentences end in a text (the index just after each one). "Dr." and similar do not end a sentence; a newline does. */
+/** An event's name for the assistant: a proposal the other parent has not confirmed yet says so. */
+function evName_(e) { return e.title + (e.proposal === 'pending' ? ' (proposed by ' + (e.proposedBy || 'a parent') + ', not confirmed yet)' : ''); }
 function stackEnds_(str) {
   var r = [], m, re = /(?<!\b(?:Mr|Mrs|Ms|Dr|St|Jr|Sr|Prof|vs|etc|No))[.!?]+["'”)]*(?=\s)|\n/g;
   while ((m = re.exec(str))) r.push(m.index + m[0].length);
@@ -772,7 +775,7 @@ function actAdopt_(a, seriesId) {
 function copyAllToCalendar() {
   var n = 0, skipped = 0;
   rows_('Activities').slice().forEach(function (a) { if (a.gcalId) { skipped++; return; } gcalSafe_(function () { actSync_(a); n++; }); });
-  rows_('Events').slice().forEach(function (ev) { if (ev.gcalId) { skipped++; return; } gcalSafe_(function () { var r = put_('Events', { id: ev.id, gcal: '1' }); gcalSync_(r); n++; }); });
+  rows_('Events').slice().forEach(function (ev) { if (ev.gcalId || ev.proposal === 'pending') { skipped++; return; } gcalSafe_(function () { var r = put_('Events', { id: ev.id, gcal: '1' }); gcalSync_(r); n++; }); });
   var msg = n + ' item(s) copied to the shared calendar. ' + skipped + ' were already there.';
   try { SpreadsheetApp.getUi().alert(msg); } catch (e) { console.log(msg); }
   return msg;
@@ -937,7 +940,7 @@ function jobs_(fromTrigger) {
   if (setting_('app|ai.on', '') === '1') aiReview_(t, hour);   // hourly tick only: never slows down opening the app
   if (hour >= 7 && once_('digest', t)) digest_(t);
   if (hour >= 20 && once_('gaps', t)) gaps_(t);
-  if (once_('rainSchool', t)) rows_('WeatherRules').forEach(function (r) { if (/rain gear/i.test(r.message) && !r.school) put_('WeatherRules', { id: r.id, school: '1' }); });   // once: the built-in rain gear rule is for school nights
+  if (!setting_('job|rainSchool', '')) { rows_('WeatherRules').forEach(function (r) { if (/rain gear/i.test(r.message) && !r.school) put_('WeatherRules', { id: r.id, school: '1' }); }); put_('Settings', { id: 'job|rainSchool', value: t }); }   // one time ever: the built-in rain gear rule becomes school nights only (it can be turned off after)
   if (hour >= 6 && once_('wx_am', t)) wxAlerts_(0, 'morning');
   if (hour >= 19 && once_('wx_pm', t)) wxAlerts_(1, 'night');
   var a = rows_('Activity');
@@ -1023,7 +1026,7 @@ function weekCard_(t) {
   for (var i = 0; i < 7; i++) {
     var d = addDays_(start, i), bits = [];
     rows_('SchoolCal').forEach(function (s) { if (d >= s.date && d <= (s.endDate || s.date)) bits.push(s.title); });
-    rows_('Events').forEach(function (e) { if (d >= e.date && d <= (e.endDate || e.date)) bits.push((e.start && e.allDay !== '1' ? t12_(e.start) + ' ' : '') + e.title); });
+    rows_('Events').forEach(function (e) { if (d >= e.date && d <= (e.endDate || e.date)) bits.push((e.start && e.allDay !== '1' ? t12_(e.start) + ' ' : '') + evName_(e)); });
     bd.forEach(function (b) { if (b.md === d.slice(5)) bits.push('Birthday: ' + b.name); });
     rows_('Childcare').forEach(function (c) { if (c.date === d) { var ct = get_('Caretakers', c.confirmedId); bits.push('Caretaker: ' + (ct ? ct.name : 'needed')); } });
     var open = kidOcc_(d).filter(function (o) { return !o.dropoff || !o.pickup; });
@@ -1112,7 +1115,7 @@ function aiContext_(t) {
     c.days = []; for (var j = 0; j < (on('week') ? 7 : 3); j++) { var dd = addDays_(t, j), bits = [];
       schoolRuns_(dd).forEach(function (r) { bits.push(runLine_(r)); });
       kidOcc_(dd).forEach(function (o) { bits.push(t12_(o.start) + ' ' + o.title + ' (' + o.kids + ') drop-off ' + (o.dropoff || 'NOT SET') + ', pickup ' + (o.pickup || 'NOT SET')); });
-      rows_('Events').forEach(function (e) { if (e.date === dd) bits.push((e.start ? t12_(e.start) + ' ' : '') + e.title + (e.people ? ' (' + e.people + ')' : '')); });
+      rows_('Events').forEach(function (e) { if (e.date === dd) bits.push((e.start ? t12_(e.start) + ' ' : '') + evName_(e) + (e.people ? ' (' + e.people + ')' : '')); });
       rows_('Childcare').forEach(function (cc) { if (cc.date === dd) { var ct = get_('Caretakers', cc.confirmedId); bits.push('Caretaker ' + t12_(cc.start) + '–' + t12_(cc.end) + ': ' + (ct ? ct.name : 'NOT CONFIRMED')); } });
       rows_('SchoolCal').forEach(function (s) { if (s.date && dd >= s.date && dd <= (s.endDate || s.date)) bits.push('School calendar: ' + s.title); });
       c.days.push(nice_(dd) + ': ' + (bits.join('; ') || 'nothing scheduled')); } }
@@ -1223,7 +1226,7 @@ function aiCardsSafe_(t, hour) { try { if (hour >= 19) briefAll_(addDays_(t, 1),
 // item changed again, or deleted). Hiding is reversible (state 'moot'; the app has "Show what the assistant tidied
 // away"). People's own messages and comments are never touched. Assistant stacks have ids starting with "ai"; the app
 // applies the stacks and hiding only for people in the assistant's audience (app|ai.who).
-var FEED_SKIP = { message: 1, answer: 1, ai: 1, daily: 1, summary_week: 1, summary_month: 1, source: 1 };
+var FEED_SKIP = { message: 1, answer: 1, ai: 1, daily: 1, summary_week: 1, summary_month: 1, source: 1, list: 1 };
 /** One line on what an item looks like now, so the assistant can tell which posts are out of date. */
 function itemNow_(table, ref) {
   if (!table || !ref) return '';
@@ -1453,7 +1456,7 @@ function briefCands_(p, d, mode) {
   });
   schoolRuns_(d).forEach(function (r) { add('run:' + r.sid + '|' + d + '|' + r.kind, runLine_(r) + (r.who && !r.changed ? ' (the usual)' : '')); });
   kidOcc_(d).forEach(function (o) { add(o.t + ':' + o.id, t12_(o.start) + ' ' + o.title + ' (' + o.kids + '): drop-off ' + (o.dropoff || 'NOT SET') + ', pickup ' + (o.pickup || 'NOT SET')); });
-  rows_('Events').forEach(function (e) { if (e.date === d && !(e.category === 'Kids' && e.allDay !== '1' && e.start)) add('Events:' + e.id, (e.allDay === '1' || !e.start ? 'All day ' : t12_(e.start) + ' ') + e.title + (e.people ? ' (' + e.people + ')' : '') + (e.category ? ' [' + e.category + ']' : '')); });
+  rows_('Events').forEach(function (e) { if (e.date === d && !(e.category === 'Kids' && e.allDay !== '1' && e.start)) add('Events:' + e.id, (e.allDay === '1' || !e.start ? 'All day ' : t12_(e.start) + ' ') + evName_(e) + (e.people ? ' (' + e.people + ')' : '') + (e.category ? ' [' + e.category + ']' : '')); });
   rows_('Childcare').forEach(function (cc) { if (cc.date === d) { var ct = get_('Caretakers', cc.confirmedId); add('Childcare:' + cc.id, 'Caretaker ' + t12_(cc.start) + '–' + t12_(cc.end) + ': ' + (ct ? ct.name : 'NOT CONFIRMED')); } });
   rows_('SchoolCal').forEach(function (s) { if (s.date && d >= s.date && d <= (s.endDate || s.date)) add('', 'School calendar: ' + s.title); });
   var mid = monday_(d) + '-' + day, m = get_('Menus', mid);
@@ -1616,7 +1619,7 @@ function aiConvo_(t, manual) {
   if (!threads.some(function (x) { return x.isNew; })) return { actions: [] };
   put_('Settings', { id: 'app|ai.convoLast', value: now_() });
   var runs = []; for (var i = 0; i < 4; i++) { var dd = addDays_(t, i); schoolRuns_(dd).forEach(function (r) { runs.push({ key: r.sid + '|' + dd + '|' + r.kind, what: nice_(dd) + ' ' + runLine_(r) }); }); }
-  var plan = rows_('Events').filter(function (e) { return e.date >= t && e.date <= addDays_(t, 14); }).map(function (e) { return e.date + ' ' + (e.start || 'all day') + ' ' + e.title + (e.people ? ' (' + e.people + ')' : ''); })
+  var plan = rows_('Events').filter(function (e) { return e.date >= t && e.date <= addDays_(t, 14); }).map(function (e) { return e.date + ' ' + (e.start || 'all day') + ' ' + evName_(e) + (e.people ? ' (' + e.people + ')' : ''); })
     .concat(rows_('Todos').filter(function (x) { return x.status !== 'Done'; }).slice(0, 40).map(function (x) { return 'To-do: ' + x.title + (x.assignee ? ' (' + x.assignee + ')' : ''); }));
   var done = rows_('ai_requests').filter(function (q) { return q.source === 'Conversation' && q.time >= since; }).map(function (q) { return q.summary; });
   var dinners = []; for (var di = 0; di < 4; di++) { var dd2 = addDays_(t, di), mm = get_('Menus', monday_(dd2) + '-' + DAYS[dow_(dd2)]); dinners.push({ date: dd2, dinner: mm ? (dishName_(mm) || 'nothing planned') : 'nothing planned', cook: mm && mm.cook || '', notHome: mm && mm.away || '' }); }
