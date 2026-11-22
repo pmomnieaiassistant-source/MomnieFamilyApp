@@ -420,7 +420,7 @@ a.alink { color: inherit; text-decoration: underline; text-decoration-color: col
 // Momnie Family app v6.0
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'], DAYN = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'], ADULTS = ['Paul', 'Shana'];
 // Shown at the bottom of Home. Bump it together with VERSION in sw.js on every release.
-const APP_VERSION = '16.25 · Nov 19, 2026';
+const APP_VERSION = '16.26 · Nov 19, 2026';
 const TABLES = ['People', 'Schools', 'SchoolCal', 'Activities', 'Overrides', 'Events', 'Caretakers', 'Childcare', 'Birthdays', 'Annuals', 'Lists', 'Todos', 'TodoTypes', 'Recipes', 'DinnerRules', 'Weeks', 'Menus',
   'Groceries', 'GroceryList', 'HouseCards', 'Houses', 'WeatherRules', 'Quotes', 'Memories', 'Updates', 'Messages', 'Activity', 'Comments', 'Reactions', 'Links', 'Settings', 'Photos', 'gifts', 'ai_rules', 'ai_requests', 'notes', 'places', 'daily_items', 'daily_completions'];
 const CAT = { School: '#3f6fb5', Kids: '#4f7cc2', Work: '#64748b', Family: '#5b6fa8', Dinner: '#b08a4f', Caretaker: '#3e9aa6', Shared: '#94a3b8', Birthday: '#c9806a' }, SCHOOL_C = ['#5a72b8', '#7a8597', '#4a6fb0'];
@@ -1543,17 +1543,18 @@ const SAVE = {
 // ----- Lists: a checklist that shows in the Feed and under Home, Lists -----
 const listItems = r => { try { const a = JSON.parse(r.items || '[]'); return Array.isArray(a) ? a.filter(x => x && x.t) : []; } catch (e) { return []; } };
 const listDone = r => listItems(r).filter(x => x.d).length;
-const listSave = (r, items, extra) => write({ t: 'Lists', row: Object.assign({ id: r.id, items: JSON.stringify(items) }, extra || {}) });
 function listBox(r) { const its = listItems(r);
   return `<div class="lbox">${its.map((x, i) => `<label class="check-row ${x.d ? 'ldone' : ''}"><input type="checkbox" data-c="listTick" data-k="${esc(r.id)}|${i}" ${x.d ? 'checked' : ''}> <span>${esc(x.t)}</span></label>`).join('') || '<div class="small muted">Nothing on this list yet.</div>'}</div>`; }
-A.listTick = (v, el) => { const [id, i] = el.dataset.k.split('|'), r = byId('Lists', id); if (!r) return; const its = listItems(r); if (!its[+i]) return; its[+i].d = v === '1' ? 1 : 0; if (its[+i].d) its[+i].by = ME; listSave(r, its); };
-A.listAdd = (v, el) => { const r = byId('Lists', ctx(el).id), inp = el.closest('.row').querySelector('input'), t = (inp.value || '').trim(); if (!r || !t) return; const its = listItems(r); its.push({ t, d: 0 }); inp.value = ''; listSave(r, its); };
+// A tick or a new item is sent as just that change (listOp); the script applies it to the list as it is then, so two people ticking at once both count.
+A.listTick = (v, el) => { const [id, i] = el.dataset.k.split('|'), r = byId('Lists', id); if (!r) return; const its = listItems(r), x = its[+i]; if (!x) return; x.d = v === '1' ? 1 : 0; if (x.d) x.by = ME; else delete x.by;
+  write({ t: 'Lists', row: { id: r.id, items: JSON.stringify(its) }, listOp: { k: x.k || '', t: x.t, d: x.d, by: ME } }); };
+A.listAdd = (v, el) => { const r = byId('Lists', ctx(el).id), inp = el.closest('.row').querySelector('input'), t = (inp.value || '').trim(); if (!r || !t) return; const its = listItems(r), add = { k: nid(), t, d: 0 }; its.push(add); inp.value = ''; write({ t: 'Lists', row: { id: r.id, items: JSON.stringify(its) }, listOp: { add } }); };
 function listPost(a) { const r = byId('Lists', a.ref); if (!r) return '';
   return `<div class="post">${avatar(a.who)}<div class="pbody"><div>${nameLink(a.who)} <span class="muted">· ${ago(a.time)}</span> <span class="chip">${ic('check', 13)} List</span></div>
     <div class="ptext" style="font-weight:700;cursor:pointer" data-a="open" data-t="Lists" data-id="${esc(r.id)}">${esc(r.title)} <span class="muted small" style="font-weight:400">· ${listDone(r)} of ${listItems(r).length} done</span></div>${listBox(r)}</div></div>`; }
 async function saveRow(t, v) {
   if (t === 'Lists') { need(v.title && v.title.trim(), 'Give the list a name.'); const old = v.id ? listItems(byId('Lists', v.id) || {}) : [], seen = new Map(old.map(x => [norm(x.t), x]));
-    const items = String(v.items || '').split('\n').map(x => x.replace(/^\s*(?:[-•*]|\[[ x]\])\s*/i, '').trim()).filter(Boolean).map(x => seen.get(norm(x)) || { t: x, d: 0 }); need(items.length, 'Add at least one item.');
+    const items = String(v.items || '').split('\n').map(x => x.replace(/^\s*(?:[-•*]|\[[ x]\])\s*/i, '').trim()).filter(Boolean).map(x => seen.get(norm(x)) || { k: nid(), t: x, d: 0 }); need(items.length, 'Add at least one item.');
     const id = v.id || nid(), row = { id, title: v.title.trim(), items: JSON.stringify(items), by: v.by || ME, time: v.time || stamp() };
     return write(v.id ? { t: 'Lists', row } : { t: 'Lists', row, log: L('list', `made a list: ${row.title}`, 'convo', { table: 'Lists', ref: id }) }); }
   if (SAVE[t]) return SAVE[t](v);

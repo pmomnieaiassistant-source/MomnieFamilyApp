@@ -1,6 +1,7 @@
 /**
  * Momnie Family app backend
- * Version 3.51 (2026-11-22)
+ * Version 3.52 (2026-11-22)
+ *   3.52: Lists: ticks and new items are merged into the newest copy, so two people ticking at once never lose a tick.
  *   3.51: Fixes: the rain gear rule is switched to school days once (not every day); list posts are left out of the assistant's Feed tidying; proposed events are not copied to the calendar by "Copy everything" and the assistant sees them as not confirmed.
  *   3.50: Proposed events (Events: proposal, proposedBy, proposedTo, counter).
  *   3.49: Weather rules can be limited to school days; the rain gear rule now only fires on school nights.
@@ -389,6 +390,16 @@ function route_(b, me) {
   }
 }
 
+/** Lists: a tick or a new item is applied to the list as it is NOW (writes run one at a time under the lock), so two people
+ *  ticking different items at the same moment never undo each other. op: { k, t, d, by } to tick or untick one item (found
+ *  by its key, or by its text for older items), or { add: { k, t } } to add one. */
+function listMerge_(json, op) {
+  var its = []; try { its = JSON.parse(json || '[]'); } catch (e) {} if (!Array.isArray(its)) its = [];
+  if (op.add && op.add.t) { if (!its.some(function (x) { return (op.add.k && x.k === op.add.k) || norm_(x.t) === norm_(op.add.t); })) its.push({ k: op.add.k || id_(), t: String(op.add.t).slice(0, 300), d: 0 }); }
+  else { var x = its.filter(function (y) { return op.k ? y.k === op.k : false; })[0] || its.filter(function (y) { return norm_(y.t) === norm_(op.t); })[0];
+    if (x) { x.d = op.d ? 1 : 0; if (x.d) x.by = op.by || ''; else delete x.by; } }
+  return JSON.stringify(its);
+}
 /** Generic writes: ops = [{t, row, log}] to insert/update, or [{t, del, log}] to delete. */
 function write_(b, me) {
   (b.ops || []).forEach(function (op) {
@@ -401,6 +412,7 @@ function write_(b, me) {
       if (r && op.t === 'Photos' && r.fileId) photoTrash_(r.fileId);
     } else {
       var row = op.row || {}, isNew = !row.id || !get_(op.t, row.id), c = cols_(op.t);
+      if (op.t === 'Lists' && op.listOp && !isNew) row = { id: row.id, items: listMerge_(get_('Lists', row.id).items, op.listOp) };   // one tick or one new item, applied to the newest copy
       if (isNew) {
         if (c.indexOf('time') >= 0 && !row.time) row.time = now_();
         if (c.indexOf('created') >= 0 && !row.created) row.created = today_();
