@@ -378,6 +378,7 @@
   .phprev { display:block; width:100%; height:70vh; border:0; border-radius:16px; margin:10px 0; background:var(--soft); }
   .phcover { display:block; width:calc(100% + 32px); margin:-14px -16px 10px; height:130px; max-width:none; object-fit:cover; border-radius:inherit; border-bottom-left-radius:0; border-bottom-right-radius:0; background:var(--soft); }
   .hcard:has(.phcover) { overflow:hidden; }
+  .lbox { margin-top:6px; } .lbox .check-row { padding:7px 0; } .lbox .ldone span { text-decoration:line-through; color:var(--muted); }
   .phpost { display:block; width:100%; max-height:420px; object-fit:cover; border-radius:16px; margin-top:8px; background:var(--soft); }
   #view input, #view select, #view textarea { background:var(--card); border:1px solid var(--line); }
   .av i[data-p="App"] { background:var(--accsoft); color:var(--accent); }
@@ -418,8 +419,8 @@ a.alink { color: inherit; text-decoration: underline; text-decoration-color: col
 // Momnie Family app v6.0
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'], DAYN = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'], ADULTS = ['Paul', 'Shana'];
 // Shown at the bottom of Home. Bump it together with VERSION in sw.js on every release.
-const APP_VERSION = '16.18 · Nov 19, 2026';
-const TABLES = ['People', 'Schools', 'SchoolCal', 'Activities', 'Overrides', 'Events', 'Caretakers', 'Childcare', 'Birthdays', 'Annuals', 'Todos', 'TodoTypes', 'Recipes', 'DinnerRules', 'Weeks', 'Menus',
+const APP_VERSION = '16.20 · Nov 19, 2026';
+const TABLES = ['People', 'Schools', 'SchoolCal', 'Activities', 'Overrides', 'Events', 'Caretakers', 'Childcare', 'Birthdays', 'Annuals', 'Lists', 'Todos', 'TodoTypes', 'Recipes', 'DinnerRules', 'Weeks', 'Menus',
   'Groceries', 'GroceryList', 'HouseCards', 'Houses', 'WeatherRules', 'Quotes', 'Memories', 'Updates', 'Messages', 'Activity', 'Comments', 'Reactions', 'Links', 'Settings', 'Photos', 'gifts', 'ai_rules', 'ai_requests', 'notes', 'places', 'daily_items', 'daily_completions'];
 const CAT = { School: '#3f6fb5', Kids: '#4f7cc2', Work: '#64748b', Family: '#5b6fa8', Dinner: '#b08a4f', Caretaker: '#3e9aa6', Shared: '#94a3b8', Birthday: '#c9806a' }, SCHOOL_C = ['#5a72b8', '#7a8597', '#4a6fb0'];
 // Muted person colors (Outlook-style): Clara pink, Conrad green, Charlie blue, Shana purple, Paul grey.
@@ -648,6 +649,7 @@ const ICONS = {
   care: '<path d="M12 20s-7.5-4.6-7.5-10A4.3 4.3 0 0 1 12 7.2 4.3 4.3 0 0 1 19.5 10C19.5 15.4 12 20 12 20z"/>',
   cake: '<path d="M4 21h16v-8a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2zM4 16c2.5 1.5 5.5 1.5 8 0s5.5-1.5 8 0M12 11V7M12 4.5v.01"/>',
   house: '<path d="M3 21h18M5 21V9l7-5 7 5v12M10 21v-5h4v5"/>',
+  briefcase: '<rect x="3" y="7" width="18" height="13" rx="2"/><path d="M9 7V5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2M3 13h18"/>',
   weather: '<path d="M7 18a4.5 4.5 0 1 1 1.4-8.8A5.5 5.5 0 0 1 19 10.5 3.8 3.8 0 0 1 18 18z"/>',
   cart: '<path d="M3 4h2.5l2.2 11h10.6L20.5 7H7"/><circle cx="9.5" cy="19.5" r="1.3"/><circle cx="17" cy="19.5" r="1.3"/>',
   tag: '<path d="M3 12V4h8l10 10-8 8z"/><circle cx="7.5" cy="8" r="1.3"/>',
@@ -968,13 +970,15 @@ function whereIs(kid) {
 // Settings row person|<id>|wfh holds {"days":"Fri", "dates":{"2026-11-20":"home"}}: usual home days, plus one-off changes by date.
 // Work hours can differ by day: Settings person|<id>|hours = {"Mon":{"s":"09:00","e":"17:00"}, ...}. Days without their own hours use the person's usual start and end.
 const hoursOf = p => { const r = byId('Settings', 'person|' + p.id + '|hours'); try { const o = JSON.parse((r && r.value) || '{}'); return o && typeof o === 'object' ? o : {}; } catch (e) { return {}; } };
-const workHours = (p, d) => { const o = hoursOf(p)[DAYS[dowIdx(d)]] || {}, s = o.s || p.workStart; return { s, e: o.e || (o.s ? '' : p.workEnd) || s }; };
+const workOv = (p, d) => (wfhOf(p).hrs || {})[d];   // a one-day change: { s, e } (working late, different hours) or { off: 1 }
+const worksOn = (p, d) => { const o = workOv(p, d); return o ? !o.off : list(p.workDays).includes(DAYS[dowIdx(d)]); };
+const workHours = (p, d) => { const ov = workOv(p, d); if (ov) return ov.off ? { s: '', e: '' } : { s: ov.s || p.workStart, e: ov.e || ov.s || p.workEnd }; const o = hoursOf(p)[DAYS[dowIdx(d)]] || {}, s = o.s || p.workStart; return { s, e: o.e || (o.s ? '' : p.workEnd) || s }; };
 const workHoursTxt = p => { const g = new Map(); DAYS.filter(d => list(p.workDays).includes(d)).forEach(d => { const o = hoursOf(p)[d] || {}, s = o.s || p.workStart, e = o.e || (o.s ? '' : p.workEnd); if (!s) return; const k = fmtT(s) + (e ? '–' + fmtT(e) : ''); g.set(k, (g.get(k) || []).concat(d)); });
   return [...g].map(([k, ds]) => ds.join(', ') + ' ' + k).join(' · '); };
-const wfhOf = p => { const r = byId('Settings', 'person|' + p.id + '|wfh'); try { const o = JSON.parse((r && r.value) || '{}'); return { days: list(o.days), dates: o.dates && typeof o.dates === 'object' ? o.dates : {} }; } catch (e) { return { days: [], dates: {} }; } };
+const wfhOf = p => { const r = byId('Settings', 'person|' + p.id + '|wfh'); try { const o = JSON.parse((r && r.value) || '{}'); return { days: list(o.days), dates: o.dates && typeof o.dates === 'object' ? o.dates : {}, hrs: o.hrs && typeof o.hrs === 'object' ? o.hrs : {} }; } catch (e) { return { days: [], dates: {}, hrs: {} }; } };
 const workWhere = (p, d) => { const w = wfhOf(p); return w.dates[d] || (w.days.includes(DAYS[dowIdx(d)]) ? 'home' : 'office'); };
-const wfhSave = (p, w, log) => { const keep = {}; Object.keys(w.dates).forEach(d => { if (d >= addDays(TODAY, -14)) keep[d] = w.dates[d]; });
-  return { t: 'Settings', row: { id: 'person|' + p.id + '|wfh', value: JSON.stringify({ days: w.days.join(', '), dates: keep }) }, log }; };
+const wfhSave = (p, w, log) => { const keep = {}, kh = {}; Object.keys(w.dates).forEach(d => { if (d >= addDays(TODAY, -14)) keep[d] = w.dates[d]; }); Object.keys(w.hrs || {}).forEach(d => { if (d >= addDays(TODAY, -14)) kh[d] = w.hrs[d]; });
+  return { t: 'Settings', row: { id: 'person|' + p.id + '|wfh', value: JSON.stringify({ days: w.days.join(', '), dates: keep, hrs: kh }) }, log }; };
 function blocksFor(p, d) {
   const items = itemsFor(d), dow = dowIdx(d), out = [];
   if (p.kind === 'kid') { const sch = byId('Schools', p.schoolId);
@@ -982,7 +986,7 @@ function blocksFor(p, d) {
       if (!c || c.kind === 'half') out.push({ n: (sch.short || sch.name) + (sd.ext && !c ? ' extended day' : ''), s: sd.s, e: c && c.end ? c.end : c ? '12:00' : sd.e, school: 1, ext: !!(sd.ext && !c), t: 'Schools', id: sch.id });
       else out.push({ off: c.title || 'No school', t: 'SchoolCal', id: c.id }); } }
   else { schoolRuns(d).filter(r => r.who === p.name).forEach(r => out.push({ n: `${r.kind === 'd' ? 'Drop off' : 'Pick up'} ${kidNames(r.kids)} ${r.kind === 'd' ? 'at' : 'from'} ${r.name}`, s: r.time, e: r.time, task: 1, t: 'Schools', id: r.sid })); }
-  if (p.kind !== 'kid' && list(p.workDays).includes(DAYS[dow]) && workHours(p, d).s) { const home = workWhere(p, d) === 'home', wh = workHours(p, d); out.push({ n: home ? 'Working from home' : 'In office', s: wh.s, e: wh.e || wh.s, work: 1, home }); }
+  if (p.kind !== 'kid' && worksOn(p, d) && workHours(p, d).s) { const home = workWhere(p, d) === 'home', wh = workHours(p, d); out.push({ n: home ? 'Working from home' : 'In office', s: wh.s, e: wh.e || wh.s, work: 1, home }); }
   items.forEach(i => { if (!i.start || i.src === 'dinner' || i.ext) return;   // extended day is already the school block above
     if (i.people.includes(p.name) && i.t !== 'Childcare') out.push({ n: i.title, s: i.start, e: i.end || i.start, where: i.sub, drop: i.dropoff, pick: i.pickup, ride: i.ride, t: i.t, id: i.id });
     if (p.kind !== 'kid') { if (i.dropoff === p.name) out.push({ n: 'Drop off ' + (kidNames(i.people) || 'kids') + ' at ' + i.title, s: i.start, e: i.start, t: i.t, id: i.id, task: 1 });
@@ -1012,7 +1016,7 @@ function personFlags(p) {
   const out = [], m = S.Menus.find(x => x.date === d), dish = m ? (byId('Recipes', m.recipeId) || {}).name || m.note || '' : '';
   if (drops.length) out.push({ icon: 'up', cls: 'on', label: 'Drop-off', info: `${p.name} drops off ${drops.join('; ')}`, line: `Drops off ${drops.join('; ')}` });
   if (picks.length) out.push({ icon: 'down', cls: 'on', label: 'Pickup', info: `${p.name} picks up ${picks.join('; ')}`, line: `Picks up ${picks.join('; ')}` });
-  const wh = workHours(p, d); if (list(p.workDays).includes(DAYS[dowIdx(d)]) && wh.s && !(wh.e && now > wh.e)) { const home = workWhere(p, d) === 'home', hrs = `${fmtT(wh.s)}${wh.e && wh.e !== wh.s ? '–' + fmtT(wh.e) : ''}`;
+  const wh = workHours(p, d); if (worksOn(p, d) && wh.s && !(wh.e && now > wh.e)) { const home = workWhere(p, d) === 'home', hrs = `${fmtT(wh.s)}${wh.e && wh.e !== wh.s ? '–' + fmtT(wh.e) : ''}`;
     out.push({ icon: home ? 'house' : 'building', cls: 'on', label: home ? 'Working from home' : 'In office', info: `${p.name} ${home ? 'is working from home' : 'is in office'} ${hrs}`, line: `${home ? 'Working from home' : 'In office'} today · ${hrs}` }); }
   if (now < '21:00') { if (m && list(m.away).includes(p.name)) out.push({ icon: 'meals', cls: 'off', label: 'Not home for dinner', info: `${p.name} won't be home for dinner tonight`, line: 'Not home for dinner tonight' });
     else if (m && m.cook === p.name) out.push({ icon: 'meals', cls: 'on', label: 'Making dinner', info: `${p.name} is making dinner tonight${dish ? ': ' + dish : ''}`, line: `Making dinner tonight${dish ? ': ' + dish : ''}` }); }
@@ -1367,6 +1371,7 @@ const FORMS = {
     F('date', 'Date', 'date'), F('endDate', 'Last day (optional)', 'date'), F('start', 'Starts (optional)', 'time'), F('end', 'Ends, or half-day pickup time', 'time', null, { dur: 'start' }), F('notes', 'Notes', 'area')],
   Birthdays: [F('name', 'Name'), F('date', 'Birthday', 'date'), F('notes', 'Notes', 'area')],
   // Annual traditions: things that happen around the same time every year that we like to do. They are not on the Planner.
+  Lists: [F('title', 'List name', 'text', null, { ph: 'e.g. Christmas tips' }), F('items', 'Items, one per line', 'area', null, { ph: 'Mail carrier\nBabysitter\nTeacher', hint: 'Press return after each one. You can add more later and check them off as you go.' })],
   Annuals: [F('name', 'Event', 'text', null, { ph: 'e.g. Oyster Fest, Meet Santa, the butterfly exhibit' }),
     F('from', 'Starts around (the year does not matter)', 'date'), F('to', 'Ends around (optional)', 'date'),
     F('when', 'When, in words (optional)', 'text', null, { ph: 'e.g. first weekend of October, weekends in December' }),
@@ -1399,7 +1404,7 @@ const FORMS = {
       F('tags', q ? 'Who are you asking?' : 'Tag people', 'multi', () => q ? ADULTS.filter(n => n !== ME) : S.People.map(p => p.name)),
       F('visibility', 'Who can see it', 'sel', [['', 'Everyone'], ['adults', 'Paul and Shana only']]), F('pinUntil', 'Pin to the top of the Feed until (optional)', 'date', null, { re: 1 }), F('_pinAt', 'Until what time (optional)', 'time', null, { show: x => !!x.pinUntil, hint: 'Leave blank to keep it pinned all day.' })]; },
 };
-const NAMES = { gifts: 'gift idea', daily_items: 'daily item', Todos: 'to-do', Events: 'event', Activities: 'activity', Childcare: 'caretaker card', Caretakers: 'caretaker', People: 'family member', Schools: 'school', SchoolCal: 'school calendar item', Birthdays: 'birthday', Annuals: 'annual tradition', HouseCards: 'house card', Houses: 'house',
+const NAMES = { gifts: 'gift idea', daily_items: 'daily item', Todos: 'to-do', Events: 'event', Activities: 'activity', Childcare: 'caretaker card', Caretakers: 'caretaker', People: 'family member', Schools: 'school', SchoolCal: 'school calendar item', Birthdays: 'birthday', Annuals: 'annual tradition', Lists: 'list', HouseCards: 'house card', Houses: 'house',
   WeatherRules: 'weather rule', Groceries: 'grocery card', TodoTypes: 'to-do type', Recipes: 'recipe', Messages: 'message' };
 
 // ---------- saving ----------
@@ -1530,7 +1535,22 @@ const SAVE = {
     need(v.name, 'Name the house.'); return write({ t: 'Houses', row: Object.assign({}, v, { id: v.id || nid() }) });
   }
 };
+// ----- Lists: a checklist that shows in the Feed and under Home, Lists -----
+const listItems = r => { try { const a = JSON.parse(r.items || '[]'); return Array.isArray(a) ? a.filter(x => x && x.t) : []; } catch (e) { return []; } };
+const listDone = r => listItems(r).filter(x => x.d).length;
+const listSave = (r, items, extra) => write({ t: 'Lists', row: Object.assign({ id: r.id, items: JSON.stringify(items) }, extra || {}) });
+function listBox(r) { const its = listItems(r);
+  return `<div class="lbox">${its.map((x, i) => `<label class="check-row ${x.d ? 'ldone' : ''}"><input type="checkbox" data-c="listTick" data-k="${esc(r.id)}|${i}" ${x.d ? 'checked' : ''}> <span>${esc(x.t)}</span></label>`).join('') || '<div class="small muted">Nothing on this list yet.</div>'}</div>`; }
+A.listTick = (v, el) => { const [id, i] = el.dataset.k.split('|'), r = byId('Lists', id); if (!r) return; const its = listItems(r); if (!its[+i]) return; its[+i].d = v === '1' ? 1 : 0; if (its[+i].d) its[+i].by = ME; listSave(r, its); };
+A.listAdd = (v, el) => { const r = byId('Lists', ctx(el).id), inp = el.closest('.row').querySelector('input'), t = (inp.value || '').trim(); if (!r || !t) return; const its = listItems(r); its.push({ t, d: 0 }); inp.value = ''; listSave(r, its); };
+function listPost(a) { const r = byId('Lists', a.ref); if (!r) return '';
+  return `<div class="post">${avatar(a.who)}<div class="pbody"><div>${nameLink(a.who)} <span class="muted">· ${ago(a.time)}</span> <span class="chip">${ic('check', 13)} List</span></div>
+    <div class="ptext" style="font-weight:700;cursor:pointer" data-a="open" data-t="Lists" data-id="${esc(r.id)}">${esc(r.title)} <span class="muted small" style="font-weight:400">· ${listDone(r)} of ${listItems(r).length} done</span></div>${listBox(r)}</div></div>`; }
 async function saveRow(t, v) {
+  if (t === 'Lists') { need(v.title && v.title.trim(), 'Give the list a name.'); const old = v.id ? listItems(byId('Lists', v.id) || {}) : [], seen = new Map(old.map(x => [norm(x.t), x]));
+    const items = String(v.items || '').split('\n').map(x => x.replace(/^\s*(?:[-•*]|\[[ x]\])\s*/i, '').trim()).filter(Boolean).map(x => seen.get(norm(x)) || { t: x, d: 0 }); need(items.length, 'Add at least one item.');
+    const id = v.id || nid(), row = { id, title: v.title.trim(), items: JSON.stringify(items), by: v.by || ME, time: v.time || stamp() };
+    return write(v.id ? { t: 'Lists', row } : { t: 'Lists', row, log: L('list', `made a list: ${row.title}`, 'convo', { table: 'Lists', ref: id }) }); }
   if (SAVE[t]) return SAVE[t](v);
   const first = (Array.isArray(FORMS[t]) ? FORMS[t] : FORMS[t](v))[0]; need(v[first.k] && String(v[first.k]).trim(), first.l + ' is required.');
   return write({ t, row: Object.assign({}, v, { id: v.id || nid() }) });
@@ -1539,6 +1559,7 @@ const DEFAULTS = { Todos: () => ({ type: 'task', assignee: '' }), Events: () => 
   WeatherRules: () => ({ enabled: '1', op: '>', when: 'night' }), places: () => ({ radius: '200' }), HouseCards: () => ({ kind: 'info', house: 'Boston' }), People: () => ({ kind: 'kid' }), SchoolCal: () => ({ kind: 'event', date: TODAY }), Caretakers: () => ({ roster: 'Boston' }) };
 function editForm(t, row, extra) {
   const isNew = !row || !row.id, v = Object.assign(isNew && DEFAULTS[t] ? DEFAULTS[t]() : {}, row || {}, extra || {});
+  if (t === 'Lists' && !isNew) v.items = listItems(row).map(x => x.t).join('\n');
   if (t === 'Activities' && !isNew) { const g = actGroup(row); v._grp = g.map(x => x.id); v._slots = g.flatMap(x => list(x.days).map(dd => ({ day: dd, start: x.start, end: x.end }))).sort((a, b) => DAYS.indexOf(a.day) - DAYS.indexOf(b.day)); }
   if (t === 'Messages' && isNew) return form('New post', FORMS.Messages, v, SAVE.Messages, [['Post', 'off'], ['Post and notify', 'on'], ['Post as urgent', 'urgent']]);
   const ai = isNew && AI_FILL[t] && aiCanUse() ? { ph: AI_FILL[t], ai: t === 'Events' ? aiEvent : txt => aiFill(t, txt) } : null;
@@ -1597,6 +1618,8 @@ function genericCard(r, d, t) {
     if (f.t === 'date') val = val.length >= 10 ? fmtDay(val) : val; if (f.t === 'time') val = fmtT(val); return f.k === 'link' || f.k === 'where' ? kvh(f.l, linkOr(val)) : kv(f.l, val); }).join('');
 }
 const CARD = {
+  Lists(r) { const n = listItems(r).length;
+    return `<h2>${esc(r.title)}</h2><div class="small muted">${listDone(r)} of ${n} done · by ${esc(r.by || '')}</div>${listBox(r)}<div class="row" style="margin-top:8px"><input placeholder="Add an item" aria-label="Add an item" onkeydown="if(event.key==='Enter')this.nextElementSibling.click()"><button class="btn sm" data-a="listAdd">Add</button></div>` + std(); },
   Annuals(r) { const w = annNext(r), ys = list(r.years).sort(), thisY = TODAY.slice(0, 4), went = ys.includes(thisY);
     return `<h2>${esc(r.name)}</h2>` + kv('Usually', annWin(r)) + kv('In words', r.when) +
       (w ? kv('Next', w.now ? `On now, until ${fmtDay(w.e)}` : `${fmtDay(w.s)}${w.days <= 120 ? ` · in ${w.days} day${w.days === 1 ? '' : 's'}` : ''}`) : '') + kv('Where', r.where) + kvh('Website', r.link && linkOr(r.link)) +
@@ -1713,6 +1736,16 @@ function wfhHTML(p, d, b) {
   if (p.name !== ME || d < TODAY) return `<div class="small ${b.home ? 'wfh' : 'muted'}">${b.home ? ic('house', 13) + ' Working from home' : ic('building', 13) + ' In office'}</div>`;
   return `<div class="wseg" role="group" aria-label="Where are you working ${fmtDay(d)}"><button class="${b.home ? '' : 'on'}" data-a="wfhSet" data-v="${d}|office">${ic('building', 13)}Office</button><button class="${b.home ? 'on' : ''}" data-a="wfhSet" data-v="${d}|home">${ic('house', 13)}Home</button></div>`;
 }
+A.workWk = v => { WORKWK = addDays(WORKWK || mondayOf(TODAY), +v); render(); };
+A.workDay = v => { const [id, d] = v.split('|'), p = byId('People', id); if (!p || p.name !== ME) return; const ov = workOv(p, d), wh = workHours(p, d), on = worksOn(p, d) && wh.s;
+  form(fmtDay(d), [F('mode', 'This day', 'sel', [['office', 'Working in the office'], ['home', 'Working from home'], ['off', 'Not working']]),
+      F('s', 'Starts', 'time', null, { show: x => x.mode !== 'off' }), F('e', 'Ends', 'time', null, { show: x => x.mode !== 'off', hint: 'Later than usual? That is working late.' })],
+    { mode: on ? workWhere(p, d) : 'off', s: wh.s || p.workStart || '', e: wh.e || p.workEnd || '' },
+    x => { const w = wfhOf(p), usualOn = list(p.workDays).includes(DAYS[dowIdx(d)]), usual = hoursOf(p)[DAYS[dowIdx(d)]] || {}, us = usual.s || p.workStart || '', ue = usual.e || (usual.s ? '' : p.workEnd) || '', usualWhere = w.days.includes(DAYS[dowIdx(d)]) ? 'home' : 'office';
+      if (x.mode === 'off') { delete w.dates[d]; if (usualOn) w.hrs[d] = { off: 1 }; else delete w.hrs[d]; }
+      else { need(x.s, 'Pick a start time.'); if (x.mode === usualWhere) delete w.dates[d]; else w.dates[d] = x.mode;
+        if (usualOn && x.s === us && (x.e || '') === ue) delete w.hrs[d]; else w.hrs[d] = { s: x.s, e: x.e || '' }; }
+      return write(wfhSave(p, w, L('wfh', x.mode === 'off' ? `is not working ${d === TODAY ? 'today' : 'on ' + fmtDay(d)}` : `is working ${x.mode === 'home' ? 'from home' : 'in the office'} ${d === TODAY ? 'today' : 'on ' + fmtDay(d)}${x.e ? ' until ' + fmtT(x.e) : ''}`, 'planner', { subject: 'wfh|' + p.id + '|' + d }))); }); };
 A.wfhSet = v => { const [d, mode] = v.split('|'), p = personOf(ME); if (!p || workWhere(p, d) === mode) return; const w = wfhOf(p), usual = w.days.includes(DAYS[dowIdx(d)]) ? 'home' : 'office';
   if (mode === usual) delete w.dates[d]; else w.dates[d] = mode;
   write(wfhSave(p, w, L('wfh', `is working ${mode === 'home' ? 'from home' : 'in office'} ${d === TODAY ? 'today' : d === addDays(TODAY, 1) ? 'tomorrow' : 'on ' + fmtDay(d)}`, 'planner', { subject: 'wfh|' + p.id + '|' + d }))); };
@@ -1824,6 +1857,18 @@ function vHH() {
     return back + (S.Caretakers.slice().sort((a, b) => a.name.localeCompare(b.name)).map(k => { const nx = up.find(c => c.confirmedId === k.id), pay = k.unpaid === '1' || k.pay === 'unpaid' ? 'Unpaid' : k.pay === 'weekly' ? `Paid weekly${k.payDay ? ' on ' + k.payDay : ''}${k.weekly ? ' · $' + k.weekly : ''}` : k.rate ? '$' + k.rate + '/hr' : '';
       return acard(`data-a="open" data-t="Caretakers" data-id="${esc(k.id)}"`, esc(k.name), [esc([k.relationship, list(k.roster).join(' and ')].filter(Boolean).join(' · ')), esc([pay, k.phone].filter(Boolean).join(' · ')), nx ? `${ic('clock', 13)} Next: ${esc(fmtDay(nx.date))}, ${esc(fmtT(nx.start))}` : ''], k.drive === '1' ? 'Drives' : ''); }).join('') || '<div class="empty">No caretakers yet.</div>') +
       `<div style="height:90px"></div><button class="fab" data-a="add" data-v="Caretakers" aria-label="Add a caretaker">${ic('plus', 20)}Caretaker</button>`; }
+  if (HH === 'lists') { const rs = S.Lists.slice().sort((a, b) => (listDone(a) >= listItems(a).length ? 1 : 0) - (listDone(b) >= listItems(b).length ? 1 : 0) || String(b.time).localeCompare(String(a.time)));
+    return back + (rs.map(r => acard(`data-a="open" data-t="Lists" data-id="${esc(r.id)}"`, esc(r.title), [`${listDone(r)} of ${listItems(r).length} done`, esc(listItems(r).filter(x => !x.d).slice(0, 3).map(x => x.t).join(', '))], listDone(r) >= listItems(r).length && listItems(r).length ? 'Done' : '')).join('') || '<div class="empty">No lists yet. Make one for anything you want to tick off: Christmas tips, a packing list, errands.</div>') +
+      `<div style="height:90px"></div><button class="fab" data-a="add" data-v="Lists" aria-label="New list">${ic('plus', 20)}List</button>`; }
+  if (HH === 'work') {
+    const mon = WORKWK || mondayOf(TODAY), days = Array.from({ length: 7 }, (_, i) => addDays(mon, i)), adults = S.People.filter(p => p.kind !== 'kid' && (p.workDays || wfhOf(p).days.length)),
+      card = p => { const me = p.name === ME, rows = days.map(d => { const wh = workHours(p, d), on = worksOn(p, d) && wh.s, ov = workOv(p, d), home = workWhere(p, d) === 'home', late = on && ov && !ov.off;
+        return `<div class="li" style="padding:10px 0" ${me ? `data-a="workDay" data-v="${p.id}|${d}"` : ''}><div class="grow"><div class="ti">${esc(fmtDay(d))}${d === TODAY ? ' <span class="chip">Today</span>' : ''}</div>
+          <div class="small muted">${on ? (home ? 'Working from home' : 'In the office') + ' · ' + fmtT(wh.s) + (wh.e && wh.e !== wh.s ? '–' + fmtT(wh.e) : '') + (late ? ' · changed' : '') : ov && ov.off ? 'Day off (changed)' : 'Not working'}</div></div>${me ? ic('chev', 16) : ''}</div>`; }).join('');
+        return `<div class="box hcard" style="cursor:default"><div class="htitle">${esc(p.name)}${me ? ' (you)' : ''}</div><div class="small muted" style="margin:2px 0 6px">${esc(workHoursTxt(p) || 'No usual hours set')}${wfhOf(p).days.length ? ' · usually from home ' + esc(wfhOf(p).days.join(', ')) : ''}</div>${rows}</div>`; };
+    return back + `<div class="pad small muted">Change a day for yourself: office or home, working late, or a day off. Tap a day to edit it. Usual days and hours are on your profile.</div>
+      <div class="pad" style="display:flex;gap:8px;align-items:center;justify-content:space-between"><button class="btn gray sm" data-a="workWk" data-v="-7" aria-label="Previous week">${ic('left', 16)}</button><b>${esc(fmtDate(mon))} – ${esc(fmtDate(addDays(mon, 6)))}${mon === mondayOf(TODAY) ? ' · this week' : ''}</b><button class="btn gray sm" data-a="workWk" data-v="7" aria-label="Next week">${ic('chev', 16)}</button></div>` +
+      (adults.map(card).join('') || '<div class="empty">No one has work days set yet. Add them on a profile.</div>'); }
   if (HH === 'annuals') {
     const ws = S.Annuals.map(a => ({ a, w: annNext(a) })).sort((p, q) => (p.w ? p.w.days : 9999) - (q.w ? q.w.days : 9999) || p.a.name.localeCompare(q.a.name)), card = ({ a, w }) => {
       const went = list(a.years).sort(), thisY = TODAY.slice(0, 4);
@@ -2081,8 +2126,8 @@ A.pause = (v, el) => { const r = byId('Recipes', ctx(el).id); if (r.pausedUntil 
 A.archive = (v, el) => { const r = byId('Recipes', ctx(el).id); write({ t: 'Recipes', row: { id: r.id, status: r.status === 'archived' ? '' : 'archived' } }); };
 // ---------- views ----------
 const TITLES = { feed: 'Feed', planner: 'Planner', meals: 'Meals', todo: 'To-Do', home: 'Home' };
-const HH_TITLES = { Schools: 'Schools', Activities: 'Activities', houses: 'House', places: 'Known locations', Caretakers: 'Caretakers', birthdays: 'Birthdays', annuals: 'Annual traditions', WeatherRules: 'Weather rules', Groceries: 'Grocery library', TodoTypes: 'To-do types' };
-let HH = '';
+const HH_TITLES = { Schools: 'Schools', Activities: 'Activities', houses: 'House', places: 'Known locations', Caretakers: 'Caretakers', birthdays: 'Birthdays', annuals: 'Annual traditions', work: 'Work schedule', lists: 'Lists', WeatherRules: 'Weather rules', Groceries: 'Grocery library', TodoTypes: 'To-do types' };
+let HH = '', WORKWK = '';
 function render() {
   const pv = view === 'person' && byId('People', PERSON);
   if (view === 'person' && !pv) view = prevView || 'home';
@@ -2178,7 +2223,7 @@ function vFeed() {
   const mine = myTodos(), over = mine.filter(t => t.due && t.due < TODAY), due = mine.filter(t => t.due === TODAY || (night && t.due === sd));
   const bdays = itemsFor(sd).filter(i => i.src === 'birthday');
   // Where the other parent is working today (tomorrow after 7 PM), from the Office / Home switch on their page.
-  const where = S.People.filter(p => p.kind !== 'kid' && p.name !== ME && workHours(p, sd).s && list(p.workDays).includes(DAYS[dowIdx(sd)])).map(p => { const home = workWhere(p, sd) === 'home', wh = workHours(p, sd);
+  const where = S.People.filter(p => p.kind !== 'kid' && p.name !== ME && workHours(p, sd).s && worksOn(p, sd)).map(p => { const home = workWhere(p, sd) === 'home', wh = workHours(p, sd);
     return { lvl: 'plain', icon: home ? 'house' : 'building', text: `${p.name} ${home ? 'working from home' : 'in office'} ${night ? 'tomorrow' : 'today'}${wh.e && wh.e !== wh.s ? ' · until ' + fmtT(wh.e) : ''}`, open: ['People', p.id] }; });
   const rem = where.concat(dinnerFlags(sd, night)).concat(al.map(a => ({ lvl: a.lvl || 'plain', icon: a.icon, text: a.text, open: a.open, sride: a.sride, nav: a.nav })))
     .concat(bdays.map(b => ({ lvl: 'plain', icon: 'cake', text: b.title + (night ? ' tomorrow' : ' today'), open: [b.t, b.id] })),
@@ -2208,12 +2253,12 @@ function vFeed() {
   // unless they tick "Show what the assistant tidied away" in the Feed menu.
   const tidyOn = aiWho().includes(ME) && st('f.moot', '0') !== '1';
   const latestSub = new Map(); S.Activity.forEach(a => { if (!a.subject) return; const pr = latestSub.get(a.subject); if (!pr || (a.time || '') >= (pr.time || '')) latestSub.set(a.subject, a); });
-  const stream = S.Activity.filter(a => a.type !== 'message' && a.state !== 'cleared' && !(a.state === 'moot' && tidyOn) && (a.type !== 'source' || !a.audience || list(a.audience).includes(ME)) && (!a.subject || latestSub.get(a.subject) === a) && (a.type !== 'ai' || aiNoteFor(a).includes(ME)) && !kindHidden(a) && !gone.has('A:' + a.id)).map(a => ({ time: a.time, a })).concat(S.Messages.filter(mm => fOn('messages') && !gone.has('M:' + mm.id)).map(mm => ({ time: mm.time, m: mm, pin: pinnedNow(mm) && mm.resolved !== '1' })))
+  const stream = S.Activity.filter(a => a.type !== 'message' && a.state !== 'cleared' && !(a.state === 'moot' && tidyOn) && (a.type !== 'source' || !a.audience || list(a.audience).includes(ME)) && (!a.subject || latestSub.get(a.subject) === a) && (a.type !== 'ai' || aiNoteFor(a).includes(ME)) && (a.type !== 'list' || byId('Lists', a.ref)) && !kindHidden(a) && !gone.has('A:' + a.id)).map(a => ({ time: a.time, a })).concat(S.Messages.filter(mm => fOn('messages') && !gone.has('M:' + mm.id)).map(mm => ({ time: mm.time, m: mm, pin: pinnedNow(mm) && mm.resolved !== '1' })))
     .concat(S.ai_requests.filter(q => !hide('ai') && q.status !== 'filled' && q.status !== 'cleared' && (q.status !== 'error' || q.who === ME) && !gone.has('R:' + q.id)).map(q => ({ time: q.time || '', r: q })))
     .sort((x, y) => (y.pin ? 1 : 0) - (x.pin ? 1 : 0) || y.time.localeCompare(x.time)).slice(0, 70);
   // Bundle bursts: several changes by the same person within a few minutes become one post.
   const win = (+st('bundleMin', '5') || 0) * 60000, out = [];
-  stream.forEach(e => { const p = out[out.length - 1], solo = x => x.r || x.m || x.pin || stackOf(x) || x.a.type === 'ai' || taggedMe(x.a.text, x.a.who) || x.a.table === 'Photos' || String(x.a.subject || '').startsWith('dinners|') || x.a.type === 'daily' || x.a.type.startsWith('summary') || x.a.who === 'App';
+  stream.forEach(e => { const p = out[out.length - 1], solo = x => x.r || x.m || x.pin || (x.a && x.a.type === 'list') || stackOf(x) || x.a.type === 'ai' || taggedMe(x.a.text, x.a.who) || x.a.table === 'Photos' || String(x.a.subject || '').startsWith('dinners|') || x.a.type === 'daily' || x.a.type.startsWith('summary') || x.a.who === 'App';
     if (win && p && !solo(e) && !solo(p.items ? p.items[0] : p) && p.who === e.a.who && new Date(p.t0) - new Date(e.time) <= win) { p.items = p.items || [{ time: p.time, a: p.a }]; p.items.push(e); p.t0 = e.time; return; }
     out.push(Object.assign({ who: e.a ? e.a.who : '', t0: e.time }, e)); });
   const fOff = FKINDS().filter(([k]) => !fOn(k)).map(x => x[1]);
@@ -2227,7 +2272,7 @@ function vFeed() {
   return html + feedFab();
 }
 // What the Feed's + button offers: [label, icon, action]. Add a line here to add an option.
-const FEED_ADD = () => [aiCanUse() && ['Ask the assistant', 'spark', 'fabAsk'], ['Grocery item', 'cart', 'fabGroc'], ['New event', 'planner', 'fabEvent'], ['New to-do', 'todo', 'fabTodo'], ['New post', 'msg', 'fabPost']].filter(Boolean);
+const FEED_ADD = () => [aiCanUse() && ['Ask the assistant', 'spark', 'fabAsk'], ['Grocery item', 'cart', 'fabGroc'], ['New event', 'planner', 'fabEvent'], ['New to-do', 'todo', 'fabTodo'], ['New list', 'check', 'fabList'], ['New post', 'msg', 'fabPost']].filter(Boolean);
 let FABON = false;
 const feedFab = () => `<div class="fabwrap ${FABON ? 'fabon' : ''}"><div class="fabbg" data-a="fabClose"></div>
   <div class="fabm" role="menu" aria-hidden="${!FABON}">${FEED_ADD().map(([l, i, a]) => `<button data-a="${a}" role="menuitem" ${FABON ? '' : 'tabindex="-1"'}>${ic(i, 20)}${esc(l)}</button>`).join('')}</div>
@@ -2250,6 +2295,7 @@ A.fabFeed = () => fabSet(!FABON);
 A.fabClose = () => fabSet(false);
 A.fabEvent = () => { fabSet(false); editForm('Events', null); };
 A.fabTodo = () => { fabSet(false); editForm('Todos', null); };
+A.fabList = () => { fabSet(false); editForm('Lists', null); };
 A.fabPost = () => { fabSet(false); A.newMsg(); };
 A.fabAsk = () => { fabSet(false); A.askOpen(); };
 // Grocery item from the Feed: a small sheet that stays open so several items can be added in a row.
@@ -2518,6 +2564,7 @@ function sourcePost(a) {
 }
 function actPost(a) {
   if (a.type === 'source') return sourcePost(a);
+  if (a.type === 'list') return listPost(a);
   if (String(a.subject || '').startsWith('dinners|')) return dinnerPost(a);
   if (a.table === 'Photos') { const p = byId('Photos', a.ref), ti = p ? titleOf(p.table, p.ref) : '';
     if (p && !isImg(p)) return `<div class="post">${avatar(a.who)}<div class="pbody"><div><b>${esc(a.who)}</b> attached a file${ti ? ` to <b data-a="open" data-t="${p.table}" data-id="${esc(p.ref)}" style="cursor:pointer">${esc(ti)}</b>` : ''} <span class="muted">· ${ago(a.time)}</span></div>
@@ -3061,7 +3108,7 @@ const SETTINGS = [['Caretakers', 'care', 'Caretakers', 'Boston and Cape rosters,
   ['Groceries', 'cart', 'Grocery library', 'Saved items with brands and notes'], ['TodoTypes', 'tag', 'To-do types', 'Types and who they go to by default'], ['memories', 'quote', 'Quotes and memories', 'The morning splash screen'],
   ['hiddencal', 'x', 'Hidden calendar entries', 'Calendar items you hid from the planner'], ['places', 'pin', 'Known locations', 'Home, work, school… for "last seen at"'], ['settings', 'bell', 'Notifications and Feed', 'Push alerts, bundling, quiet hours, what shows in your Feed'], ['device', 'phone', 'This phone', 'Your personal link and sign-in']];
 // Muted section colors for the Home icons.
-const HC = { gift: '#b0567a', users: '#5b6fa8', school: '#4a7fb5', activity: '#3d9a62', house: '#b07a3c', book: '#a65f5f', gear: '#6b7280', care: '#3e9aa6', cake: '#c8578f', sun: '#c28a2c', weather: '#4f8fbf', cart: '#8a7a3d', tag: '#7a6aa8', quote: '#9a6b8a', bell: '#b08a4f', phone: '#64748b' };
+const HC = { gift: '#b0567a', users: '#5b6fa8', school: '#4a7fb5', activity: '#3d9a62', house: '#b07a3c', book: '#a65f5f', gear: '#6b7280', care: '#3e9aa6', cake: '#c8578f', sun: '#c28a2c', briefcase: '#5b6fa8', weather: '#4f8fbf', cart: '#8a7a3d', tag: '#7a6aa8', quote: '#9a6b8a', bell: '#b08a4f', phone: '#64748b' };
 const hrow = (a, v, icon, l, sub) => `<div class="li" data-a="${a}" data-v="${v}"><div class="hicon" style="--hc:${HC[icon] || 'var(--accent)'}">${ic(icon)}</div><div class="grow"><div class="ti">${l}</div>${sub ? `<div class="small muted">${sub}</div>` : ''}</div><span class="chev">›</span></div>`;
 /** What the Home row says: what is on now, or what is next. */
 function annSub() {
@@ -3080,8 +3127,10 @@ function vHome() {
     `<div class="sect">Household</div>` +
     hrow('homeOpen', 'Schools', 'school', 'Schools', S.Schools.map(x => x.short || x.name).join(', ') || 'Hours, contacts and school calendars') +
     hrow('homeOpen', 'Activities', 'activity', 'Activities', grp.length ? `${grp.length} repeating, for kids and parents` : 'Repeating activities like hockey or piano') +
+    hrow('homeOpen', 'lists', 'check', 'Lists', S.Lists.length ? S.Lists.filter(r => listDone(r) < listItems(r).length).length + ' open of ' + S.Lists.length : 'Checklists to share and tick off') +
     hrow('homeOpen', 'annuals', 'sun', 'Annual traditions', annSub()) +
     hrow('homeOpen', 'houses', 'house', 'House', 'Info and upkeep · ' + houses) +
+    hrow('homeOpen', 'work', 'briefcase', 'Work schedule', 'Office, home, working late, days off') +
     hrow('openSettings', '', 'gear', 'Settings', 'Meals, assistant rules, caretakers, birthdays, notifications and more') +
     notesHTML() +
     `<div class="giftwrap"><div class="li giftrow" data-a="homeOpen" data-v="gifts"><span class="muted">${ic('gift', 16)}</span><span class="grow small">Gift ideas</span><span class="small muted">${S.gifts.length || ''}</span><span class="chev">›</span></div></div>` +

@@ -1,6 +1,8 @@
 /**
  * Momnie Family app backend
- * Version 3.46 (2026-11-20)
+ * Version 3.48 (2026-11-20)
+ *   3.48: Lists (checklist posts, Lists tab).
+ *   3.47: One-day work changes (late, different hours, day off) from the app's Work schedule page are used in the Today cards.
  *   3.46: A tradition collects its events (links); the assistant links the event when a tradition is made or planned, and does not ask "again this year?" when it is already on the Planner.
  *   3.45: Annual traditions are no longer shown daily; shortly before one starts the assistant asks "Are we doing it again?" (shared Yes/No); Yes puts it on the Planner.
  *   3.44: The assistant can ask "Should this be an annual tradition?" about an event (yes/no question in the Feed); a Yes adds the tradition and posts a note. Messages gets a ref column.
@@ -103,6 +105,7 @@ var T = {
   Caretakers: 'id,name,relationship,phone,roster,birthday,drive,rate,unpaid,notes,pay,payDay,weekly',
   Childcare: 'id,date,start,end,task,place,kids,roster,notes,asks,confirmedId,payTodoId,paidAmount,paidOn,createdBy',
   Birthdays: 'id,name,date,notes',
+  Lists: 'id,time,by,title,items',   // checklists: items is JSON [{t: text, d: 1 when ticked, by}]
   Annuals: 'id,name,from,to,when,where,link,notes,years,remind',   // annual traditions: things we like to do each year (month and day repeat); years = the years we went
   Todos: 'id,created,type,title,amount,where,due,status,assignee,addedBy,doneOn,doneBy,notes,house,kid,repeat,link,source',
   TodoTypes: 'id,name,emoji,assignee,builtin,fields',
@@ -1437,9 +1440,9 @@ function briefCands_(p, d, mode) {
   var t = today_(), day = DAYS[dow_(d)], c = [], add = function (ref, text) { c.push({ ref: ref, what: text }); };
   var people = rows_('People'), me = people.filter(function (x) { return x.name === p; })[0] || {};
   people.forEach(function (x) {
-    var hrs = (jsonSafe_(setting_('person|' + x.id + '|hours', '{}'))[day]) || {}, ws = hrs.s || x.workStart, we = hrs.e || (hrs.s ? '' : x.workEnd);
-    if (x.kind === 'kid' || !ws || list_(x.workDays).indexOf(day) < 0) return;
-    var w = jsonSafe_(setting_('person|' + x.id + '|wfh', '{}')), dates = w.dates && typeof w.dates === 'object' ? w.dates : {};
+    var w = jsonSafe_(setting_('person|' + x.id + '|wfh', '{}')), dates = w.dates && typeof w.dates === 'object' ? w.dates : {}, ov = w.hrs && w.hrs[d];   // ov: a one-day change from the app's Work schedule page
+    var hrs = (jsonSafe_(setting_('person|' + x.id + '|hours', '{}'))[day]) || {}, ws = ov && !ov.off ? (ov.s || x.workStart) : hrs.s || x.workStart, we = ov && !ov.off ? (ov.e || '') : hrs.e || (hrs.s ? '' : x.workEnd);
+    if (x.kind === 'kid' || !ws || (ov ? ov.off : list_(x.workDays).indexOf(day) < 0)) return;
     var where = dates[d] || (list_(w.days).indexOf(day) >= 0 ? 'home' : 'office');
     add('People:' + x.id, (x.name === p ? 'You work' : x.name + ' works') + ' ' + t12_(ws) + (we ? '–' + t12_(we) : '') + ', ' + (where === 'home' ? 'from home' : 'in office'));
   });
