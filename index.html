@@ -419,7 +419,7 @@ a.alink { color: inherit; text-decoration: underline; text-decoration-color: col
 // Momnie Family app v6.0
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'], DAYN = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'], ADULTS = ['Paul', 'Shana'];
 // Shown at the bottom of Home. Bump it together with VERSION in sw.js on every release.
-const APP_VERSION = '16.21 · Nov 19, 2026';
+const APP_VERSION = '16.22 · Nov 19, 2026';
 const TABLES = ['People', 'Schools', 'SchoolCal', 'Activities', 'Overrides', 'Events', 'Caretakers', 'Childcare', 'Birthdays', 'Annuals', 'Lists', 'Todos', 'TodoTypes', 'Recipes', 'DinnerRules', 'Weeks', 'Menus',
   'Groceries', 'GroceryList', 'HouseCards', 'Houses', 'WeatherRules', 'Quotes', 'Memories', 'Updates', 'Messages', 'Activity', 'Comments', 'Reactions', 'Links', 'Settings', 'Photos', 'gifts', 'ai_rules', 'ai_requests', 'notes', 'places', 'daily_items', 'daily_completions'];
 const CAT = { School: '#3f6fb5', Kids: '#4f7cc2', Work: '#64748b', Family: '#5b6fa8', Dinner: '#b08a4f', Caretaker: '#3e9aa6', Shared: '#94a3b8', Birthday: '#c9806a' }, SCHOOL_C = ['#5a72b8', '#7a8597', '#4a6fb0'];
@@ -886,7 +886,8 @@ function conflictsFor(d) {
 }
 function wxHits(dayIdx, when) {
   const day = WX && WX.days && WX.days[dayIdx]; if (!day) return [];
-  return S.WeatherRules.filter(r => r.enabled !== '0' && (r.when || 'morning') === when && (r.op === '<' ? +day[r.metric] < +r.threshold : +day[r.metric] > +r.threshold));
+  const date = addDays(TODAY, dayIdx);
+  return S.WeatherRules.filter(r => r.enabled !== '0' && (r.when || 'morning') === when && (r.op === '<' ? +day[r.metric] < +r.threshold : +day[r.metric] > +r.threshold) && (r.school !== '1' || schoolRuns(date).length));
 }
 /** "Needs attention" list for the Today section. */
 function alerts() {
@@ -1385,7 +1386,7 @@ const FORMS = {
     F('radius', 'Counts as there within', 'sel', [['100', '100 m (one building)'], ['200', '200 m'], ['500', '500 m (a campus)'], ['1000', '1 km']])],
   Houses: [F('name', 'Name'), F('lat', 'Latitude', 'num'), F('lon', 'Longitude', 'num'), F('_here', 'Set to where I am right now', 'chk')],
   WeatherRules: [F('metric', 'If', 'sel', [['rain', 'Chance of rain (%)'], ['high', 'High temperature (°F)'], ['low', 'Low temperature (°F)'], ['uv', 'UV index'], ['snow', 'Snowfall (inches)']]), F('op', 'is', 'sel', [['>', 'above'], ['<', 'below']]),
-    F('threshold', 'this number', 'num'), F('message', 'Show this reminder'), F('when', 'When', 'sel', [['night', 'From the evening before'], ['morning', 'The morning of']]), F('push', 'Also send a notification', 'chk'), F('urgent', 'Urgent (ignores quiet hours)', 'chk'), F('enabled', 'Turned on', 'chk')],
+    F('threshold', 'this number', 'num'), F('message', 'Show this reminder'), F('when', 'When', 'sel', [['night', 'From the evening before'], ['morning', 'The morning of']]), F('school', 'Only on school days', 'chk', null, { hint: 'Skips weekends and days with no school, so it only shows when there is school that day.' }), F('push', 'Also send a notification', 'chk'), F('urgent', 'Urgent (ignores quiet hours)', 'chk'), F('enabled', 'Turned on', 'chk')],
   Groceries: [F('name', 'Name'), F('category', 'Category', 'text', null, { ph: 'e.g. Dairy' }), F('details', 'Brand, size and notes', 'area', null, { ph: 'e.g. Stonyfield organic vanilla. Kids like this kind.' }), F('altNames', 'Other names (comma separated)'),
     F('recurDays', 'Add to the list automatically every __ days (blank = never)', 'num'), F('house', 'House', 'sel', HOUSE_O)],
   TodoTypes: [F('name', 'Type name'), F('emoji', 'Emoji'), F('assignee', 'Goes to by default', 'sel', [['', 'Either of us'], 'Paul', 'Shana']), F('fields', 'Extra fields', 'multi', ['amount', 'where', 'kid', 'link'])],
@@ -1605,9 +1606,9 @@ const kvh = (l, h) => h ? `<div class="kv"><span>${esc(l)}</span>${h}</div>` : '
 const linkOr = s => isUrl(s) ? `<a href="${esc(s)}" target="_blank" rel="noopener">${esc(s)}</a>` : esc(s);
 const TRAD_BTN = `<button class="btn gray sm" data-a="mkTradition">${ic('sun', 16)}Make it an annual tradition</button>`;
 const std = o => `<div class="actions">${o && o.noEdit ? '' : `<button class="btn gray sm" data-a="edit">${ic('pen')}Edit</button>`}<button class="btn gray sm" data-a="link">${ic('link')}Link</button>${o && o.care ? `<button class="btn gray sm" data-a="careFor">${ic('care')}Add caretaker</button>` : ''}${o && o.ann ? TRAD_BTN : ''}${o && o.noDel ? '' : `<button class="btn danger sm" data-a="del">${ic('trash')}Delete</button>`}</div>`;
-const rideSel = (cls, val) => `<select class="${cls}">${rideO().map(x => { const [a, b] = Array.isArray(x) ? x : [x, x]; return `<option value="${esc(a)}" ${a === (val || '') ? 'selected' : ''}>${esc(b)}</option>`; }).join('')}</select>`;
+const rideSel = (cls, val) => `<select class="${cls}" data-c="rideAuto">${rideO().map(x => { const [a, b] = Array.isArray(x) ? x : [x, x]; return `<option value="${esc(a)}" ${a === (val || '') ? 'selected' : ''}>${esc(b)}</option>`; }).join('')}</select>`;
 const rideBox = (title, d, p, all) => `<h3>${esc(title)}</h3><div class="two"><div><label>Drop-off</label>${rideSel('rd', d)}</div><div><label>Pickup</label>${rideSel('rp', p)}</div></div>
-  ${all ? '<label class="check-row"><input type="checkbox" class="rall"> Apply to all future weeks</label>' : ''}<div class="actions"><button class="btn sm" data-a="rideSave">Save rides</button>${all ? '<button class="btn gray sm" data-a="skipDay">Cancel just this day</button>' : ''}</div>`;
+  ${all ? '<label class="check-row"><input type="checkbox" class="rall" data-c="rideAuto"> Apply to all future weeks</label>' : ''}${all ? '<div class="actions"><button class="btn gray sm" data-a="skipDay">Cancel just this day</button></div>' : ''}`;
 function careSms(c, k) {
   const ks = kidNames(list(c.kids)) || 'the kids', what = c.task === 'pick up' ? `pick up ${ks}${c.place ? ' from ' + c.place : ''}` : c.task === 'bring to' ? `bring ${ks} to ${c.place || '…'}` : `babysit ${ks}`, d = parse(c.date);
   return `Hi ${k.name.split(' ')[0]}, would you be available to ${what} on ${d.toLocaleDateString('en-US', { weekday: 'long' })}, ${d.toLocaleDateString('en-US', { month: 'long', day: 'numeric' })} from ${fmtT2(c.start)} until ${fmtT2(c.end)}? Thanks!`;
@@ -1835,7 +1836,7 @@ A.hhGo = k => { sheets.slice().forEach(d => d.close()); if (view !== 'hh') { pre
 const hhTitle = () => { const [k, id] = HH.split(':'); if (!id) return HH_TITLES[HH];
   if (k === 'school') { const x = byId('Schools', id); return x ? x.short || x.name : 'School'; } if (k === 'act') { const x = byId('Activities', id); return x ? x.name : 'Activity'; } return id === 'Cape' ? 'Cape house' : id; };
 const WX_WORD = { rain: 'rain chance', snow: 'snow', low: 'low', high: 'high', uv: 'UV' }, wxUnit = m => m === 'rain' ? '%' : m === 'snow' ? ' in' : m === 'uv' ? '' : '°';
-const wxRuleTxt = r => `If the ${WX_WORD[r.metric] || r.metric} is ${r.op === '<' ? 'below' : 'above'} ${r.threshold}${wxUnit(r.metric)} · ${r.when === 'night' ? 'the evening before' : 'that morning'}`;
+const wxRuleTxt = r => `If the ${WX_WORD[r.metric] || r.metric} is ${r.op === '<' ? 'below' : 'above'} ${r.threshold}${wxUnit(r.metric)} · ${r.when === 'night' ? 'the evening before' : 'that morning'}${r.school === '1' ? ' · school days only' : ''}`;
 const acard = (attrs, title, lines, chip, extra) => `<div class="box hcard" ${attrs}><div class="row" style="align-items:flex-start"><div class="grow"><div class="htitle">${title}</div>${lines.filter(Boolean).map(l => `<div class="small muted" style="margin-top:3px">${l}</div>`).join('')}</div>${chip ? `<span class="chip">${chip}</span>` : ''}</div>${extra || ''}</div>`;
 const hhCard = (t, id, title, lines, chip, go) => `<div class="box hcard" ${go ? `data-a="hhGo" data-v="${esc(go)}"` : `data-a="open" data-t="${t}" data-id="${esc(id)}"`}><div class="row" style="align-items:flex-start"><div class="grow"><div class="htitle">${esc(title)}${aiMk(t, id)}</div>${lines.filter(Boolean).map(l => `<div class="small muted" style="margin-top:3px">${l}</div>`).join('')}</div>${chip ? `<span class="chip">${chip}</span>` : ''}</div></div>`;
 function vHH() {
@@ -2079,11 +2080,12 @@ A.careSet = async (stt, el) => { const c = byId('Childcare', ctx(el).id), k = el
   else if (stt === 'cant') ops.push(sys('Childcare', c.id, `marked ${name} as can't do it`));
   else if (c.confirmedId === k) S.Todos.filter(x => x.source === 'findcare:' + c.id && x.status === 'Done').forEach(x => ops.push({ t: 'Todos', row: { id: x.id, status: 'Open', doneOn: '', doneBy: '' } }));
   await write(ops); };
+A.rideAuto = (v, el) => A.rideSave(null, el);   // rides save as soon as you choose, there is no Save button
 A.rideSave = async (v, el) => { const d = el.closest('dialog'), c = d._ctx, dr = d.querySelector('.rd').value, pu = d.querySelector('.rp').value, all = d.querySelector('.rall'), dc = driveCheck([dr, pu].filter(Boolean)); if (!dc) return;
   const title = titleOf(c.t, c.id), txt = `set rides for ${title}${c.date ? ' (' + fmtDay(c.date) + ')' : ''}: drop-off ${dr || 'not set'}, pickup ${pu || 'not set'}`;
-  if (c.t === 'Events') dc.push({ t: 'Events', row: { id: c.id, dropoff: dr, pickup: pu }, log: L('rides', txt, 'planning') });
-  else if (all && all.checked) { actGroup(byId('Activities', c.id)).forEach((x, i) => dc.push({ t: 'Activities', row: { id: x.id, dropoff: dr, pickup: pu }, log: i ? null : L('rides', txt + ', and every week after', 'planning') })); S.Overrides.filter(o => o.ref === c.id && o.date >= c.date && o.cancelled !== '1').forEach(o => dc.push({ t: 'Overrides', del: o.id })); }
-  else dc.push({ t: 'Overrides', row: { id: (ovr(c.id, c.date).id) || nid(), ref: c.id, date: c.date, dropoff: dr, pickup: pu }, log: L('rides', txt, 'planning', { table: 'Activities', ref: c.id }) });
+  if (c.t === 'Events') dc.push({ t: 'Events', row: { id: c.id, dropoff: dr, pickup: pu }, log: L('rides', txt, 'planning', { subject: 'rides|' + c.id + '|' + (c.date || '') }) });
+  else if (all && all.checked) { actGroup(byId('Activities', c.id)).forEach((x, i) => dc.push({ t: 'Activities', row: { id: x.id, dropoff: dr, pickup: pu }, log: i ? null : L('rides', txt + ', and every week after', 'planning', { subject: 'rides|' + c.id + '|' + (c.date || '') }) })); S.Overrides.filter(o => o.ref === c.id && o.date >= c.date && o.cancelled !== '1').forEach(o => dc.push({ t: 'Overrides', del: o.id })); }
+  else dc.push({ t: 'Overrides', row: { id: (ovr(c.id, c.date).id) || nid(), ref: c.id, date: c.date, dropoff: dr, pickup: pu }, log: L('rides', txt, 'planning', { table: 'Activities', ref: c.id, subject: 'rides|' + c.id + '|' + (c.date || '') }) });
   if (await write(dc)) toast('Rides saved'); };
 A.skipDay = async (v, el) => { const c = ctx(el); if (!confirm(`Cancel ${titleOf(c.t, c.id)} on ${fmtDay(c.date)} only?`)) return;
   if (await write({ t: 'Overrides', row: { id: ovr(c.id, c.date).id || nid(), ref: c.id, date: c.date, cancelled: '1' }, log: L('cancel', `canceled ${titleOf(c.t, c.id)} for ${fmtDay(c.date)}`, 'planner', { table: 'Activities', ref: c.id }) })) A.close(v, el); };
@@ -3142,11 +3144,11 @@ A.feedback = () => form('Constructive feedback', [F('idea', 'What would make the
 A.openSettings = () => { const d = sheet(() => '<h2>Settings</h2><div style="clear:both"></div>' + [['ai', 'spark', 'Assistant', [ME === 'Paul' ? (aiOn() ? 'On' : 'Off') : '', S.ai_rules.length ? (n => `${n} rule${n === 1 ? '' : 's'} on`)(S.ai_rules.filter(r => r.active !== '0').length) : 'Rules in plain English'].filter(Boolean).join(' · ')],
     ['mealsHome', 'book', 'Meals', 'Dinner rules and the instructions for importing recipes']].concat(SETTINGS)
   .map(([k, icon, l, sub]) => k === 'mealsHome' ? hrow('mealsHome', '', icon, l, sub) : hrow('homeOpen', k, icon, l, sub)).join('')); d._settings = true; };
-// ---------- Notes: a shared scratch pad at the bottom of Home, visible to everyone ----------
-const notesHTML = () => { const ns = S.notes.filter(n => n.text).sort((a, b) => (b.time || '').localeCompare(a.time || ''));
+// ---------- Notes: a private scratch pad at the bottom of Home. Only the person who wrote a note sees it (to share something, make a post) ----------
+const notesHTML = () => { const ns = S.notes.filter(n => n.text && (!n.who || n.who === ME)).sort((a, b) => (b.time || '').localeCompare(a.time || ''));
   return `<div class="sect row" style="justify-content:space-between;align-items:center;padding-right:16px"><span>Notes</span><button class="lnk" style="text-transform:none;letter-spacing:0" data-a="noteEdit" aria-label="Add a note">${ic('plus', 15)}Note</button></div>` +
     (ns.length ? ns.map(n => `<div class="li note" data-a="noteEdit" data-v="${n.id}"><div class="grow"><div style="white-space:pre-wrap">${withMentions(n.text)}</div><div class="small muted" style="margin-top:2px">${esc(n.who || '')} · ${ago(n.time)}</div></div></div>`).join('')
-      : '<div class="pad small muted">Anything worth jotting down. Everyone sees these.</div>'); };
+      : '<div class="pad small muted">Anything worth jotting down. Only you see these; to share with the family, make a post.</div>'); };
 A.noteEdit = id => { const n = id ? byId('notes', id) : null;
   form(n ? 'Note' : 'New note', [F('text', 'Note', 'area', null, { ph: 'e.g. Wifi password for the Cape is on the fridge' })], { id: n ? n.id : '', text: n ? n.text : '' },
     (x, mode) => { if (mode === 'del') { if (!confirm('Delete this note?')) return false; return write({ t: 'notes', del: x.id }); }

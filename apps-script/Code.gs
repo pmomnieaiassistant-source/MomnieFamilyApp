@@ -1,6 +1,7 @@
 /**
  * Momnie Family app backend
- * Version 3.48 (2026-11-20)
+ * Version 3.49 (2026-11-22)
+ *   3.49: Weather rules can be limited to school days; the rain gear rule now only fires on school nights.
  *   3.48: Lists (checklist posts, Lists tab).
  *   3.47: One-day work changes (late, different hours, day off) from the app's Work schedule page are used in the Today cards.
  *   3.46: A tradition collects its events (links); the assistant links the event when a tradition is made or planned, and does not ask "again this year?" when it is already on the Planner.
@@ -117,7 +118,7 @@ var T = {
   GroceryList: 'id,groceryId,name,status,addOn,source,menuId,house,addedBy,boughtOn,boughtBy',
   HouseCards: 'id,house,kind,title,body,link,everyMonths,nextDue',
   Houses: 'id,name,lat,lon',
-  WeatherRules: 'id,metric,op,threshold,message,when,push,urgent,enabled',
+  WeatherRules: 'id,metric,op,threshold,message,when,push,urgent,enabled,school',   // school '1': only when that day is a school day
   Quotes: 'id,quote,author,lastShown',
   Memories: 'id,date,note,photo',
   Updates: 'id,date,title,message,hiddenFrom,label',   // label: optional heading over a splash screen, e.g. "A bit from Paul"
@@ -811,10 +812,12 @@ function fetchWx_(la, lo) {
   cache.put(key, JSON.stringify(w), 1800);
   return w;
 }
-function ruleHits_(day, when) {
+function ruleHits_(day, when, date) {
   if (!day) return [];
+  var school = null;   // is `date` a school day? worked out once, only if a rule asks
   return rows_('WeatherRules').filter(function (r) {
     if (r.enabled === '0' || (r.when || 'morning') !== when) return false;
+    if (r.school === '1' && date) { if (school === null) school = schoolRuns_(date).length > 0; if (!school) return false; }
     var v = Number(day[r.metric]), th = Number(r.threshold);
     return !isNaN(v) && !isNaN(th) && (r.op === '<' ? v < th : v > th);
   });
@@ -933,6 +936,7 @@ function jobs_(fromTrigger) {
   if (setting_('app|ai.on', '') === '1') aiReview_(t, hour);   // hourly tick only: never slows down opening the app
   if (hour >= 7 && once_('digest', t)) digest_(t);
   if (hour >= 20 && once_('gaps', t)) gaps_(t);
+  if (once_('rainSchool', t)) rows_('WeatherRules').forEach(function (r) { if (/rain gear/i.test(r.message) && !r.school) put_('WeatherRules', { id: r.id, school: '1' }); });   // once: the built-in rain gear rule is for school nights
   if (hour >= 6 && once_('wx_am', t)) wxAlerts_(0, 'morning');
   if (hour >= 19 && once_('wx_pm', t)) wxAlerts_(1, 'night');
   var a = rows_('Activity');
@@ -1462,7 +1466,7 @@ function briefCands_(p, d, mode) {
   rows_('HouseCards').forEach(function (h) { if (h.kind === 'upkeep' && h.nextDue && h.nextDue <= addDays_(d, 7)) add('HouseCards:' + h.id, 'House upkeep: ' + h.title + (h.house ? ' (' + h.house + ')' : '') + ' due ' + h.nextDue); });
   var wx = null, h = get_('Houses', setting_(p + '|house', 'boston'));
   if (h && h.lat) { var w = fetchWx_(+h.lat, +h.lon), wd = w && w.days.filter(function (x) { return x.date === d; })[0];
-    if (wd) wx = { place: h.name, high: wd.high, low: wd.low, rainChance: wd.rain, uv: wd.uv, snowInches: wd.snow, familyRules: ruleHits_(wd, mode === 'night' ? 'night' : 'morning').map(function (r) { return r.message; }) }; }
+    if (wd) wx = { place: h.name, high: wd.high, low: wd.low, rainChance: wd.rain, uv: wd.uv, snowInches: wd.snow, familyRules: ruleHits_(wd, mode === 'night' ? 'night' : 'morning', d).map(function (r) { return r.message; }) }; }
   return { cands: c, weather: wx };
 }
 /** Writes person p's Today card for date d and saves it in Settings (p|ai.brief). */
@@ -1713,7 +1717,7 @@ function wxAlerts_(offset, when) {
     var h = get_('Houses', setting_(p + '|house', 'boston'));
     if (!h || !h.lat) return;
     var w = fetchWx_(+h.lat, +h.lon);
-    ruleHits_(w && w.days[offset], when).forEach(function (r) { if (r.push === '1') notify_(p, r.message, (offset ? 'Tomorrow' : 'Today') + ' at ' + h.name, r.urgent === '1'); });
+    ruleHits_(w && w.days[offset], when, addDays_(today_(), offset)).forEach(function (r) { if (r.push === '1') notify_(p, r.message, (offset ? 'Tomorrow' : 'Today') + ' at ' + h.name, r.urgent === '1'); });
   });
 }
 
@@ -1792,7 +1796,7 @@ function setup() {
     { id: 'question', name: 'App question', emoji: '', assignee: '', builtin: '1', fields: '' },
     { id: 'paycare', name: 'Pay caretaker', emoji: '', assignee: 'Paul', builtin: '1', fields: 'amount' }]);
   seed('WeatherRules', [
-    { metric: 'rain', op: '>', threshold: '50', message: 'Send kids with rain gear', when: 'night', push: '1', urgent: '', enabled: '1' },
+    { metric: 'rain', op: '>', threshold: '50', message: 'Send kids with rain gear', when: 'night', push: '1', urgent: '', enabled: '1', school: '1' },
     { metric: 'low', op: '<', threshold: '32', message: 'Hats and gloves for the kids', when: 'night', push: '', urgent: '', enabled: '1' },
     { metric: 'high', op: '>', threshold: '85', message: 'Sunscreen and water bottles', when: 'morning', push: '', urgent: '', enabled: '1' },
     { metric: 'uv', op: '>', threshold: '6', message: 'UV is high: sunscreen for the kids', when: 'morning', push: '', urgent: '', enabled: '1' },
