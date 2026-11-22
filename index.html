@@ -419,7 +419,7 @@ a.alink { color: inherit; text-decoration: underline; text-decoration-color: col
 // Momnie Family app v6.0
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'], DAYN = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'], ADULTS = ['Paul', 'Shana'];
 // Shown at the bottom of Home. Bump it together with VERSION in sw.js on every release.
-const APP_VERSION = '16.20 · Nov 19, 2026';
+const APP_VERSION = '16.21 · Nov 19, 2026';
 const TABLES = ['People', 'Schools', 'SchoolCal', 'Activities', 'Overrides', 'Events', 'Caretakers', 'Childcare', 'Birthdays', 'Annuals', 'Lists', 'Todos', 'TodoTypes', 'Recipes', 'DinnerRules', 'Weeks', 'Menus',
   'Groceries', 'GroceryList', 'HouseCards', 'Houses', 'WeatherRules', 'Quotes', 'Memories', 'Updates', 'Messages', 'Activity', 'Comments', 'Reactions', 'Links', 'Settings', 'Photos', 'gifts', 'ai_rules', 'ai_requests', 'notes', 'places', 'daily_items', 'daily_completions'];
 const CAT = { School: '#3f6fb5', Kids: '#4f7cc2', Work: '#64748b', Family: '#5b6fa8', Dinner: '#b08a4f', Caretaker: '#3e9aa6', Shared: '#94a3b8', Birthday: '#c9806a' }, SCHOOL_C = ['#5a72b8', '#7a8597', '#4a6fb0'];
@@ -1394,15 +1394,16 @@ const FORMS = {
     F('steps', 'Steps', 'area', null, { ph: '1. …' }), F('link', 'Link (optional)')],
   Messages: v => { const q = v.kind === 'question';
     if (v.pinUntil && v.pinUntil.length > 10) { v._pinAt = v.pinUntil.slice(11, 16); v.pinUntil = v.pinUntil.slice(0, 10); }   // saved as date + time
-    return [F('kind', 'Type', 'sel', [['', 'Post'], ['question', 'Question']], { re: 1, on: x => { x._kindSet = 1; qGuess(x); } }),
+    return [F('kind', 'Type', 'sel', [['', 'Post'], ['question', 'Question'], ['list', 'List (a checklist)']], { re: 1, on: x => { x._kindSet = 1; if (x.kind !== 'list') qGuess(x); } }),
+      F('title', 'List name', 'text', null, { show: x => x.kind === 'list', ph: 'e.g. Christmas tips' }), F('items', 'Items, one per line', 'area', null, { show: x => x.kind === 'list', ph: 'Mail carrier\nBabysitter\nTeacher', hint: 'Press return after each one. You can add more later and check them off as you go.' }),
       // Redraw only if the guess changed: redrawing on every blur could swallow a tap on the next field.
-      F('text', q ? 'Question' : 'Message', 'area', null, { re: x => x._redraw, ph: q ? 'e.g. What time are you getting home today?' : '', on: x => { const was = [x.kind, x.answerType, x.options].join('|');
+      F('text', q ? 'Question' : 'Message', 'area', null, { show: x => x.kind !== 'list', re: x => x._redraw, ph: q ? 'e.g. What time are you getting home today?' : '', on: x => { const was = [x.kind, x.answerType, x.options].join('|');
         if (!x._kindSet && !x.id && /\?\s*$/.test(x.text || '')) x.kind = 'question'; qGuess(x); x._redraw = was !== [x.kind, x.answerType, x.options].join('|'); } }),
       F('answerType', 'Answer with', 'sel', Q_TYPES, { show: x => x.kind === 'question', re: 1, on: x => { x._typeSet = 1; } }),
       F('options', 'Choices (comma separated)', 'text', null, { show: x => x.kind === 'question' && x.answerType === 'choice', ph: 'e.g. Me, You, Lina' }),
-      F('_files', 'Photos and files', 'files'),
-      F('tags', q ? 'Who are you asking?' : 'Tag people', 'multi', () => q ? ADULTS.filter(n => n !== ME) : S.People.map(p => p.name)),
-      F('visibility', 'Who can see it', 'sel', [['', 'Everyone'], ['adults', 'Paul and Shana only']]), F('pinUntil', 'Pin to the top of the Feed until (optional)', 'date', null, { re: 1 }), F('_pinAt', 'Until what time (optional)', 'time', null, { show: x => !!x.pinUntil, hint: 'Leave blank to keep it pinned all day.' })]; },
+      F('_files', 'Photos and files', 'files', null, { show: x => x.kind !== 'list' }),
+      F('tags', q ? 'Who are you asking?' : 'Tag people', 'multi', () => q ? ADULTS.filter(n => n !== ME) : S.People.map(p => p.name), { show: x => x.kind !== 'list' }),
+      F('visibility', 'Who can see it', 'sel', [['', 'Everyone'], ['adults', 'Paul and Shana only']], { show: x => x.kind !== 'list' }), F('pinUntil', 'Pin to the top of the Feed until (optional)', 'date', null, { re: 1, show: x => x.kind !== 'list' }), F('_pinAt', 'Until what time (optional)', 'time', null, { show: x => !!x.pinUntil && x.kind !== 'list', hint: 'Leave blank to keep it pinned all day.' })]; },
 };
 const NAMES = { gifts: 'gift idea', daily_items: 'daily item', Todos: 'to-do', Events: 'event', Activities: 'activity', Childcare: 'caretaker card', Caretakers: 'caretaker', People: 'family member', Schools: 'school', SchoolCal: 'school calendar item', Birthdays: 'birthday', Annuals: 'annual tradition', Lists: 'list', HouseCards: 'house card', Houses: 'house',
   WeatherRules: 'weather rule', Groceries: 'grocery card', TodoTypes: 'to-do type', Recipes: 'recipe', Messages: 'message' };
@@ -1561,7 +1562,7 @@ function editForm(t, row, extra) {
   const isNew = !row || !row.id, v = Object.assign(isNew && DEFAULTS[t] ? DEFAULTS[t]() : {}, row || {}, extra || {});
   if (t === 'Lists' && !isNew) v.items = listItems(row).map(x => x.t).join('\n');
   if (t === 'Activities' && !isNew) { const g = actGroup(row); v._grp = g.map(x => x.id); v._slots = g.flatMap(x => list(x.days).map(dd => ({ day: dd, start: x.start, end: x.end }))).sort((a, b) => DAYS.indexOf(a.day) - DAYS.indexOf(b.day)); }
-  if (t === 'Messages' && isNew) return form('New post', FORMS.Messages, v, SAVE.Messages, [['Post', 'off'], ['Post and notify', 'on'], ['Post as urgent', 'urgent']]);
+  if (t === 'Messages' && isNew) return form('New post', FORMS.Messages, v, x => x.kind === 'list' ? saveRow('Lists', { title: x.title, items: x.items }) : SAVE.Messages(x), [['Post', 'off'], ['Post and notify', 'on'], ['Post as urgent', 'urgent']]);
   const ai = isNew && AI_FILL[t] && aiCanUse() ? { ph: AI_FILL[t], ai: t === 'Events' ? aiEvent : txt => aiFill(t, txt) } : null;
   const save = async x => { const rq = x._aiReq; delete x._aiReq; if (!rq) return saveRow(t, x);
     ASSIST = { t, made: null }; let r; try { r = await saveRow(t, x); } finally { const made = ASSIST && ASSIST.made; ASSIST = null;
@@ -2272,7 +2273,7 @@ function vFeed() {
   return html + feedFab();
 }
 // What the Feed's + button offers: [label, icon, action]. Add a line here to add an option.
-const FEED_ADD = () => [aiCanUse() && ['Ask the assistant', 'spark', 'fabAsk'], ['Grocery item', 'cart', 'fabGroc'], ['New event', 'planner', 'fabEvent'], ['New to-do', 'todo', 'fabTodo'], ['New list', 'check', 'fabList'], ['New post', 'msg', 'fabPost']].filter(Boolean);
+const FEED_ADD = () => [aiCanUse() && ['Ask the assistant', 'spark', 'fabAsk'], ['Grocery item', 'cart', 'fabGroc'], ['New event', 'planner', 'fabEvent'], ['New to-do', 'todo', 'fabTodo'], ['New post', 'msg', 'fabPost']].filter(Boolean);
 let FABON = false;
 const feedFab = () => `<div class="fabwrap ${FABON ? 'fabon' : ''}"><div class="fabbg" data-a="fabClose"></div>
   <div class="fabm" role="menu" aria-hidden="${!FABON}">${FEED_ADD().map(([l, i, a]) => `<button data-a="${a}" role="menuitem" ${FABON ? '' : 'tabindex="-1"'}>${ic(i, 20)}${esc(l)}</button>`).join('')}</div>
@@ -2295,7 +2296,6 @@ A.fabFeed = () => fabSet(!FABON);
 A.fabClose = () => fabSet(false);
 A.fabEvent = () => { fabSet(false); editForm('Events', null); };
 A.fabTodo = () => { fabSet(false); editForm('Todos', null); };
-A.fabList = () => { fabSet(false); editForm('Lists', null); };
 A.fabPost = () => { fabSet(false); A.newMsg(); };
 A.fabAsk = () => { fabSet(false); A.askOpen(); };
 // Grocery item from the Feed: a small sheet that stays open so several items can be added in a row.
