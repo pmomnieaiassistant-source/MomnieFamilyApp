@@ -420,7 +420,7 @@ a.alink { color: inherit; text-decoration: underline; text-decoration-color: col
 // Momnie Family app v6.0
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'], DAYN = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'], ADULTS = ['Paul', 'Shana'];
 // Shown at the bottom of Home. Bump it together with VERSION in sw.js on every release.
-const APP_VERSION = '16.24 · Nov 19, 2026';
+const APP_VERSION = '16.25 · Nov 19, 2026';
 const TABLES = ['People', 'Schools', 'SchoolCal', 'Activities', 'Overrides', 'Events', 'Caretakers', 'Childcare', 'Birthdays', 'Annuals', 'Lists', 'Todos', 'TodoTypes', 'Recipes', 'DinnerRules', 'Weeks', 'Menus',
   'Groceries', 'GroceryList', 'HouseCards', 'Houses', 'WeatherRules', 'Quotes', 'Memories', 'Updates', 'Messages', 'Activity', 'Comments', 'Reactions', 'Links', 'Settings', 'Photos', 'gifts', 'ai_rules', 'ai_requests', 'notes', 'places', 'daily_items', 'daily_completions'];
 const CAT = { School: '#3f6fb5', Kids: '#4f7cc2', Work: '#64748b', Family: '#5b6fa8', Dinner: '#b08a4f', Caretaker: '#3e9aa6', Shared: '#94a3b8', Birthday: '#c9806a' }, SCHOOL_C = ['#5a72b8', '#7a8597', '#4a6fb0'];
@@ -974,7 +974,7 @@ function whereIs(kid) {
 const hoursOf = p => { const r = byId('Settings', 'person|' + p.id + '|hours'); try { const o = JSON.parse((r && r.value) || '{}'); return o && typeof o === 'object' ? o : {}; } catch (e) { return {}; } };
 const workOv = (p, d) => (wfhOf(p).hrs || {})[d];   // a one-day change: { s, e } (working late, different hours) or { off: 1 }
 const worksOn = (p, d) => { const o = workOv(p, d); return o ? !o.off : list(p.workDays).includes(DAYS[dowIdx(d)]); };
-const workHours = (p, d) => { const ov = workOv(p, d); if (ov) return ov.off ? { s: '', e: '' } : { s: ov.s || p.workStart, e: ov.e || ov.s || p.workEnd }; const o = hoursOf(p)[DAYS[dowIdx(d)]] || {}, s = o.s || p.workStart; return { s, e: o.e || (o.s ? '' : p.workEnd) || s }; };
+const workHours = (p, d) => { const ov = workOv(p, d); if (ov) return ov.off ? { s: '', e: '' } : { s: ov.s || p.workStart, e: ov.e || p.workEnd || ov.s }; const o = hoursOf(p)[DAYS[dowIdx(d)]] || {}, s = o.s || p.workStart; return { s, e: o.e || (o.s ? '' : p.workEnd) || s }; };
 const workHoursTxt = p => { const g = new Map(); DAYS.filter(d => list(p.workDays).includes(d)).forEach(d => { const o = hoursOf(p)[d] || {}, s = o.s || p.workStart, e = o.e || (o.s ? '' : p.workEnd); if (!s) return; const k = fmtT(s) + (e ? '–' + fmtT(e) : ''); g.set(k, (g.get(k) || []).concat(d)); });
   return [...g].map(([k, ds]) => ds.join(', ') + ' ' + k).join(' · '); };
 const wfhOf = p => { const r = byId('Settings', 'person|' + p.id + '|wfh'); try { const o = JSON.parse((r && r.value) || '{}'); return { days: list(o.days), dates: o.dates && typeof o.dates === 'object' ? o.dates : {}, hrs: o.hrs && typeof o.hrs === 'object' ? o.hrs : {} }; } catch (e) { return { days: [], dates: {}, hrs: {} }; } };
@@ -1566,7 +1566,7 @@ function editForm(t, row, extra) {
   const isNew = !row || !row.id, v = Object.assign(isNew && DEFAULTS[t] ? DEFAULTS[t]() : {}, row || {}, extra || {});
   if (t === 'Lists' && !isNew) v.items = listItems(row).map(x => x.t).join('\n');
   if (t === 'Activities' && !isNew) { const g = actGroup(row); v._grp = g.map(x => x.id); v._slots = g.flatMap(x => list(x.days).map(dd => ({ day: dd, start: x.start, end: x.end }))).sort((a, b) => DAYS.indexOf(a.day) - DAYS.indexOf(b.day)); }
-  if (t === 'Messages' && isNew) return form('New post', FORMS.Messages, v, x => x.kind === 'list' ? saveRow('Lists', { title: x.title, items: x.items }) : SAVE.Messages(x), [['Post', 'off'], ['Post and notify', 'on'], ['Post as urgent', 'urgent']]);
+  if (t === 'Messages' && isNew) return form('New post', FORMS.Messages, v, (x, mode) => x.kind === 'list' ? saveRow('Lists', { title: x.title, items: x.items }) : SAVE.Messages(x, mode), [['Post', 'off'], ['Post and notify', 'on'], ['Post as urgent', 'urgent']]);
   const ai = isNew && AI_FILL[t] && aiCanUse() ? { ph: AI_FILL[t], ai: t === 'Events' ? aiEvent : txt => aiFill(t, txt) } : null;
   const save = async x => { const rq = x._aiReq; delete x._aiReq; if (!rq) return saveRow(t, x);
     ASSIST = { t, made: null }; let r; try { r = await saveRow(t, x); } finally { const made = ASSIST && ASSIST.made; ASSIST = null;
