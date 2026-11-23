@@ -1,6 +1,7 @@
 /**
  * Momnie Family app backend
- * Version 3.53 (2026-11-23)
+ * Version 3.54 (2026-11-23)
+ *   3.54: Vacations also count for dinners (people away are "not home", an away cook is flagged) and the morning summary no longer says someone away is working.
  *   3.53: Vacations (Vacations tab; Events gets a vacation column): people away skip school runs, rides, work, home weather reminders, the morning summary and the assistant's gap-spotting; vacation events still count.
  *   3.52: Lists: ticks and new items are merged into the newest copy, so two people ticking at once never lose a tick.
  *   3.51: Fixes: the rain gear rule is switched to school days once (not every day); list posts are left out of the assistant's Feed tidying; proposed events are not copied to the calendar by "Copy everything" and the assistant sees them as not confirmed.
@@ -399,6 +400,13 @@ function vacsOn_(d) { return rows_('Vacations').filter(function (v) { return v.f
 function vacWho_(v) { var w = list_(v.people); return w.length ? w : rows_('People').map(function (p) { return p.name; }); }
 function vacOf_(name, d) { return vacsOn_(d).filter(function (v) { return vacWho_(v).indexOf(name) >= 0; })[0] || null; }
 function allAway_(d) { var ppl = rows_('People'); return ppl.length > 0 && ppl.every(function (p) { return !!vacOf_(p.name, d); }); }
+/** ", X cooking, Y not home" for a dinner, counting people away on vacation as not home (and saying so if the cook is away). */
+function dinWho_(m, d) {
+  var away = list_(m && m.away);
+  rows_('People').forEach(function (p) { if (vacOf_(p.name, d) && away.indexOf(p.name) < 0 && !(m && p.name === m.cook)) away.push(p.name); });
+  var cook = m && m.cook ? (vacOf_(m.cook, d) ? ', ' + m.cook + ' was down to cook but is away on vacation' : ', ' + m.cook + ' cooking') : '';
+  return cook + (away.length ? ', ' + away.join(', ') + ' not home' : '');
+}
 function vacLine_(v) { return 'On vacation' + (v.name ? ' (' + v.name + ')' : '') + (v.where ? ' in ' + v.where : ''); }
 /** Lists: a tick or a new item is applied to the list as it is NOW (writes run one at a time under the lock), so two people
  *  ticking different items at the same moment never undo each other. op: { k, t, d, by } to tick or untick one item (found
@@ -1125,7 +1133,7 @@ function aiContext_(t) {
   if (on('meals') || on('week')) {
     c.dinners = []; for (var i = 0; i < 8; i++) { var d = addDays_(t, i), m = get_('Menus', monday_(d) + '-' + DAYS[dow_(d)]);
       if (allAway_(d)) { c.dinners.push(nice_(d) + ': everyone is away on vacation, no dinner needed'); continue; }
-      c.dinners.push(nice_(d) + ': ' + (m ? (m.skipped === '1' ? 'skipped' : dishName_(m) || 'nothing planned') + (m.cook ? ', ' + m.cook + ' cooking' : '') + (m.away ? ', ' + m.away + ' not home' : '') : 'nothing planned')); }
+      c.dinners.push(nice_(d) + ': ' + (m ? (m.skipped === '1' ? 'skipped' : dishName_(m) || 'nothing planned') : 'nothing planned') + dinWho_(m, d)); }
   }
   if (on('meals')) { var st = recipeStats_();
     c.recipes = rows_('Recipes').filter(function (r) { return r.name && r.status !== 'archived'; }).map(function (r) { var s = st[r.id] || {};
@@ -1482,6 +1490,8 @@ function briefCands_(p, d, mode) {
     var w = jsonSafe_(setting_('person|' + x.id + '|wfh', '{}')), dates = w.dates && typeof w.dates === 'object' ? w.dates : {}, ov = w.hrs && w.hrs[d];   // ov: a one-day change from the app's Work schedule page
     var hrs = (jsonSafe_(setting_('person|' + x.id + '|hours', '{}'))[day]) || {}, ws = ov && !ov.off ? (ov.s || x.workStart) : hrs.s || x.workStart, we = ov && !ov.off ? (ov.e || '') : hrs.e || (hrs.s ? '' : x.workEnd);
     if (x.kind === 'kid' || !ws || (ov ? ov.off : list_(x.workDays).indexOf(day) < 0)) return;
+    var xv = x.name !== p && vacOf_(x.name, d);
+    if (xv) { add('Vacations:' + xv.id, x.name + ' is away (' + vacLine_(xv).toLowerCase() + '), not working'); return; }
     var where = dates[d] || (list_(w.days).indexOf(day) >= 0 ? 'home' : 'office');
     add('People:' + x.id, (x.name === p ? 'You work' : x.name + ' works') + ' ' + t12_(ws) + (we ? '–' + t12_(we) : '') + ', ' + (where === 'home' ? 'from home' : 'in office'));
   });
@@ -1491,7 +1501,7 @@ function briefCands_(p, d, mode) {
   rows_('Childcare').forEach(function (cc) { if (cc.date === d) { var ct = get_('Caretakers', cc.confirmedId); add('Childcare:' + cc.id, 'Caretaker ' + t12_(cc.start) + '–' + t12_(cc.end) + ': ' + (ct ? ct.name : 'NOT CONFIRMED')); } });
   rows_('SchoolCal').forEach(function (s) { if (s.date && d >= s.date && d <= (s.endDate || s.date)) add('', 'School calendar: ' + s.title); });
   var mid = monday_(d) + '-' + day, m = get_('Menus', mid);
-  add('Menus:' + mid, 'Dinner: ' + (m ? (m.skipped === '1' ? 'skipped' : dishName_(m) || 'nothing planned') + (m.cook ? ', ' + m.cook + ' cooking' : '') + (m.away ? ', ' + m.away + ' not home' : '') : 'nothing planned'));
+  add('Menus:' + mid, 'Dinner: ' + (m ? (m.skipped === '1' ? 'skipped' : dishName_(m) || 'nothing planned') : 'nothing planned') + dinWho_(m, d));
   rows_('Todos').filter(function (x) { return x.status !== 'Done' && (!x.assignee || x.assignee === p) && x.due && x.due <= addDays_(d, 3); })
     .sort(function (a, b) { return a.due < b.due ? -1 : 1; }).slice(0, 20)
     .forEach(function (x) { add('Todos:' + x.id, 'To-do: ' + x.title + ' | due ' + x.due + (x.due < t ? ' (OVERDUE)' : x.due === d ? ' (due this day)' : '') + (x.assignee ? ' | ' + x.assignee + "'s" : ' | anyone') + (x.amount ? ' | $' + x.amount : '')); });
@@ -1727,7 +1737,7 @@ function digest_(t) {
     if (vac) { var ve = rows_('Events').filter(function (e) { return e.vacation === '1' && t >= e.date && t <= (e.endDate || e.date) && (!list_(e.people).length || list_(e.people).indexOf(p) >= 0); });
       notify_(p, 'Today, ' + nice_(t), [vacLine_(vac) + '. Skipping the usual school, work, activities and dinners.'].concat(ve.map(function (e) { return (e.start && e.allDay !== '1' ? t12_(e.start) + ' ' : '') + e.title; })).join('\n')); return; }
     var L = [], m = get_('Menus', monday_(t) + '-' + DAYS[dow_(t)]), dish = dishName_(m);
-    if (dish) L.push('Tonight: ' + dish + (m.cook ? ' (' + m.cook + ' cooking)' : '') + (m.away ? ' (' + m.away + ' not home)' : ''));
+    if (dish) L.push('Tonight: ' + dish + dinWho_(m, t));
     rows_('Childcare').forEach(function (c) { if (c.date === t) { var ct = get_('Caretakers', c.confirmedId); L.push('Caretaker: ' + (ct ? ct.name : 'NOT CONFIRMED') + ', ' + t12_(c.start) + '–' + t12_(c.end)); } });
     schoolRuns_(t).forEach(function (r) { L.push(runLine_(r)); });
     kidOcc_(t).forEach(function (o) { L.push(t12_(o.start) + ' ' + o.title + (!o.dropoff || !o.pickup ? ' (ride not set)' : '')); });

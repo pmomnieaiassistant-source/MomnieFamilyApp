@@ -420,7 +420,7 @@ a.alink { color: inherit; text-decoration: underline; text-decoration-color: col
 // Momnie Family app v6.0
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'], DAYN = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'], ADULTS = ['Paul', 'Shana'];
 // Shown at the bottom of Home. Bump it together with VERSION in sw.js on every release.
-const APP_VERSION = '16.27 · Nov 19, 2026';
+const APP_VERSION = '16.28 · Nov 23, 2026';
 const TABLES = ['People', 'Schools', 'SchoolCal', 'Activities', 'Overrides', 'Events', 'Caretakers', 'Childcare', 'Birthdays', 'Annuals', 'Lists', 'Vacations', 'Todos', 'TodoTypes', 'Recipes', 'DinnerRules', 'Weeks', 'Menus',
   'Groceries', 'GroceryList', 'HouseCards', 'Houses', 'WeatherRules', 'Quotes', 'Memories', 'Updates', 'Messages', 'Activity', 'Comments', 'Reactions', 'Links', 'Settings', 'Photos', 'gifts', 'ai_rules', 'ai_requests', 'notes', 'places', 'daily_items', 'daily_completions'];
 const CAT = { School: '#3f6fb5', Kids: '#4f7cc2', Work: '#64748b', Family: '#5b6fa8', Dinner: '#b08a4f', Caretaker: '#3e9aa6', Shared: '#94a3b8', Birthday: '#c9806a' }, SCHOOL_C = ['#5a72b8', '#7a8597', '#4a6fb0'];
@@ -1919,7 +1919,9 @@ function vHH() {
       `<div style="height:90px"></div><button class="fab" data-a="add" data-v="Lists" aria-label="New list">${ic('plus', 20)}List</button>`; }
   if (HH === 'work') {
     const mon = WORKWK || mondayOf(TODAY), days = Array.from({ length: 7 }, (_, i) => addDays(mon, i)), adults = S.People.filter(p => p.kind !== 'kid' && (p.workDays || wfhOf(p).days.length)),
-      card = p => { const me = p.name === ME, rows = days.map(d => { const wh = workHours(p, d), on = worksOn(p, d) && wh.s, ov = workOv(p, d), home = workWhere(p, d) === 'home', late = on && ov && !ov.off;
+      card = p => { const me = p.name === ME, rows = days.map(d => { const wh = workHours(p, d), on = worksOn(p, d) && wh.s, ov = workOv(p, d), home = workWhere(p, d) === 'home', late = on && ov && !ov.off, vac = vacFor(p.name, d);
+        if (vac) return `<div class="li" style="padding:10px 0" data-a="open" data-t="Vacations" data-id="${esc(vac.id)}"><div class="grow"><div class="ti">${esc(fmtDay(d))}${d === TODAY ? ' <span class="chip">Today</span>' : ''}</div>
+          <div class="small" style="color:var(--accent)">${ic('sun', 13)} ${esc(vacPlace(vac))}${list(p.workDays).includes(DAYS[dowIdx(d)]) ? ' · not working' : ''}</div></div>${ic('chev', 16)}</div>`;
         return `<div class="li" style="padding:10px 0" ${me ? `data-a="workDay" data-v="${p.id}|${d}"` : ''}><div class="grow"><div class="ti">${esc(fmtDay(d))}${d === TODAY ? ' <span class="chip">Today</span>' : ''}</div>
           <div class="small muted">${on ? (home ? 'Working from home' : 'In the office') + ' · ' + fmtT(wh.s) + (wh.e && wh.e !== wh.s ? '–' + fmtT(wh.e) : '') + (late ? ' · changed' : '') : ov && ov.off ? 'Day off (changed)' : 'Not working'}</div></div>${me ? ic('chev', 16) : ''}</div>`; }).join('');
         return `<div class="box hcard" style="cursor:default"><div class="htitle">${esc(p.name)}${me ? ' (you)' : ''}</div><div class="small muted" style="margin:2px 0 6px">${esc(workHoursTxt(p) || 'No usual hours set')}${wfhOf(p).days.length ? ' · usually from home ' + esc(wfhOf(p).days.join(', ')) : ''}</div>${rows}</div>`; };
@@ -2723,7 +2725,7 @@ function vMenu() {
   { const ms = w ? S.Menus.filter(m => m.week === w.id).sort((a, b) => a.date.localeCompare(b.date)) : weekNights(MW);
     html += `<div class="row pad" style="margin:4px 0"><span class="small muted">Swipe a night right to change it, or left to clear it.</span></div>` +
       ms.map(m => { const r = byId('Recipes', m.recipeId), name = dish(m), past = m.date < TODAY;
-        return `<div class="card dcard ${PFLASH === m.id ? 'flash' : ''}" data-menu="${m.id}" data-swipe="1" style="${past ? 'opacity:.55' : ''}"><div class="row"><span class="small b ${m.date === TODAY ? '' : 'muted'}" style="${m.date === TODAY ? 'color:var(--accent)' : ''}">${m.day.toUpperCase()} ${fmtDate(m.date)}${m.date === TODAY ? ' · TONIGHT' : ''}</span><span>${m.cook ? `<span class="chip">${ic('meals', 13)} ${esc(m.cook)}</span> ` : ''}${m.away ? `<span class="chip bad">${esc(m.away)} out</span>` : ''}${m.skipped === '1' ? '<span class="chip bad">Skipped</span>' : ''}</span></div>
+        return `<div class="card dcard ${PFLASH === m.id ? 'flash' : ''}" data-menu="${m.id}" data-swipe="1" style="${past ? 'opacity:.55' : ''}"><div class="row"><span class="small b ${m.date === TODAY ? '' : 'muted'}" style="${m.date === TODAY ? 'color:var(--accent)' : ''}">${m.day.toUpperCase()} ${fmtDate(m.date)}${m.date === TODAY ? ' · TONIGHT' : ''}</span><span>${m.cook ? (vacFor(m.cook, m.date) ? `<span class="chip bad">${ic('meals', 13)} ${esc(m.cook)} away</span> ` : `<span class="chip">${ic('meals', 13)} ${esc(m.cook)}</span> `) : ''}${(() => { const out = list(m.away).filter(n => !vacFor(n, m.date)), vac = allAway(m.date) ? [] : [...awaySet(m.date)].filter(n => n !== m.cook); return (out.length ? `<span class="chip bad">${esc(joinNames(out))} out</span> ` : '') + (vac.length ? `<span class="chip bad">${ic('sun', 13)} ${esc(joinNames(vac))} away</span>` : ''); })()}${m.skipped === '1' ? '<span class="chip bad">Skipped</span>' : ''}</span></div>
           <div class="row" style="margin-top:4px"><div class="grow" data-a="open" data-t="Menus" data-id="${m.id}"><div style="font-size:18px;font-weight:800" class="${name ? '' : 'muted'}">${esc(name || (allAway(m.date) ? 'Away on vacation' : 'No dinner planned'))}</div>${r && r.tags ? `<div class="small muted">${list(r.tags).map(t => '#' + esc(t)).join(' ')}</div>` : ''}</div>
           </div>
           ${MCHG === m.id ? `<div class="dchg" data-a="mChgClose"><button class="btn" data-a="mRandom" data-v="${m.id}">${ic('shuffle', 18)}Random</button><button class="btn" data-a="mSelect" data-v="${m.id}">${ic('list', 18)}Select</button></div>` : ''}</div>`; }).join('') +
@@ -2749,7 +2751,7 @@ A.autofill = () => { const wk = MW || mondayOf(TODAY), days = autofillDays();
   if (!days.length) return toast('No nights are set to autofill. Choose them in Home, Meals, Dinner rules.');
   if (!S.Recipes.some(r => r.name && r.status !== 'archived')) return toast('Add a few recipes first.');
   ensureWeek(wk);
-  const ms = S.Menus.filter(m => m.week === wk), mine = m => m.date >= TODAY && days.includes(m.day) && m.skipped !== '1', ops = [];
+  const ms = S.Menus.filter(m => m.week === wk), mine = m => m.date >= TODAY && days.includes(m.day) && m.skipped !== '1' && !allAway(m.date), ops = [];   // nobody home on vacation: no dinner to plan
   let todo = ms.filter(m => mine(m) && !m.recipeId && !m.note), again = false;
   // Nothing empty: offer to re-pick the nights picked automatically (by Autofill, Random or an old draft). Dinners chosen by hand stay.
   if (!todo.length) { const re = ms.filter(m => mine(m) && m.recipeId && m.kept !== '1');
