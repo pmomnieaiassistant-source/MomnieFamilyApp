@@ -420,7 +420,7 @@ a.alink { color: inherit; text-decoration: underline; text-decoration-color: col
 // Momnie Family app v6.0
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'], DAYN = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'], ADULTS = ['Paul', 'Shana'];
 // Shown at the bottom of Home. Bump it together with VERSION in sw.js on every release.
-const APP_VERSION = '16.27 · Nov 19, 2026';
+const APP_VERSION = '16.28 · Nov 19, 2026';
 const TABLES = ['People', 'Schools', 'SchoolCal', 'Activities', 'Overrides', 'Events', 'Caretakers', 'Childcare', 'Birthdays', 'Annuals', 'Lists', 'Vacations', 'Todos', 'TodoTypes', 'Recipes', 'DinnerRules', 'Weeks', 'Menus',
   'Groceries', 'GroceryList', 'HouseCards', 'Houses', 'WeatherRules', 'Quotes', 'Memories', 'Updates', 'Messages', 'Activity', 'Comments', 'Reactions', 'Links', 'Settings', 'Photos', 'gifts', 'ai_rules', 'ai_requests', 'notes', 'places', 'daily_items', 'daily_completions'];
 const CAT = { School: '#3f6fb5', Kids: '#4f7cc2', Work: '#64748b', Family: '#5b6fa8', Dinner: '#b08a4f', Caretaker: '#3e9aa6', Shared: '#94a3b8', Birthday: '#c9806a' }, SCHOOL_C = ['#5a72b8', '#7a8597', '#4a6fb0'];
@@ -3296,8 +3296,8 @@ A.pushOn = async (v, el) => { el.disabled = true;
 A.pushOff = async () => { try { if (self.firebase) await firebase.messaging().deleteToken(); } catch (e) {} await saveToken(store.get('pushTok'), true); toast('Push is off for this phone'); refresh(); };
 // ----- Getting new versions onto the phone quickly -----
 // A Home Screen app can sit in the background for days without reloading. So: check for a new version whenever the app
-// comes back to the front (and every 30 minutes while open). When a new version has installed, reload once, waiting
-// until no pop-up is open and nothing is still saving, so nothing you're doing gets lost.
+// comes back to the front (and every 30 minutes while open). A new version is never loaded while you're using the app
+// (that sent you back to the Feed mid-tap): it waits until you leave the app or come back to it, and nothing is saving.
 const hadSW = !!(navigator.serviceWorker && navigator.serviceWorker.controller);
 let updWait = 0, updLast = 0;
 function watchForUpdates() {
@@ -3305,10 +3305,9 @@ function watchForUpdates() {
   const check = () => { if (Date.now() - updLast < 60000) return; updLast = Date.now(); swReg.update().catch(() => {}); };
   document.addEventListener('visibilitychange', () => { if (!document.hidden) check(); });
   setInterval(() => { if (!document.hidden) check(); }, 30 * 60000);
-  navigator.serviceWorker.addEventListener('controllerchange', () => {
-    if (!hadSW || updWait) return;   // first install: nothing to refresh
-    const go = () => { if (sheets.length || outbox.length || busy) return; clearInterval(updWait); toast('Updating to the new version…'); setTimeout(() => location.reload(), 600); };
-    updWait = setInterval(go, 1500); go(); });
+  navigator.serviceWorker.addEventListener('controllerchange', () => { if (hadSW) updWait = 1; });   // first install: nothing to refresh
+  const apply = () => { if (updWait && !outbox.length && !busy) { updWait = 0; location.reload(); } };
+  document.addEventListener('visibilitychange', apply);   // leaving the app, or coming back to it: never in the middle of a tap
 }
 async function pushInit() {
   if (!('serviceWorker' in navigator)) return;
@@ -3319,15 +3318,16 @@ async function pushInit() {
 
 // ---------- splash screens ----------
 function splash(force) {
-  const q = S.Updates.filter(u => (u.title || u.message) && !list(u.hiddenFrom).includes(ME)).sort((a, b) => (b.date || '').localeCompare(a.date || '')).map(u => ({ u }));
+  const closedToday = k => !force && store.get('splashClosed|' + k) === TODAY;   // Close: not again today (a reload doesn't bring it back)
+  const q = S.Updates.filter(u => (u.title || u.message) && !list(u.hiddenFrom).includes(ME) && !closedToday(u.id)).sort((a, b) => (b.date || '').localeCompare(a.date || '')).map(u => ({ u }));
   const dly = S.Activity.find(a => a.type === 'daily' && a.time.slice(0, 10) === TODAY);
-  if (dly && (force || st('splashHidden', '') !== TODAY)) q.push({ a: dly });
+  if (dly && (force || (st('splashHidden', '') !== TODAY && !closedToday('daily')))) q.push({ a: dly });
   if (force && !dly) toast('Nothing to show today.');
   const next = () => { const x = q.shift(); if (!x) return;
     const d = sheet(x.u ? `<div class="small muted b">${x.u.label ? esc(String(x.u.label).toUpperCase()) : "WHAT'S NEW"}${x.u.date ? ' · ' + fmtDate(x.u.date) : ''}</div><h2 style="margin-top:6px">${esc(x.u.title)}</h2><div style="text-align:left">${md(x.u.message)}</div>` : `<div class="small muted b">${fmtLong(TODAY).toUpperCase()}</div><div style="margin-top:10px">${dailyHTML(x.a)}</div>`, 'splash');
     d.insertAdjacentHTML('beforeend', '<div class="actions"><button class="btn gray" style="flex:1" data-a="close">Close</button><button class="btn dark" data-a="splashHide">Hide</button></div>');
     d._hide = () => x.u ? write({ t: 'Updates', row: { id: x.u.id, hiddenFrom: list(x.u.hiddenFrom).concat(ME).join(', ') } }) : setSt('splashHidden', TODAY);
-    d.addEventListener('close', () => setTimeout(next, 150)); };
+    d.addEventListener('close', () => { store.set('splashClosed|' + (x.u ? x.u.id : 'daily'), TODAY); setTimeout(next, 150); }); };
   next();
 }
 A.splashHide = async (v, el) => { const d = el.closest('dialog'); el.disabled = true; await d._hide(); d.close(); };
