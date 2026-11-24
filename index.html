@@ -380,6 +380,7 @@
   .hcard:has(.phcover) { overflow:hidden; }
   .lbox { margin-top:6px; } .lbox .check-row { padding:7px 0; } .lbox .ldone span { text-decoration:line-through; color:var(--muted); }
   .pc.pend { opacity:.82; outline:1.5px dashed #c28a2c; outline-offset:-3px; }   /* proposed, not confirmed yet */
+  .audm { color:var(--muted); opacity:.55; margin-left:5px; display:inline-flex; vertical-align:-1px; }   /* who sees a post: padlock = only you, two people = everyone */
   .phpost { display:block; width:100%; max-height:420px; object-fit:cover; border-radius:16px; margin-top:8px; background:var(--soft); }
   #view input, #view select, #view textarea { background:var(--card); border:1px solid var(--line); }
   .av i[data-p="App"] { background:var(--accsoft); color:var(--accent); }
@@ -420,7 +421,7 @@ a.alink { color: inherit; text-decoration: underline; text-decoration-color: col
 // Momnie Family app v6.0
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'], DAYN = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'], ADULTS = ['Paul', 'Shana'];
 // Shown at the bottom of Home. Bump it together with VERSION in sw.js on every release.
-const APP_VERSION = '16.28 · Nov 19, 2026';
+const APP_VERSION = '16.29 · Nov 19, 2026';
 const TABLES = ['People', 'Schools', 'SchoolCal', 'Activities', 'Overrides', 'Events', 'Caretakers', 'Childcare', 'Birthdays', 'Annuals', 'Lists', 'Vacations', 'Todos', 'TodoTypes', 'Recipes', 'DinnerRules', 'Weeks', 'Menus',
   'Groceries', 'GroceryList', 'HouseCards', 'Houses', 'WeatherRules', 'Quotes', 'Memories', 'Updates', 'Messages', 'Activity', 'Comments', 'Reactions', 'Links', 'Settings', 'Photos', 'gifts', 'ai_rules', 'ai_requests', 'notes', 'places', 'daily_items', 'daily_completions'];
 const CAT = { School: '#3f6fb5', Kids: '#4f7cc2', Work: '#64748b', Family: '#5b6fa8', Dinner: '#b08a4f', Caretaker: '#3e9aa6', Shared: '#94a3b8', Birthday: '#c9806a' }, SCHOOL_C = ['#5a72b8', '#7a8597', '#4a6fb0'];
@@ -590,6 +591,11 @@ const taggedMe = (text, who) => who !== ME && mentionsIn(text).includes(ME);
 const personMentions = (name, n) => S.Messages.filter(m => list(m.tags).includes(name) || mentionsIn(m.text).includes(name)).map(m => ({ time: m.time, who: m.from, text: m.text, open: ['Messages', m.id], kind: 'message' }))
   .concat(S.Comments.filter(c => c.system !== '1' && c.table !== 'gifts' && mentionsIn(c.text).includes(name)).map(c => ({ time: c.time, who: c.who, text: c.text, open: [c.table, c.ref], kind: 'comment' })))
   .sort((a, b) => String(b.time || '').localeCompare(String(a.time || ''))).slice(0, n || 10);
+/** A tiny, muted mark after a post's time: a padlock when only you see it, two people when everyone does (hover or long-press for words). */
+const audMark = (names, label) => { const n = names ? names.filter(x => ADULTS.includes(x)) : ADULTS.slice(), me = n.length === 1 && n[0] === ME, all = ADULTS.every(x => n.includes(x));
+  const t = label || (me ? 'Only you see this' : all ? 'Everyone sees this' : 'Seen by ' + joinNames(n));
+  return `<span class="audm" title="${esc(t)}" aria-label="${esc(t)}">${ic(me ? 'lock' : 'users', 12)}</span>`; };
+const msgAud = m => audMark(null, m.visibility === 'adults' ? 'Paul and Shana only' : 'Everyone sees this');
 const aiAv = () => `<span class="av aiav"><i>${ic('spark', 18)}</i></span>`;
 const avatar = who => who === 'App' ? `<span class="av"><i data-p="App">${ic('home', 16)}</i></span>`
   : who === 'Assistant' ? aiAv()
@@ -644,6 +650,7 @@ const ICONS = {
   plus: '<path d="M12 5v14M5 12h14"/>',
   left: '<path d="m15 5-7 7 7 7"/>',
   pen: '<path d="M4 20h4L19 9l-4-4L4 16z"/>',
+  lock: '<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/>',
   users: '<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.5-3.5 3.2-5.5 6.5-5.5s6 2 6.5 5.5M16 4.8a3.5 3.5 0 0 1 0 6.4M18 14.8c2 .7 3.2 2.5 3.5 5.2"/>',
   school: '<path d="m2 9 10-5 10 5-10 5z"/><path d="M6 11v5c0 1.5 2.7 3 6 3s6-1.5 6-3v-5M22 9v6"/>',
   activity: '<circle cx="12" cy="12" r="9"/><path d="M12 3c-2.5 3-2.5 15 0 18M3.5 9h17M3.5 15h17"/>',
@@ -1573,7 +1580,7 @@ A.listTick = (v, el) => { const [id, i] = el.dataset.k.split('|'), r = byId('Lis
   write({ t: 'Lists', row: { id: r.id, items: JSON.stringify(its) }, listOp: { k: x.k || '', t: x.t, d: x.d, by: ME } }); };
 A.listAdd = (v, el) => { const r = byId('Lists', ctx(el).id), inp = el.closest('.row').querySelector('input'), t = (inp.value || '').trim(); if (!r || !t) return; const its = listItems(r), add = { k: nid(), t, d: 0 }; its.push(add); inp.value = ''; write({ t: 'Lists', row: { id: r.id, items: JSON.stringify(its) }, listOp: { add } }); };
 function listPost(a) { const r = byId('Lists', a.ref); if (!r) return '';
-  return `<div class="post">${avatar(a.who)}<div class="pbody"><div>${nameLink(a.who)} <span class="muted">· ${ago(a.time)}</span> <span class="chip">${ic('check', 13)} List</span></div>
+  return `<div class="post">${avatar(a.who)}<div class="pbody"><div>${nameLink(a.who)} <span class="muted">· ${ago(a.time)}${audMark()}</span> <span class="chip">${ic('check', 13)} List</span></div>
     <div class="ptext" style="font-weight:700;cursor:pointer" data-a="open" data-t="Lists" data-id="${esc(r.id)}">${esc(r.title)} <span class="muted small" style="font-weight:400">· ${listDone(r)} of ${listItems(r).length} done</span></div>${listBox(r)}</div></div>`; }
 async function saveRow(t, v) {
   if (t === 'Lists') { need(v.title && v.title.trim(), 'Give the list a name.'); const old = v.id ? listItems(byId('Lists', v.id) || {}) : [], seen = new Map(old.map(x => [norm(x.t), x]));
@@ -1726,7 +1733,7 @@ const CARD = {
       `<h3>Ingredients</h3>${list(r.unique).map(ing).join('') || '<div class="muted small">None listed.</div>'}${list(r.pantry).length ? `<div class="lbl">Pantry (check you have these)</div><div class="kv">${list(r.pantry).map(ingParse).map(p => esc(p.name) + (qtyTxt(p) ? ` <em class="qty">${esc(qtyTxt(p))}</em>` : '')).join(', ')}</div>` : ''}` + kvh('Steps', r.steps && stepsHTML(r)) + kvh('Link', r.link && linkOr(r.link)) +
       `<div class="actions"><button class="btn gray sm" data-a="pause">⏸ ${r.pausedUntil && r.pausedUntil >= TODAY ? 'Unpause' : "Don't suggest for…"}</button><button class="btn gray sm" data-a="archive">${r.status === 'archived' ? 'Unarchive' : ic('archive', 16) + 'Archive'}</button></div>` + std(); },
   Messages(m) { const res = m.resolved === '1';
-    return `<div class="row" style="justify-content:flex-start">${avatar(m.from)}<div>${nameLink(m.from)} <span class="muted small">· ${ago(m.time)}</span>${m.urgent === '1' ? ' <span class="chip bad">Urgent</span>' : ''}${res ? ' <span class="chip ok">Resolved</span>' : ''}</div></div><div class="ptext msg">${withMentions(m.text)}</div>` + (m.kind === 'question' ? qBlock(m) : '') +
+    return `<div class="row" style="justify-content:flex-start">${avatar(m.from)}<div>${nameLink(m.from)} <span class="muted small">· ${ago(m.time)}${msgAud(m)}</span>${m.urgent === '1' ? ' <span class="chip bad">Urgent</span>' : ''}${res ? ' <span class="chip ok">Resolved</span>' : ''}</div></div><div class="ptext msg">${withMentions(m.text)}</div>` + (m.kind === 'question' ? qBlock(m) : '') +
       kv('Tagged', m.tags) + kv('Who can see it', m.visibility === 'adults' ? 'Paul and Shana only' : 'Everyone') + (m.pinUntil ? kv('Pinned until', fmtDay(m.pinUntil.slice(0, 10)) + (m.pinUntil.length > 10 ? ', ' + fmtT(m.pinUntil.slice(11, 16)) : '')) : '') +
       `<div class="actions"><button class="btn ${res ? 'gray' : 'dark'} sm" data-a="resolve">${res ? 'Reopen' : '✓ Resolve'}</button><button class="btn gray sm" data-a="msgTodo">${ic('plus', 16)}Add as to-do</button><button class="btn gray sm" data-a="msgEvent">${ic('planner', 16)}Add as event</button></div>` + std(); },
   People(p) { return personPage(p); },
@@ -2499,10 +2506,10 @@ async function aiConvoSoon() { if (!aiOn()) return;
   try { await outboxEmpty(); const r = await api('ai_after', { today: TODAY }), a = r.after || {}; if ((a.convo || []).length || a.reviewed) await load(); } catch (e) {} }
 // A post pinned until a date stays pinned through that day; pinned until a date and time, until then.
 const pinnedNow = m => !!m.pinUntil && (m.pinUntil.length > 10 ? m.pinUntil > stamp().slice(0, 16) : m.pinUntil >= TODAY);
-const msgPost = (m, pin) => m.kind === 'question' ? qPost(m, pin) : `<div class="post" data-a="open" data-t="Messages" data-id="${m.id}">${avatar(m.from)}<div class="pbody"><div>${nameLink(m.from)}${list(m.tags).filter(n => n !== m.from).length ? ' → ' + list(m.tags).filter(n => n !== m.from).map(nameLink).join(', ') : ''} <span class="muted">· ${ago(m.time)}</span>${m.from !== ME && list(m.tags).includes(ME) ? ' <span class="chip ok">Tagged you</span>' : ''}${pin ? ` <span class="muted">${ic('pin', 14)}</span>` : ''}${m.urgent === '1' ? ' <span class="chip bad">Urgent</span>' : ''}</div>
+const msgPost = (m, pin) => m.kind === 'question' ? qPost(m, pin) : `<div class="post" data-a="open" data-t="Messages" data-id="${m.id}">${avatar(m.from)}<div class="pbody"><div>${nameLink(m.from)}${list(m.tags).filter(n => n !== m.from).length ? ' → ' + list(m.tags).filter(n => n !== m.from).map(nameLink).join(', ') : ''} <span class="muted">· ${ago(m.time)}${msgAud(m)}</span>${m.from !== ME && list(m.tags).includes(ME) ? ' <span class="chip ok">Tagged you</span>' : ''}${pin ? ` <span class="muted">${ic('pin', 14)}</span>` : ''}${m.urgent === '1' ? ' <span class="chip bad">Urgent</span>' : ''}</div>
   <div class="ptext msg">${withMentions(m.text)}</div>${postAttach('Messages', m.id)}${postFoot('Messages', m.id, m.resolved === '1' ? ic('check', 14) + ' Resolved by ' + esc(m.resolvedBy) : 'Open')}</div></div>`;
 const qPost = (m, pin) => { const asked = qAsked(m), ans = qAnswers(m), left = asked.filter(n => !ans[n]);
-  return `<div class="post">${avatar(m.from)}<div class="pbody"><div>${nameLink(m.from)} asks ${asked.map(n => n === ME ? 'you' : nameLink(n)).join(', ')} <span class="muted">· ${ago(m.time)}</span> <span class="chip">${ic('question', 13)} Question</span>${pin ? ` <span class="muted">${ic('pin', 14)}</span>` : ''}${m.urgent === '1' ? ' <span class="chip bad">Urgent</span>' : ''}</div>
+  return `<div class="post">${avatar(m.from)}<div class="pbody"><div>${nameLink(m.from)} asks ${asked.map(n => n === ME ? 'you' : nameLink(n)).join(', ')} <span class="muted">· ${ago(m.time)}${msgAud(m)}</span> <span class="chip">${ic('question', 13)} Question</span>${pin ? ` <span class="muted">${ic('pin', 14)}</span>` : ''}${m.urgent === '1' ? ' <span class="chip bad">Urgent</span>' : ''}</div>
   <div class="ptext msg" data-a="open" data-t="Messages" data-id="${m.id}" style="cursor:pointer">${withMentions(m.text)}</div>${postAttach('Messages', m.id)}${qBlock(m)}${postFoot('Messages', m.id, left.length ? 'Waiting on ' + esc(joinNames(left.map(n => n === ME ? 'you' : n))) : ic('check', 14) + ' Answered')}</div></div>`; };
 // Reactions and comment count under a post, as line icons.
 /** A post's photos (first one large, a count for the rest) and files, shown under its text. */
@@ -2542,7 +2549,7 @@ function askPost(q) {
   const convo = q.source === 'Conversation', thing = one || (refs.length === 1 && refs[0][0] === 'Overrides' ? 'school run' : '');
   const did = q.status === 'error' ? "couldn't do this" : refs.length ? `${convo ? 'added' : 'created'} ${thing ? 'this ' + thing : refs.length + ' things'}${convo ? ' from a conversation' : ''}` : q.status === 'question' ? 'needs a detail' : 'replied';
   const mine = q.who === ME, busy = ASK_BUSY === q.id;
-  return `<div class="post asst"><span class="av asav">${ic('spark', 18)}</span><div class="pbody"><div class="ahead"><b>Assistant</b> ${did}${convo ? '' : ` for ${esc(q.who === ME ? 'you' : q.who)}`} <span class="muted">· ${ago(q.time)}</span></div>
+  return `<div class="post asst"><span class="av asav">${ic('spark', 18)}</span><div class="pbody"><div class="ahead"><b>Assistant</b> ${did}${convo ? '' : ` for ${esc(q.who === ME ? 'you' : q.who)}`} <span class="muted">· ${ago(q.time)}${audMark()}</span></div>
     ${q.summary ? `<div class="ptext" style="font-weight:400;margin-top:4px">${esc(q.summary)}</div>` : ''}
     ${refs.length ? `<div class="stack">${refs.map(askItem).join('')}</div>` : ''}
     ${q.status === 'question' && q.question ? `<div class="aq"><b>@${esc(q.who)}</b> ${esc(q.question)}${mine ? `<textarea data-askans="${q.id}" rows="2" placeholder="Your answer">${esc(ANS_DRAFT[q.id] || '')}</textarea>
@@ -2595,7 +2602,7 @@ A.askAnswer = async id => { const q = byId('ai_requests', id), answer = (ANS_DRA
 document.addEventListener('input', e => { const k = e.target.dataset && e.target.dataset.askans; if (k) ANS_DRAFT[k] = e.target.value; });
 
 function bundlePost(e) {
-  return `<div class="post">${avatar(e.who)}<div class="pbody"><div><b>${esc(e.who)}</b> made ${e.items.length} updates <span class="muted">· ${ago(e.items[0].time)}</span></div><div class="ptext" style="font-weight:400">` +
+  return `<div class="post">${avatar(e.who)}<div class="pbody"><div><b>${esc(e.who)}</b> made ${e.items.length} updates <span class="muted">· ${ago(e.items[0].time)}${audMark()}</span></div><div class="ptext" style="font-weight:400">` +
     e.items.map(x => { const a = x.a, ti = a.table && a.ref ? titleOf(a.table, a.ref) : ''; return `<div class="row" style="padding:3px 0" ${ti ? `data-a="open" data-t="${a.table}" data-id="${esc(a.ref)}"` : ''}><span>${esc(a.text)}</span>${ti ? '<span class="chev">›</span>' : ''}</div>`; }).join('') + '</div></div></div>';
 }
 /** The week's dinners as one post, read from the current menu: what's planned each night and which nights are still open. */
@@ -2605,7 +2612,7 @@ function dinnerPost(a) {
   const left = all.filter(m => m.date >= TODAY), ns = left.length ? left : all, open = left.filter(m => m.skipped !== '1' && !dish(m));
   const verb = ns.filter(m => dish(m) && m.skipped !== '1').length ? 'set dinner for ' : 'updated dinner for ';
   const line = m => `<div class="row" style="padding:2px 0" data-a="open" data-t="Menus" data-id="${esc(m.id)}"><span class="small b muted" style="width:38px">${m.day}</span><span class="grow">${m.skipped === '1' ? '<span class="muted">Skipped</span>' : dish(m) ? esc(dish(m)) : '<span class="muted">Open</span>'}</span></div>`;
-  return `<div class="post">${avatar(a.who)}<div class="pbody"><div><b>${esc(a.who)}</b> ${verb}${weekLow(wk, mondayOf(TODAY))} <span class="muted">· ${ago(a.time)}</span></div>
+  return `<div class="post">${avatar(a.who)}<div class="pbody"><div><b>${esc(a.who)}</b> ${verb}${weekLow(wk, mondayOf(TODAY))} <span class="muted">· ${ago(a.time)}${audMark()}</span></div>
     <div class="ptext" style="font-weight:400;margin-top:4px">${ns.map(line).join('')}</div>
     ${open.length ? `<div class="row" style="margin-top:8px;gap:8px"><span class="small grow">${esc(joinNames(open.map(m => DAYNAME[m.day])))} ${open.length === 1 ? 'is' : 'are'} still open.</span><button class="btn gray sm" data-a="dinPick" data-v="${wk}">Pick something</button></div>` : `<div class="small muted" style="margin-top:6px">${ic('check', 13)} Every night is planned.</div>`}</div></div>`;
 }
@@ -2617,24 +2624,24 @@ function sourcePost(a) {
   const go = sc ? `data-a="hhGo" data-v="school:${esc(sc.id)}" style="cursor:pointer"` : '';
   const av = sc && sc.logo ? `<span class="av srcav" ${go}><img src="${esc(sc.logo)}" alt=""></span>`
     : `<span class="av srcav" ${go}><i style="background:color-mix(in srgb, ${col} 18%, var(--card));color:${col}">${esc((nm || '?').replace(/^The /, '').slice(0, 1))}</i></span>`;
-  return `<div class="post src">${av}<div class="pbody"><div><b ${go}>${esc(nm)}</b> <span class="muted">· ${ago(a.time)}</span></div><div class="ptext" style="font-weight:400">${aiCardText(a)}</div></div></div>`;
+  return `<div class="post src">${av}<div class="pbody"><div><b ${go}>${esc(nm)}</b> <span class="muted">· ${ago(a.time)}${audMark(a.audience ? list(a.audience) : null)}</span></div><div class="ptext" style="font-weight:400">${aiCardText(a)}</div></div></div>`;
 }
 function actPost(a) {
   if (a.type === 'source') return sourcePost(a);
   if (a.type === 'list') return listPost(a);
   if (String(a.subject || '').startsWith('dinners|')) return dinnerPost(a);
   if (a.table === 'Photos') { const p = byId('Photos', a.ref), ti = p ? titleOf(p.table, p.ref) : '';
-    if (p && !isImg(p)) return `<div class="post">${avatar(a.who)}<div class="pbody"><div><b>${esc(a.who)}</b> attached a file${ti ? ` to <b data-a="open" data-t="${p.table}" data-id="${esc(p.ref)}" style="cursor:pointer">${esc(ti)}</b>` : ''} <span class="muted">· ${ago(a.time)}</span></div>
+    if (p && !isImg(p)) return `<div class="post">${avatar(a.who)}<div class="pbody"><div><b>${esc(a.who)}</b> attached a file${ti ? ` to <b data-a="open" data-t="${p.table}" data-id="${esc(p.ref)}" style="cursor:pointer">${esc(ti)}</b>` : ''} <span class="muted">· ${ago(a.time)}${audMark()}</span></div>
       ${fileChip(p)}${postFoot(p.table, p.ref, '')}</div></div>`;
-    if (p) return `<div class="post" data-a="photoView" data-v="${p.id}">${avatar(a.who)}<div class="pbody"><div><b>${esc(a.who)}</b> added a photo${ti ? ` to <b>${esc(ti)}</b>` : ''} <span class="muted">· ${ago(a.time)}</span></div>
+    if (p) return `<div class="post" data-a="photoView" data-v="${p.id}">${avatar(a.who)}<div class="pbody"><div><b>${esc(a.who)}</b> added a photo${ti ? ` to <b>${esc(ti)}</b>` : ''} <span class="muted">· ${ago(a.time)}${audMark()}</span></div>
       <img class="phpost" src="${esc(photoSrc(p.fileId, 1200))}" alt="" loading="lazy">${postFoot(p.table, p.ref, '')}</div></div>`; }
   if (a.type === 'ai') { const aud = aiNoteFor(a), rule = String(a.ref || '').startsWith('rule:') ? byId('ai_rules', a.ref.slice(5)) : null;
-    return `<div class="post">${aiAv()}<div class="pbody"><div><b>Assistant</b> <span class="muted">· ${ago(a.time)}</span>${aud.length === 1 ? ' <span class="chip">Just for you</span>' : ''}</div>${rule ? `<div class="small muted" data-a="aiRuleEdit" data-v="${rule.id}" style="cursor:pointer">${ic('spark', 12)} Your rule: ${esc(rule.text.length > 70 ? rule.text.slice(0, 70) + '…' : rule.text)}</div>` : ''}<div class="ptext" style="font-weight:400">${aiCardText(a)}</div></div></div>`; }
-  if (a.type === 'daily') return `<div class="post">${avatar('App')}<div class="pbody"><div><b>Today's memory</b> <span class="muted">· ${fmtDay(a.time)}</span></div><div class="ptext" style="font-weight:400">${dailyHTML(a)}</div></div></div>`;
+    return `<div class="post">${aiAv()}<div class="pbody"><div><b>Assistant</b> <span class="muted">· ${ago(a.time)}${audMark(aud)}</span></div>${rule ? `<div class="small muted" data-a="aiRuleEdit" data-v="${rule.id}" style="cursor:pointer">${ic('spark', 12)} Your rule: ${esc(rule.text.length > 70 ? rule.text.slice(0, 70) + '…' : rule.text)}</div>` : ''}<div class="ptext" style="font-weight:400">${aiCardText(a)}</div></div></div>`; }
+  if (a.type === 'daily') return `<div class="post">${avatar('App')}<div class="pbody"><div><b>Today's memory</b> <span class="muted">· ${fmtDay(a.time)}${audMark()}</span></div><div class="ptext" style="font-weight:400">${dailyHTML(a)}</div></div></div>`;
   if (a.type.startsWith('summary')) { let extra = ''; if (a.type === 'summary_week' && a.ref) { const c = []; for (let i = 0; i < 7; i++) c.push(...conflictsFor(addDays(a.ref, i))); if (c.length) extra = '<div class="lbl">Conflicts to sort out</div>' + c.map(x => `<div class="alert amber" data-a="open" data-t="${x.open[0]}" data-id="${esc(x.open[1])}" data-d="${x.open[2]}">${esc(x.text)}</div>`).join(''); }
-    return `<div class="post">${avatar('App')}<div class="pbody"><div><b>${a.type === 'summary_week' ? 'The week ahead' : 'This month'}</b> <span class="muted">· ${ago(a.time)}</span></div><div class="ptext" style="font-weight:400;white-space:normal">${md(stripEmo(a.text))}${extra}</div></div></div>`; }
+    return `<div class="post">${avatar('App')}<div class="pbody"><div><b>${a.type === 'summary_week' ? 'The week ahead' : 'This month'}</b> <span class="muted">· ${ago(a.time)}${audMark()}</span></div><div class="ptext" style="font-weight:400;white-space:normal">${md(stripEmo(a.text))}${extra}</div></div></div>`; }
   const ti = a.table && a.ref ? titleOf(a.table, a.ref) : '', n = ti ? cmts(a.table, a.ref).filter(c => c.system !== '1').length : 0;
-  return `<div class="post" ${ti ? `data-a="open" data-t="${a.table}" data-id="${esc(a.ref)}"` : ''}>${avatar(a.who)}<div class="pbody"><div>${a.who === 'App' ? '' : nameLink(a.who) + ' '}${withMentions(a.text)} <span class="muted">· ${ago(a.time)}</span>${taggedMe(a.text, a.who) ? ' <span class="chip ok">Tagged you</span>' : ''}</div>
+  return `<div class="post" ${ti ? `data-a="open" data-t="${a.table}" data-id="${esc(a.ref)}"` : ''}>${avatar(a.who)}<div class="pbody"><div>${a.who === 'App' ? '' : nameLink(a.who) + ' '}${withMentions(a.text)} <span class="muted">· ${ago(a.time)}${audMark()}</span>${taggedMe(a.text, a.who) ? ' <span class="chip ok">Tagged you</span>' : ''}</div>
     ${ti ? `<div class="ptext"><div class="row"><span>${esc(ti)}</span>${a.amount ? `<span>${money(a.amount)}</span>` : ''}</div></div>${postFoot(a.table, a.ref, '')}` : ''}</div></div>`;
 }
 
